@@ -316,6 +316,39 @@ export default function CreateOpportunityScreen() {
 
       if (error) throw error;
 
+      // Notify all users who have opportunity notifications enabled
+      if (data) {
+        const { data: usersWithNotifs } = await supabase
+          .from('user_notification_settings')
+          .select('user_id')
+          .eq('opportunities_enabled', true)
+          .neq('user_id', user?.id);
+
+        if (usersWithNotifs && usersWithNotifs.length > 0) {
+          // Create in-app notifications
+          const notifications = usersWithNotifs.map(setting => ({
+            user_id: setting.user_id,
+            type: 'opportunity',
+            title: 'New Opportunity Available',
+            message: `${title.trim()} - ${organizationName.trim()}`,
+            link: `/opportunity/${data.id}`,
+            related_id: data.id,
+          }));
+
+          await supabase.from('notifications').insert(notifications);
+
+          // Send push notifications
+          for (const setting of usersWithNotifs) {
+            await sendNotificationToUser(setting.user_id, {
+              type: 'opportunity',
+              id: data.id,
+              title: 'New Opportunity Available',
+              body: `${title.trim()} - ${organizationName.trim()}`,
+            });
+          }
+        }
+      }
+
       showAlert(
         'Success!',
         'Opportunity created successfully',
