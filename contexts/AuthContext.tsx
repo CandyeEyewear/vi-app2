@@ -4,7 +4,6 @@
  */
 
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { registerForPushNotifications, savePushToken, removePushToken } from '../services/pushNotifications';
 import { User, RegisterFormData, LoginFormData, ApiResponse } from '../types';
 import { supabase } from '../services/supabase';
@@ -21,82 +20,75 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const STORAGE_KEY = '@vibe_user';
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-
-
-  // Load user from storage on mount
+  // Initialize auth state on mount
   useEffect(() => {
-    loadUser();
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        loadUserProfile(session.user.id);
+      } else {
+        setLoading(false);
+      }
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        loadUserProfile(session.user.id);
+      } else {
+        setUser(null);
+        setLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const loadUser = async () => {
-     try {
-       // Check if there's a valid Supabase session
-       const { data: { session }, error } = await supabase.auth.getSession();
-       
-       if (error || !session) {
-         // No valid session, clear storage
-         await AsyncStorage.removeItem(STORAGE_KEY);
-         setUser(null);
-         return;
-       }
-
-       // Valid session exists, load user profile
-       const { data: profileData, error: profileError } = await supabase
-         .from('users')
-         .select('*')
-         .eq('id', session.user.id)
-         .single();
-
-       if (profileError) {
-         console.error('Error loading profile:', profileError);
-         await AsyncStorage.removeItem(STORAGE_KEY);
-         setUser(null);
-         return;
-       }
-
-       // Transform to User type
-       const userData: User = {
-         id: profileData.id,
-         email: profileData.email,
-         fullName: profileData.full_name,
-         phone: profileData.phone,
-         location: profileData.location,
-         bio: profileData.bio,
-         areasOfExpertise: profileData.areas_of_expertise,
-         education: profileData.education,
-         avatarUrl: profileData.avatar_url,
-         role: profileData.role,
-         isPrivate: profileData.is_private,
-         totalHours: profileData.total_hours,
-         activitiesCompleted: profileData.activities_completed,
-         organizationsHelped: profileData.organizations_helped,
-         achievements: [],
-         createdAt: profileData.created_at,
-         updatedAt: profileData.updated_at,
-       };
-
-       await saveUser(userData);
-     } catch (error) {
-       console.error('Error loading user:', error);
-       await AsyncStorage.removeItem(STORAGE_KEY);
-       setUser(null);
-     } finally {
-       setLoading(false);
-     }
-   };
-
-  const saveUser = async (userData: User) => {
+  const loadUserProfile = async (userId: string) => {
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(userData));
+      const { data: profileData, error: profileError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (profileError) {
+        console.error('Error loading profile:', profileError);
+        setUser(null);
+        return;
+      }
+
+      // Transform to User type
+      const userData: User = {
+        id: profileData.id,
+        email: profileData.email,
+        fullName: profileData.full_name,
+        phone: profileData.phone,
+        location: profileData.location,
+        bio: profileData.bio,
+        areasOfExpertise: profileData.areas_of_expertise,
+        education: profileData.education,
+        avatarUrl: profileData.avatar_url,
+        role: profileData.role,
+        isPrivate: profileData.is_private,
+        totalHours: profileData.total_hours,
+        activitiesCompleted: profileData.activities_completed,
+        organizationsHelped: profileData.organizations_helped,
+        achievements: [],
+        createdAt: profileData.created_at,
+        updatedAt: profileData.updated_at,
+      };
+
       setUser(userData);
     } catch (error) {
-      console.error('Error saving user:', error);
+      console.error('Error loading user:', error);
+      setUser(null);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -141,18 +133,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         totalHours: profileData.total_hours,
         activitiesCompleted: profileData.activities_completed,
         organizationsHelped: profileData.organizations_helped,
-        achievements: [], // Will be fetched separately
+        achievements: [],
         createdAt: profileData.created_at,
         updatedAt: profileData.updated_at,
       };
 
-      await saveUser(userData);
+      setUser(userData);
       
-     // Register for push notifications
-   const pushToken = await registerForPushNotifications();
-   if (pushToken && authData.user) {
-     await savePushToken(authData.user.id, pushToken);
-   }
+      // Register for push notifications
+      const pushToken = await registerForPushNotifications();
+      if (pushToken && authData.user) {
+        await savePushToken(authData.user.id, pushToken);
+      }
 
       return { success: true, data: userData };
     } catch (error: any) {
@@ -225,13 +217,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         updatedAt: profileData.updated_at,
       };
 
-      await saveUser(userData);
+      setUser(userData);
 
-// Register for push notifications
-   const pushToken = await registerForPushNotifications();
-   if (pushToken && authData.user) {
-     await savePushToken(authData.user.id, pushToken);
-   }
+      // Register for push notifications
+      const pushToken = await registerForPushNotifications();
+      if (pushToken && authData.user) {
+        await savePushToken(authData.user.id, pushToken);
+      }
+
       return { success: true, data: userData };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -241,19 +234,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-     try {
-       // Remove push token before signing out
-       if (user?.id) {
-         await removePushToken(user.id);
-       }
-       
-       await supabase.auth.signOut();
-       await AsyncStorage.removeItem(STORAGE_KEY);
-       setUser(null);
-     } catch (error) {
-       console.error('Error signing out:', error);
-     }
-   };
+    try {
+      // Remove push token before signing out
+      if (user?.id) {
+        await removePushToken(user.id);
+      }
+      
+      await supabase.auth.signOut();
+      setUser(null);
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+
   const updateProfile = async (updates: Partial<User>): Promise<ApiResponse<User>> => {
     if (!user) {
       return { success: false, error: 'No user logged in' };
@@ -295,7 +288,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         updatedAt: data.updated_at,
       };
 
-      await saveUser(updatedUser);
+      setUser(updatedUser);
       return { success: true, data: updatedUser };
     } catch (error: any) {
       return { success: false, error: error.message };
