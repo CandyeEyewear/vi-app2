@@ -1,0 +1,61 @@
+# ===================================
+# 🌐 Core Node / Expo / React Native
+# ===================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+build/
+.expo/
+.expo-shared/
+web-build/
+
+# ===================================
+# 🔐 Environment / Secrets
+# ===================================
+.env
+.env.*
+!env.example
+*.pem
+*.key
+*.p8
+*.p12
+*.keystore
+google-service-account.json
+
+# ===================================
+# ⚙️ EAS & Expo Build Outputs
+# ===================================
+*.aab
+*.apk
+*.ipa
+*.app
+eas-build/
+eas-output/
+eas.json.lock
+
+# ===================================
+# 🧠 System & IDE Files
+# ===================================
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.tmp
+.vscode/
+.idea/
+.expo/*
+*.iml
+
+# ===================================
+# 🖼️ Platform Specific
+# ===================================
+android/
+ios/
+# (If you later eject your Expo app, remove these lines to track native code)
+
+# ===================================
+# 📦 OS-generated
+# ===================================
+desktop.ini

@@ -1,0 +1,58 @@
+{
+  "expo": {
+    "name": "VIbe",
+    "slug": "vibe-volunteer-app",
+    "scheme": "vibe",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "VIbe uses your camera to capture volunteer photos and upload media.",
+        "NSPhotoLibraryUsageDescription": "VIbe needs access to your photo library so you can attach images to posts and opportunities.",
+        "NSPhotoLibraryAddUsageDescription": "VIbe saves photos or images you create within the app.",
+        "NSLocationWhenInUseUsageDescription": "Location is used to show nearby volunteer opportunities and events."
+      }
+    },
+    "android": {
+      "package": "org.volunteersinc.vibe",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#2196F3"
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-image-picker",
+      "expo-location"
+    ],
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "af48b690-5cb4-44ef-bd25-e8bcc1c31f0b"
+      }
+    },
+    "owner": "viadim"
+  }
+}

@@ -1,0 +1,420 @@
+/**
+ * Register Screen
+ * Simplified volunteer registration with essential fields
+ * Works with Supabase database trigger for automatic profile creation
+ */
+
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import { supabase } from '../services/supabase';
+import { Colors } from '../constants/colors';
+
+export default function RegisterScreen() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  
+  const [formData, setFormData] = useState({
+    fullName: '',
+    email: '',
+    phone: '',
+    location: '',
+    password: '',
+    confirmPassword: '',
+    bio: '',
+    areasOfExpertise: '',
+    education: '',
+  });
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handleRegister = async () => {
+    // Validation
+    if (!formData.fullName || !formData.email || !formData.phone || !formData.location || !formData.password) {
+      Alert.alert('Error', 'Please fill in all required fields');
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
+      return;
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Parse areas of expertise into array
+      const expertiseArray = formData.areasOfExpertise
+        ? formData.areasOfExpertise.split(',').map(item => item.trim()).filter(Boolean)
+        : [];
+
+      // Sign up with Supabase Auth - the database trigger will create the user profile
+      const { data, error } = await supabase.auth.signUp({
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password,
+        options: {
+          data: {
+            full_name: formData.fullName.trim(),
+            phone: formData.phone.trim(),
+            location: formData.location.trim(),
+            bio: formData.bio.trim() || null,
+            areas_of_expertise: expertiseArray.length > 0 ? expertiseArray : null,
+            education: formData.education.trim() || null,
+          },
+        },
+      });
+
+      if (error) {
+        console.error('Registration error:', error);
+        Alert.alert('Registration Failed', error.message);
+        return;
+      }
+
+      // Check if email confirmation is required
+      if (data.user && !data.session) {
+        Alert.alert(
+          'Check Your Email',
+          'We sent you a confirmation email. Please verify your email address to complete registration.',
+          [{ text: 'OK', onPress: () => router.replace('/login') }]
+        );
+      } else {
+        // User is automatically logged in
+        Alert.alert(
+          'Success!',
+          'Your account has been created successfully',
+          [{ text: 'OK', onPress: () => router.replace('/(tabs)/feed') }]
+        );
+      }
+    } catch (error: any) {
+      console.error('Unexpected error:', error);
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateField = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}
+    >
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Text style={styles.backButtonText}>← Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Join VIbe</Text>
+          <Text style={styles.subtitle}>Create your volunteer account</Text>
+        </View>
+
+        {/* Required Fields Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Basic Information*</Text>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Full Name*</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="John Doe"
+              placeholderTextColor={Colors.light.textSecondary}
+              value={formData.fullName}
+              onChangeText={(value) => updateField('fullName', value)}
+              editable={!loading}
+              autoCapitalize="words"
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Email*</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="your.email@example.com"
+              placeholderTextColor={Colors.light.textSecondary}
+              value={formData.email}
+              onChangeText={(value) => updateField('email', value)}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              editable={!loading}
+              autoComplete="email"
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Phone Number*</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="+1 (876) 123-4567"
+              placeholderTextColor={Colors.light.textSecondary}
+              value={formData.phone}
+              onChangeText={(value) => updateField('phone', value)}
+              keyboardType="phone-pad"
+              editable={!loading}
+              autoComplete="tel"
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Location*</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Kingston, Jamaica"
+              placeholderTextColor={Colors.light.textSecondary}
+              value={formData.location}
+              onChangeText={(value) => updateField('location', value)}
+              editable={!loading}
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Password*</Text>
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="At least 6 characters"
+                placeholderTextColor={Colors.light.textSecondary}
+                value={formData.password}
+                onChangeText={(value) => updateField('password', value)}
+                secureTextEntry={!showPassword}
+                editable={!loading}
+                autoComplete="password-new"
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeButton}
+              >
+                <Text style={styles.eyeText}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Confirm Password*</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Re-enter your password"
+              placeholderTextColor={Colors.light.textSecondary}
+              value={formData.confirmPassword}
+              onChangeText={(value) => updateField('confirmPassword', value)}
+              secureTextEntry={!showPassword}
+              editable={!loading}
+              autoComplete="password-new"
+            />
+          </View>
+        </View>
+
+        {/* Optional Fields Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Additional Information (Optional)</Text>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Bio</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              placeholder="Tell us about yourself and why you want to volunteer..."
+              placeholderTextColor={Colors.light.textSecondary}
+              value={formData.bio}
+              onChangeText={(value) => updateField('bio', value)}
+              multiline
+              numberOfLines={4}
+              editable={!loading}
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Areas of Expertise</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Teaching, Healthcare, Technology (comma separated)"
+              placeholderTextColor={Colors.light.textSecondary}
+              value={formData.areasOfExpertise}
+              onChangeText={(value) => updateField('areasOfExpertise', value)}
+              editable={!loading}
+            />
+            <Text style={styles.helperText}>Separate multiple areas with commas</Text>
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Education</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Bachelor's in Computer Science"
+              placeholderTextColor={Colors.light.textSecondary}
+              value={formData.education}
+              onChangeText={(value) => updateField('education', value)}
+              editable={!loading}
+            />
+          </View>
+        </View>
+
+        {/* Register Button */}
+        <TouchableOpacity
+          style={[styles.registerButton, loading && styles.registerButtonDisabled]}
+          onPress={handleRegister}
+          disabled={loading}
+          activeOpacity={0.7}
+        >
+          {loading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.registerButtonText}>Create Account</Text>
+          )}
+        </TouchableOpacity>
+
+        {/* Login Link */}
+        <View style={styles.loginContainer}>
+          <Text style={styles.loginText}>Already have an account? </Text>
+          <TouchableOpacity onPress={() => router.replace('/login')} disabled={loading}>
+            <Text style={styles.loginLink}>Sign In</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.light.background,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingTop: 60,
+    paddingBottom: 40,
+  },
+  header: {
+    marginBottom: 32,
+  },
+  backButton: {
+    marginBottom: 16,
+  },
+  backButtonText: {
+    fontSize: 16,
+    color: Colors.light.primary,
+    fontWeight: '600',
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: Colors.light.text,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: Colors.light.textSecondary,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.light.text,
+    marginBottom: 16,
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.light.text,
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: Colors.light.card,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    color: Colors.light.text,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+  },
+  textArea: {
+    height: 100,
+    textAlignVertical: 'top',
+  },
+  helperText: {
+    fontSize: 12,
+    color: Colors.light.textSecondary,
+    marginTop: 4,
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.light.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 16,
+    fontSize: 16,
+    color: Colors.light.text,
+  },
+  eyeButton: {
+    padding: 16,
+  },
+  eyeText: {
+    fontSize: 20,
+  },
+  registerButton: {
+    backgroundColor: Colors.light.primary,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 24,
+  },
+  registerButtonDisabled: {
+    opacity: 0.6,
+  },
+  registerButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  loginContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loginText: {
+    fontSize: 14,
+    color: Colors.light.textSecondary,
+  },
+  loginLink: {
+    fontSize: 14,
+    color: Colors.light.primary,
+    fontWeight: '600',
+  },
+});
