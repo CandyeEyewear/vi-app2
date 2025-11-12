@@ -17,6 +17,7 @@ import {
   ScrollView,
   Dimensions,
   Keyboard,
+  Share,
 } from 'react-native';
 import { Heart, MessageCircle, Share2, Trash2, Megaphone, Pin, Flag } from 'lucide-react-native';
 import { Post } from '../../types';
@@ -28,6 +29,9 @@ import { supabase } from '../../services/supabase';
 import CustomAlert from '../CustomAlert';
 import ReactionBar from '../ReactionBar';
 import ReactionPicker from '../ReactionPicker';
+import ShareModal from '../ShareModal';
+import ShareCommentModal from '../ShareCommentModal';
+import SharedPostCard from '../SharedPostCard';
 
 const { width } = Dimensions.get('window');
 
@@ -37,7 +41,7 @@ interface FeedPostCardProps {
 
 export default function FeedPostCard({ post }: FeedPostCardProps) {
   const { user, isAdmin } = useAuth();
-  const { likePost, unlikePost, addComment, sharePost, deletePost, addReaction } = useFeed();
+  const { likePost, unlikePost, addComment, sharePost, shareToFeed, deletePost, addReaction } = useFeed();
   
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -54,6 +58,9 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
     type: 'success' as 'success' | 'error' | 'warning',
   });
   const [showReactionPicker, setShowReactionPicker] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [showShareCommentModal, setShowShareCommentModal] = useState(false);
+  const [postToShare, setPostToShare] = useState<Post | null>(null);
 
   const isLiked = user ? post.likes.includes(user.id) : false;
   const canDelete = user && (isAdmin || post.userId === user.id);
@@ -113,17 +120,49 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
     }
   };
 
-  const [showShareConfirm, setShowShareConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const handleShare = () => {
-    setShowShareConfirm(true);
+    setShowShareModal(true);
   };
 
-  const confirmShare = () => {
-    sharePost(post.id);
-    setShowShareConfirm(false);
-    showAlert('Success', 'Post shared!', 'success');
+  const handleShareToFeed = () => {
+    // Close main share modal
+    setShowShareModal(false);
+    // Set post and open comment modal
+    setPostToShare(post);
+    setShowShareCommentModal(true);
+  };
+
+  const handleConfirmShare = async (comment: string) => {
+    if (!postToShare) return;
+    
+    const response = await shareToFeed(postToShare.id, comment);
+    if (response.success) {
+      showAlert('Success', 'Post shared to your feed!', 'success');
+    } else {
+      showAlert('Error', response.error || 'Failed to share post', 'error');
+    }
+    setPostToShare(null);
+  };
+
+  const handleShareExternal = async () => {
+    try {
+      const shareMessage = `Check out this post from ${post.user.fullName} on VIbe:\n\n${post.text}`;
+      
+      await Share.share({
+        message: shareMessage,
+        title: 'Share from VIbe',
+      });
+
+      // Increment share count
+      sharePost(post.id);
+    } catch (error: any) {
+      console.error('Error sharing externally:', error);
+      if (error.message !== 'User did not share') {
+        showAlert('Error', 'Failed to share post', 'error');
+      }
+    }
   };
 
   const handleDelete = () => {
@@ -238,8 +277,16 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
       {/* Content */}
       <Text style={styles.text}>{post.text}</Text>
 
-      {/* Media */}
-      {post.mediaUrls && post.mediaUrls.length > 0 && (
+      {/* NEW: Render Shared Post if this is a share */}
+      {post.sharedPost && (
+        <SharedPostCard
+          originalPost={post.sharedPost}
+          onUserTap={handleUserTap}
+        />
+      )}
+
+      {/* Media - Only show if NOT a shared post */}
+      {!post.sharedPost && post.mediaUrls && post.mediaUrls.length > 0 && (
         <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
           {post.mediaUrls.map((url, index) => (
             <Image
@@ -420,7 +467,7 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.reportModalBody}>
+            <ScrollView style={styles.reportModalBody}>
               <Text style={styles.reportLabel}>Why are you reporting this post?</Text>
               
               {['spam', 'inappropriate', 'harassment', 'misinformation', 'offensive', 'other'].map((reason) => (
@@ -471,7 +518,7 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
                 <Flag size={20} color="#FFFFFF" />
                 <Text style={styles.reportSubmitText}>Submit Report</Text>
               </TouchableOpacity>
-            </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -486,16 +533,27 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
         currentReaction={post.reactionSummary?.userReaction}
       />
 
-      {/* Share Confirmation */}
-      <CustomAlert
-        visible={showShareConfirm}
-        title="Share Post"
-        message="Share this post to your profile?"
-        type="warning"
-        onClose={() => setShowShareConfirm(false)}
-        onConfirm={confirmShare}
-        showCancel
+      {/* Share Modal */}
+      <ShareModal
+        visible={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        onShareToFeed={handleShareToFeed}
+        onShareExternal={handleShareExternal}
+        postAuthorName={post.user.fullName}
       />
+
+      {/* Share Comment Modal */}
+      {postToShare && (
+        <ShareCommentModal
+          visible={showShareCommentModal}
+          onClose={() => {
+            setShowShareCommentModal(false);
+            setPostToShare(null);
+          }}
+          onShare={handleConfirmShare}
+          originalPost={postToShare}
+        />
+      )}
 
       {/* Delete Confirmation */}
       <CustomAlert

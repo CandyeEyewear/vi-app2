@@ -214,6 +214,10 @@ export interface Post {
   // Moderation fields
   isHidden?: boolean;
   
+  // Shared post fields
+  sharedPostId?: string | null;     // ID of the original post if this is a share
+  sharedPost?: Post | null;         // The full original post object (populated when loading)
+  
   // Timestamps
   createdAt: string;
   updatedAt: string;

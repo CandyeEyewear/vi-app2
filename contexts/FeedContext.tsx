@@ -1,6 +1,7 @@
 /**
- * Feed Context - WITH REACTIONS
+ * Feed Context - WITH COMPREHENSIVE REAL-TIME
  * Manages feed posts, likes, comments, shares, and reactions
+ * ENHANCED with real-time for posts, comments, updates, deletes
  */
 
 import React, { createContext, useState, useContext, useEffect } from 'react';
@@ -16,6 +17,7 @@ interface FeedContextType {
   unlikePost: (postId: string) => Promise<void>;
   addComment: (postId: string, text: string) => Promise<ApiResponse<Comment>>;
   sharePost: (postId: string) => Promise<void>;
+  shareToFeed: (postId: string, customMessage?: string) => Promise<ApiResponse<Post>>;
   deletePost: (postId: string) => Promise<ApiResponse<void>>;
   refreshFeed: () => Promise<void>;
   addReaction: (postId: string, reactionType: ReactionType) => Promise<ApiResponse<void>>;
@@ -29,15 +31,17 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(false);
 
- // Load feed on mount
+  // Load feed on mount
   useEffect(() => {
     if (user) {
+      console.log('[FEED] 🚀 User logged in, loading feed and setting up real-time...');
       loadFeed();
-      const cleanup = setupRealtimeSubscription();
+      const cleanup = setupRealtimeSubscriptions();
       
       return () => {
+        console.log('[FEED] 🧹 Cleaning up real-time subscriptions...');
         if (cleanup) {
-          cleanup(); // Call the cleanup function returned by setupRealtimeSubscription
+          cleanup();
         }
       };
     }
@@ -65,12 +69,334 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
     return summary;
   };
 
-  // ✅ Real-time subscription for reactions
-  const setupRealtimeSubscription = () => {
+  // 🎯 COMPREHENSIVE REAL-TIME SUBSCRIPTIONS
+  const setupRealtimeSubscriptions = () => {
     if (!user) return;
 
+    console.log('[FEED] 🔌 Setting up comprehensive real-time subscriptions...');
+
+    // Single channel for all subscriptions
     const channel = supabase
-      .channel('post-reactions-updates')
+      .channel('feed-realtime-all')
+      
+      // ========== NEW POSTS ==========
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'posts',
+        },
+        async (payload) => {
+          console.log('[FEED] ✨ New post detected:', payload.new);
+          const newPostData = payload.new as any;
+          
+          // Skip if it's our own post (already optimistically added)
+          if (newPostData.user_id === user.id) {
+            console.log('[FEED] ℹ️ Skipping own post (already added optimistically)');
+            return;
+          }
+
+          // Fetch user details for the new post
+          const { data: userData } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', newPostData.user_id)
+            .single();
+
+          if (!userData) {
+            console.log('[FEED] ⚠️ Could not fetch user data for new post');
+            return;
+          }
+
+          const newPost: Post = {
+            id: newPostData.id,
+            userId: newPostData.user_id,
+            user: {
+              id: userData.id,
+              email: userData.email,
+              fullName: userData.full_name,
+              phone: userData.phone,
+              location: userData.location,
+              bio: userData.bio,
+              areasOfExpertise: userData.areas_of_expertise,
+              education: userData.education,
+              avatarUrl: userData.avatar_url,
+              role: userData.role,
+              totalHours: userData.total_hours,
+              activitiesCompleted: userData.activities_completed,
+              organizationsHelped: userData.organizations_helped,
+              achievements: [],
+              createdAt: userData.created_at,
+              updatedAt: userData.updated_at,
+            },
+            text: newPostData.text,
+            mediaUrls: newPostData.media_urls || [],
+            mediaTypes: newPostData.media_types || [],
+            visibility: newPostData.visibility || 'public',
+            likes: newPostData.likes || [],
+            comments: [],
+            shares: newPostData.shares || 0,
+            reactions: [],
+            reactionSummary: {
+              heart: 0,
+              thumbsup: 0,
+              clap: 0,
+              fire: 0,
+              star: 0,
+              total: 0,
+            },
+            isAnnouncement: newPostData.is_announcement || false,
+            isPinned: newPostData.is_pinned || false,
+            sharedPostId: newPostData.shared_post_id || null,
+            createdAt: newPostData.created_at,
+            updatedAt: newPostData.updated_at,
+          };
+
+          // Check for shared posts and fetch original post
+          if (newPostData.shared_post_id) {
+            console.log('[FEED] 📎 New shared post, fetching original...');
+            const { data: originalPostData } = await supabase
+              .from('posts')
+              .select(`
+                *,
+                user:users(*)
+              `)
+              .eq('id', newPostData.shared_post_id)
+              .single();
+
+            if (originalPostData) {
+              // Fetch comments for original post
+              const { data: originalComments } = await supabase
+                .from('comments')
+                .select(`
+                  *,
+                  user:users(*)
+                `)
+                .eq('post_id', originalPostData.id)
+                .order('created_at', { ascending: true });
+
+              // Fetch reactions for original post
+              const { data: originalReactions } = await supabase
+                .from('post_reactions')
+                .select(`
+                  *,
+                  user:users(*)
+                `)
+                .eq('post_id', originalPostData.id);
+
+              const originalReactionsList: PostReaction[] = originalReactions?.map((reaction) => ({
+                id: reaction.id,
+                postId: reaction.post_id,
+                userId: reaction.user_id,
+                reactionType: reaction.reaction_type,
+                createdAt: reaction.created_at,
+                user: {
+                  id: reaction.user.id,
+                  email: reaction.user.email,
+                  fullName: reaction.user.full_name,
+                  phone: reaction.user.phone,
+                  location: reaction.user.location,
+                  avatarUrl: reaction.user.avatar_url,
+                  role: reaction.user.role,
+                  totalHours: reaction.user.total_hours,
+                  activitiesCompleted: reaction.user.activities_completed,
+                  organizationsHelped: reaction.user.organizations_helped,
+                  achievements: [],
+                  createdAt: reaction.user.created_at,
+                  updatedAt: reaction.user.updated_at,
+                },
+              })) || [];
+
+              const originalPost: Post = {
+                id: originalPostData.id,
+                userId: originalPostData.user_id,
+                user: {
+                  id: originalPostData.user.id,
+                  email: originalPostData.user.email,
+                  fullName: originalPostData.user.full_name,
+                  phone: originalPostData.user.phone,
+                  location: originalPostData.user.location,
+                  bio: originalPostData.user.bio,
+                  areasOfExpertise: originalPostData.user.areas_of_expertise,
+                  education: originalPostData.user.education,
+                  avatarUrl: originalPostData.user.avatar_url,
+                  role: originalPostData.user.role,
+                  totalHours: originalPostData.user.total_hours,
+                  activitiesCompleted: originalPostData.user.activities_completed,
+                  organizationsHelped: originalPostData.user.organizations_helped,
+                  achievements: [],
+                  createdAt: originalPostData.user.created_at,
+                  updatedAt: originalPostData.user.updated_at,
+                },
+                text: originalPostData.text,
+                mediaUrls: originalPostData.media_urls || [],
+                mediaTypes: originalPostData.media_types || [],
+                visibility: originalPostData.visibility || 'public',
+                likes: originalPostData.likes || [],
+                comments: originalComments?.map((comment) => ({
+                  id: comment.id,
+                  postId: comment.post_id,
+                  userId: comment.user_id,
+                  user: {
+                    id: comment.user.id,
+                    email: comment.user.email,
+                    fullName: comment.user.full_name,
+                    phone: comment.user.phone,
+                    location: comment.user.location,
+                    bio: comment.user.bio,
+                    areasOfExpertise: comment.user.areas_of_expertise,
+                    education: comment.user.education,
+                    avatarUrl: comment.user.avatar_url,
+                    role: comment.user.role,
+                    totalHours: comment.user.total_hours,
+                    activitiesCompleted: comment.user.activities_completed,
+                    organizationsHelped: comment.user.organizations_helped,
+                    achievements: [],
+                    createdAt: comment.user.created_at,
+                    updatedAt: comment.user.updated_at,
+                  },
+                  text: comment.text,
+                  createdAt: comment.created_at,
+                })) || [],
+                shares: originalPostData.shares || 0,
+                opportunityId: originalPostData.opportunity_id,
+                isAnnouncement: originalPostData.is_announcement || false,
+                isPinned: originalPostData.is_pinned || false,
+                reactions: originalReactionsList,
+                reactionSummary: calculateReactionSummary(originalReactionsList, user?.id),
+                createdAt: originalPostData.created_at,
+                updatedAt: originalPostData.updated_at,
+              };
+
+              newPost.sharedPost = originalPost;
+            }
+          }
+
+          console.log('[FEED] ✅ Adding new post to feed');
+          setPosts((prev) => [newPost, ...prev]);
+        }
+      )
+
+      // ========== POST UPDATES (likes, shares, pins) ==========
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'posts',
+        },
+        (payload) => {
+          console.log('[FEED] 🔄 Post updated:', payload.new);
+          const updatedPostData = payload.new as any;
+
+          setPosts((prev) =>
+            prev.map((p) => {
+              if (p.id === updatedPostData.id) {
+                console.log('[FEED] ✅ Updating post in feed:', updatedPostData.id);
+                return {
+                  ...p,
+                  likes: updatedPostData.likes || p.likes,
+                  shares: updatedPostData.shares || p.shares,
+                  isPinned: updatedPostData.is_pinned || p.isPinned,
+                  updatedAt: updatedPostData.updated_at,
+                };
+              }
+              return p;
+            })
+          );
+        }
+      )
+
+      // ========== POST DELETES ==========
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'posts',
+        },
+        (payload) => {
+          console.log('[FEED] 🗑️ Post deleted:', payload.old);
+          const deletedPostData = payload.old as any;
+
+          console.log('[FEED] ✅ Removing post from feed');
+          setPosts((prev) => prev.filter((p) => p.id !== deletedPostData.id));
+        }
+      )
+
+      // ========== NEW COMMENTS ==========
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'comments',
+        },
+        async (payload) => {
+          console.log('[FEED] 💬 New comment detected:', payload.new);
+          const newCommentData = payload.new as any;
+
+          // Fetch user details for the comment
+          const { data: userData } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', newCommentData.user_id)
+            .single();
+
+          if (!userData) {
+            console.log('[FEED] ⚠️ Could not fetch user data for comment');
+            return;
+          }
+
+          const newComment: Comment = {
+            id: newCommentData.id,
+            postId: newCommentData.post_id,
+            userId: newCommentData.user_id,
+            user: {
+              id: userData.id,
+              email: userData.email,
+              fullName: userData.full_name,
+              phone: userData.phone,
+              location: userData.location,
+              bio: userData.bio,
+              areasOfExpertise: userData.areas_of_expertise,
+              education: userData.education,
+              avatarUrl: userData.avatar_url,
+              role: userData.role,
+              totalHours: userData.total_hours,
+              activitiesCompleted: userData.activities_completed,
+              organizationsHelped: userData.organizations_helped,
+              achievements: [],
+              createdAt: userData.created_at,
+              updatedAt: userData.updated_at,
+            },
+            text: newCommentData.text,
+            createdAt: newCommentData.created_at,
+          };
+
+          setPosts((prev) =>
+            prev.map((p) => {
+              if (p.id === newCommentData.post_id) {
+                console.log('[FEED] ✅ Adding comment to post:', p.id);
+                // Check if comment already exists (to avoid duplicates from optimistic updates)
+                const commentExists = p.comments.some(c => c.id === newComment.id);
+                if (commentExists) {
+                  console.log('[FEED] ℹ️ Comment already exists (optimistic update)');
+                  return p;
+                }
+                return {
+                  ...p,
+                  comments: [...p.comments, newComment],
+                };
+              }
+              return p;
+            })
+          );
+        }
+      )
+
+      // ========== REACTIONS INSERT ==========
       .on(
         'postgres_changes',
         {
@@ -79,7 +405,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
           table: 'post_reactions',
         },
         async (payload) => {
-          console.log('New reaction:', payload);
+          console.log('[FEED] 👍 New reaction detected:', payload.new);
           const newReaction = payload.new as any;
           
           // Get user details for the reaction
@@ -116,6 +442,13 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
           setPosts((prev) =>
             prev.map((p) => {
               if (p.id === newReaction.post_id) {
+                console.log('[FEED] ✅ Adding reaction to post:', p.id);
+                // Check if reaction already exists (optimistic update)
+                const reactionExists = p.reactions?.some(r => r.id === reaction.id);
+                if (reactionExists) {
+                  console.log('[FEED] ℹ️ Reaction already exists (optimistic update)');
+                  return p;
+                }
                 const reactions = [...(p.reactions || []), reaction];
                 return {
                   ...p,
@@ -128,33 +461,8 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
           );
         }
       )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'post_reactions',
-        },
-        (payload) => {
-          console.log('Reaction deleted:', payload);
-          const deletedReaction = payload.old as any;
 
-          // Update post reactions
-          setPosts((prev) =>
-            prev.map((p) => {
-              if (p.id === deletedReaction.post_id) {
-                const reactions = (p.reactions || []).filter(r => r.id !== deletedReaction.id);
-                return {
-                  ...p,
-                  reactions,
-                  reactionSummary: calculateReactionSummary(reactions, user?.id),
-                };
-              }
-              return p;
-            })
-          );
-        }
-      )
+      // ========== REACTIONS UPDATE ==========
       .on(
         'postgres_changes',
         {
@@ -163,7 +471,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
           table: 'post_reactions',
         },
         async (payload) => {
-          console.log('Reaction updated:', payload);
+          console.log('[FEED] 🔄 Reaction updated:', payload.new);
           const updatedReaction = payload.new as any;
 
           // Get user details for the reaction
@@ -200,6 +508,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
           setPosts((prev) =>
             prev.map((p) => {
               if (p.id === updatedReaction.post_id) {
+                console.log('[FEED] ✅ Updating reaction in post:', p.id);
                 const reactions = (p.reactions || []).map(r => 
                   r.id === reaction.id ? reaction : r
                 );
@@ -214,15 +523,49 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
           );
         }
       )
-      .subscribe();
+
+      // ========== REACTIONS DELETE ==========
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'post_reactions',
+        },
+        (payload) => {
+          console.log('[FEED] 🗑️ Reaction deleted:', payload.old);
+          const deletedReaction = payload.old as any;
+
+          // Update post reactions
+          setPosts((prev) =>
+            prev.map((p) => {
+              if (p.id === deletedReaction.post_id) {
+                console.log('[FEED] ✅ Removing reaction from post:', p.id);
+                const reactions = (p.reactions || []).filter(r => r.id !== deletedReaction.id);
+                return {
+                  ...p,
+                  reactions,
+                  reactionSummary: calculateReactionSummary(reactions, user?.id),
+                };
+              }
+              return p;
+            })
+          );
+        }
+      )
+      .subscribe((status) => {
+        console.log('[FEED] 📡 Real-time subscription status:', status);
+      });
 
     return () => {
+      console.log('[FEED] 🔌 Unsubscribing from real-time channel');
       channel.unsubscribe();
     };
   };
 
   const loadFeed = async () => {
     try {
+      console.log('[FEED] 📥 Loading feed...');
       setLoading(true);
 
       // Fetch posts with user details
@@ -235,6 +578,8 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
         .order('created_at', { ascending: false });
 
       if (postsError) throw postsError;
+
+      console.log('[FEED] ✅ Loaded', postsData.length, 'posts');
 
       // Fetch comments and reactions for each post
       const postsWithDetails = await Promise.all(
@@ -338,15 +683,146 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
             isPinned: post.is_pinned || false,
             reactions, // ✅ Add reactions
             reactionSummary: calculateReactionSummary(reactions, user?.id), // ✅ Add summary
+            sharedPostId: post.shared_post_id || null,
             createdAt: post.created_at,
             updatedAt: post.updated_at,
           } as Post;
         })
       );
 
-      setPosts(postsWithDetails);
+      // Fetch original posts for shared posts
+      const postsWithSharedData = await Promise.all(
+        postsWithDetails.map(async (post) => {
+          if (post.sharedPostId) {
+            console.log('[FEED] 📎 Loading shared post data for:', post.id);
+            // Fetch the original post
+            const { data: originalPostData } = await supabase
+              .from('posts')
+              .select(`
+                *,
+                user:users(*)
+              `)
+              .eq('id', post.sharedPostId)
+              .single();
+
+            if (originalPostData) {
+              // Fetch comments for original post
+              const { data: originalComments } = await supabase
+                .from('comments')
+                .select(`
+                  *,
+                  user:users(*)
+                `)
+                .eq('post_id', originalPostData.id)
+                .order('created_at', { ascending: true });
+
+              // Fetch reactions for original post
+              const { data: originalReactions } = await supabase
+                .from('post_reactions')
+                .select(`
+                  *,
+                  user:users(*)
+                `)
+                .eq('post_id', originalPostData.id);
+
+              const originalReactionsList: PostReaction[] = originalReactions?.map((reaction) => ({
+                id: reaction.id,
+                postId: reaction.post_id,
+                userId: reaction.user_id,
+                reactionType: reaction.reaction_type,
+                createdAt: reaction.created_at,
+                user: {
+                  id: reaction.user.id,
+                  email: reaction.user.email,
+                  fullName: reaction.user.full_name,
+                  phone: reaction.user.phone,
+                  location: reaction.user.location,
+                  avatarUrl: reaction.user.avatar_url,
+                  role: reaction.user.role,
+                  totalHours: reaction.user.total_hours,
+                  activitiesCompleted: reaction.user.activities_completed,
+                  organizationsHelped: reaction.user.organizations_helped,
+                  achievements: [],
+                  createdAt: reaction.user.created_at,
+                  updatedAt: reaction.user.updated_at,
+                },
+              })) || [];
+
+              const originalPost: Post = {
+                id: originalPostData.id,
+                userId: originalPostData.user_id,
+                user: {
+                  id: originalPostData.user.id,
+                  email: originalPostData.user.email,
+                  fullName: originalPostData.user.full_name,
+                  phone: originalPostData.user.phone,
+                  location: originalPostData.user.location,
+                  bio: originalPostData.user.bio,
+                  areasOfExpertise: originalPostData.user.areas_of_expertise,
+                  education: originalPostData.user.education,
+                  avatarUrl: originalPostData.user.avatar_url,
+                  role: originalPostData.user.role,
+                  totalHours: originalPostData.user.total_hours,
+                  activitiesCompleted: originalPostData.user.activities_completed,
+                  organizationsHelped: originalPostData.user.organizations_helped,
+                  achievements: [],
+                  createdAt: originalPostData.user.created_at,
+                  updatedAt: originalPostData.user.updated_at,
+                },
+                text: originalPostData.text,
+                mediaUrls: originalPostData.media_urls || [],
+                mediaTypes: originalPostData.media_types || [],
+                visibility: originalPostData.visibility || 'public',
+                likes: originalPostData.likes || [],
+                comments: originalComments?.map((comment) => ({
+                  id: comment.id,
+                  postId: comment.post_id,
+                  userId: comment.user_id,
+                  user: {
+                    id: comment.user.id,
+                    email: comment.user.email,
+                    fullName: comment.user.full_name,
+                    phone: comment.user.phone,
+                    location: comment.user.location,
+                    bio: comment.user.bio,
+                    areasOfExpertise: comment.user.areas_of_expertise,
+                    education: comment.user.education,
+                    avatarUrl: comment.user.avatar_url,
+                    role: comment.user.role,
+                    totalHours: comment.user.total_hours,
+                    activitiesCompleted: comment.user.activities_completed,
+                    organizationsHelped: comment.user.organizations_helped,
+                    achievements: [],
+                    createdAt: comment.user.created_at,
+                    updatedAt: comment.user.updated_at,
+                  },
+                  text: comment.text,
+                  createdAt: comment.created_at,
+                })) || [],
+                shares: originalPostData.shares || 0,
+                opportunityId: originalPostData.opportunity_id,
+                isAnnouncement: originalPostData.is_announcement || false,
+                isPinned: originalPostData.is_pinned || false,
+                reactions: originalReactionsList,
+                reactionSummary: calculateReactionSummary(originalReactionsList, user?.id),
+                createdAt: originalPostData.created_at,
+                updatedAt: originalPostData.updated_at,
+              };
+
+              return {
+                ...post,
+                sharedPost: originalPost,
+              };
+            }
+          }
+          return post;
+        })
+      );
+
+      setPosts(postsWithSharedData);
+      console.log('[FEED] ✅ Feed loaded successfully');
     } catch (error) {
-      console.error('Error loading feed:', error);
+      console.error('[FEED] ❌ Error loading feed:', error);
     } finally {
       setLoading(false);
     }
@@ -378,6 +854,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
+      console.log('[FEED] 📝 Creating new post...');
       const { data, error } = await supabase
      .from('posts')
      .insert({
@@ -420,9 +897,11 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
         updatedAt: data.updated_at,
       };
 
+      console.log('[FEED] ✅ Post created, adding optimistically');
       setPosts((prev) => [newPost, ...prev]);
       return { success: true, data: newPost };
     } catch (error: any) {
+      console.error('[FEED] ❌ Error creating post:', error);
       return { success: false, error: error.message };
     }
   };
@@ -431,25 +910,38 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
 
     try {
+      console.log('[FEED] ❤️ Liking post:', postId);
       const post = posts.find((p) => p.id === postId);
       if (!post) return;
 
       const newLikes = [...post.likes, user.id];
+
+      // Optimistic update
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId ? { ...p, likes: newLikes } : p
+        )
+      );
 
       const { error } = await supabase
         .from('posts')
         .update({ likes: newLikes })
         .eq('id', postId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('[FEED] ❌ Error liking post:', error);
+        // Revert optimistic update
+        setPosts((prev) =>
+          prev.map((p) =>
+            p.id === postId ? { ...p, likes: post.likes } : p
+          )
+        );
+        throw error;
+      }
 
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === postId ? { ...p, likes: newLikes } : p
-        )
-      );
+      console.log('[FEED] ✅ Post liked successfully');
     } catch (error) {
-      console.error('Error liking post:', error);
+      console.error('[FEED] ❌ Error liking post:', error);
     }
   };
 
@@ -457,25 +949,38 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
 
     try {
+      console.log('[FEED] 💔 Unliking post:', postId);
       const post = posts.find((p) => p.id === postId);
       if (!post) return;
 
       const newLikes = post.likes.filter((id) => id !== user.id);
+
+      // Optimistic update
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId ? { ...p, likes: newLikes } : p
+        )
+      );
 
       const { error } = await supabase
         .from('posts')
         .update({ likes: newLikes })
         .eq('id', postId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('[FEED] ❌ Error unliking post:', error);
+        // Revert optimistic update
+        setPosts((prev) =>
+          prev.map((p) =>
+            p.id === postId ? { ...p, likes: post.likes } : p
+          )
+        );
+        throw error;
+      }
 
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === postId ? { ...p, likes: newLikes } : p
-        )
-      );
+      console.log('[FEED] ✅ Post unliked successfully');
     } catch (error) {
-      console.error('Error unliking post:', error);
+      console.error('[FEED] ❌ Error unliking post:', error);
     }
   };
 
@@ -485,6 +990,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
+      console.log('[FEED] 💬 Adding comment to post:', postId);
       const { data, error } = await supabase
         .from('comments')
         .insert({
@@ -506,6 +1012,8 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
         createdAt: data.created_at,
       };
 
+      // Optimistic update
+      console.log('[FEED] ✅ Comment added optimistically');
       setPosts((prev) =>
         prev.map((p) =>
           p.id === postId
@@ -516,31 +1024,119 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
 
       return { success: true, data: newComment };
     } catch (error: any) {
+      console.error('[FEED] ❌ Error adding comment:', error);
       return { success: false, error: error.message };
     }
   };
 
   const sharePost = async (postId: string) => {
     try {
+      console.log('[FEED] 🔄 Sharing post:', postId);
       const post = posts.find((p) => p.id === postId);
       if (!post) return;
 
       const newShares = post.shares + 1;
+
+      // Optimistic update
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId ? { ...p, shares: newShares } : p
+        )
+      );
 
       const { error } = await supabase
         .from('posts')
         .update({ shares: newShares })
         .eq('id', postId);
 
+      if (error) {
+        console.error('[FEED] ❌ Error sharing post:', error);
+        // Revert optimistic update
+        setPosts((prev) =>
+          prev.map((p) =>
+            p.id === postId ? { ...p, shares: post.shares } : p
+          )
+        );
+        throw error;
+      }
+
+      console.log('[FEED] ✅ Post shared successfully');
+    } catch (error) {
+      console.error('[FEED] ❌ Error sharing post:', error);
+    }
+  };
+
+  const shareToFeed = async (postId: string, customComment?: string): Promise<ApiResponse<Post>> => {
+    if (!user) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    try {
+      console.log('[FEED] 📤 Sharing post to feed (Facebook-style):', postId);
+      const originalPost = posts.find((p) => p.id === postId);
+      if (!originalPost) {
+        return { success: false, error: 'Original post not found' };
+      }
+
+      console.log('[FEED] Creating shared post with reference...');
+      console.log('[FEED] Custom comment:', customComment || '(none)');
+      
+      // Create the shared post with reference to original
+      const { data, error } = await supabase
+        .from('posts')
+        .insert({
+          user_id: user.id,
+          text: customComment || '', // User's optional comment
+          shared_post_id: postId,     // Reference to original post
+          media_urls: [],             // Shared posts don't duplicate media
+          media_types: [],
+          visibility: 'public',
+          likes: [],
+          shares: 0,
+        })
+        .select()
+        .single();
+
       if (error) throw error;
 
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === postId ? { ...p, shares: newShares } : p
-        )
-      );
-    } catch (error) {
-      console.error('Error sharing post:', error);
+      // Increment share count on original post
+      await sharePost(postId);
+
+      const newPost: Post = {
+        id: data.id,
+        userId: user.id,
+        user: user,
+        text: data.text, // The user's comment
+        mediaUrls: [],
+        mediaTypes: [],
+        visibility: data.visibility || 'public',
+        likes: [],
+        comments: [],
+        shares: 0,
+        reactions: [],
+        reactionSummary: {
+          heart: 0,
+          thumbsup: 0,
+          clap: 0,
+          fire: 0,
+          star: 0,
+          total: 0,
+        },
+        isAnnouncement: false,
+        isPinned: false,
+        sharedPostId: postId,        // NEW: Store reference
+        sharedPost: originalPost,     // NEW: Embed original post
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      };
+
+      console.log('[FEED] ✅ Shared post created, adding optimistically');
+      setPosts((prev) => [newPost, ...prev]);
+      
+      return { success: true, data: newPost };
+    } catch (error: any) {
+      console.error('[FEED] ❌ Error sharing to feed:', error);
+      return { success: false, error: error.message };
     }
   };
 
@@ -550,6 +1146,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
   }
 
   try {
+    console.log('[FEED] 🗑️ Deleting post:', postId);
     // Check if user is admin or post owner
     const post = posts.find((p) => p.id === postId);
     if (!post) {
@@ -560,7 +1157,8 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
       return { success: false, error: 'Not authorized to delete this post' };
     }
 
-    console.log('Deleting post:', postId);
+    // Optimistically remove from UI
+    setPosts((prev) => prev.filter((p) => p.id !== postId));
 
     // Delete comments first
     const { error: commentsError } = await supabase
@@ -569,7 +1167,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
       .eq('post_id', postId);
 
     if (commentsError) {
-      console.error('Error deleting comments:', commentsError);
+      console.error('[FEED] ❌ Error deleting comments:', commentsError);
       throw new Error(`Failed to delete comments: ${commentsError.message}`);
     }
 
@@ -580,7 +1178,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
       .eq('post_id', postId);
 
     if (reactionsError) {
-      console.error('Error deleting reactions:', reactionsError);
+      console.error('[FEED] ❌ Error deleting reactions:', reactionsError);
       throw new Error(`Failed to delete reactions: ${reactionsError.message}`);
     }
 
@@ -591,26 +1189,33 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
       .eq('id', postId);
 
     if (postError) {
-      console.error('Error deleting post:', postError);
+      console.error('[FEED] ❌ Error deleting post:', postError);
       throw new Error(`Failed to delete post: ${postError.message}`);
     }
 
-    console.log('Post deleted successfully');
-    setPosts((prev) => prev.filter((p) => p.id !== postId));
+    console.log('[FEED] ✅ Post deleted successfully');
     return { success: true };
   } catch (error: any) {
-    console.error('Delete post error:', error);
+    console.error('[FEED] ❌ Delete post error:', error);
+    // Reload feed to restore state if delete failed
+    await loadFeed();
     return { success: false, error: error.message };
   }
 };
 
-  // ✅ NEW: Add reaction
+  // ✨ OPTIMISTIC REACTION - Shows instantly!
   const addReaction = async (postId: string, reactionType: ReactionType): Promise<ApiResponse<void>> => {
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }
 
     try {
+      console.log('[FEED] 👍 Adding reaction:', reactionType, 'to post:', postId);
+      
+      // Get current post state
+      const post = posts.find(p => p.id === postId);
+      if (!post) return { success: false, error: 'Post not found' };
+
       // Check if user already has a reaction on this post
       const { data: existing } = await supabase
         .from('post_reactions')
@@ -622,18 +1227,75 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
       if (existing) {
         // If same reaction, remove it (toggle off)
         if (existing.reaction_type === reactionType) {
+          console.log('[FEED] ℹ️ Same reaction detected, toggling off');
           return await removeReaction(postId);
         }
         
-        // Otherwise, update to new reaction
+        // Create optimistic reaction for update
+        const optimisticReaction: PostReaction = {
+          id: existing.id,
+          postId: postId,
+          userId: user.id,
+          reactionType: reactionType,
+          createdAt: existing.created_at,
+          user: user,
+        };
+
+        // Optimistic update - Show immediately
+        console.log('[FEED] ⚡ Updating reaction optimistically');
+        setPosts((prev) =>
+          prev.map((p) => {
+            if (p.id === postId) {
+              const reactions = (p.reactions || []).map(r => 
+                r.userId === user.id ? optimisticReaction : r
+              );
+              return {
+                ...p,
+                reactions,
+                reactionSummary: calculateReactionSummary(reactions, user.id),
+              };
+            }
+            return p;
+          })
+        );
+        
+        // Update in database
         const { error } = await supabase
           .from('post_reactions')
           .update({ reaction_type: reactionType })
           .eq('id', existing.id);
 
         if (error) throw error;
+        console.log('[FEED] ✅ Reaction updated in database');
       } else {
-        // Add new reaction
+        // Create optimistic reaction for new insert
+        const tempId = `temp-${Date.now()}`;
+        const optimisticReaction: PostReaction = {
+          id: tempId,
+          postId: postId,
+          userId: user.id,
+          reactionType: reactionType,
+          createdAt: new Date().toISOString(),
+          user: user,
+        };
+
+        // Optimistic update - Show immediately
+        console.log('[FEED] ⚡ Adding reaction optimistically');
+        setPosts((prev) =>
+          prev.map((p) => {
+            if (p.id === postId) {
+              const reactions = [...(p.reactions || []), optimisticReaction];
+              return {
+                ...p,
+                reactions,
+                reactionSummary: calculateReactionSummary(reactions, user.id),
+              };
+            }
+            return p;
+          })
+        );
+
+        // Add new reaction to database
         const { error } = await supabase
           .from('post_reactions')
           .insert({
@@ -643,22 +1305,43 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
           });
 
         if (error) throw error;
+        console.log('[FEED] ✅ Reaction added to database');
       }
 
       return { success: true };
     } catch (error: any) {
-      console.error('Error adding reaction:', error);
+      console.error('[FEED] ❌ Error adding reaction:', error);
+      // Reload to fix state
+      await loadFeed();
       return { success: false, error: error.message };
     }
   };
 
-  // ✅ NEW: Remove reaction
+  // ✨ OPTIMISTIC REACTION REMOVAL
   const removeReaction = async (postId: string): Promise<ApiResponse<void>> => {
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }
 
     try {
+      console.log('[FEED] 🗑️ Removing reaction from post:', postId);
+
+      // Optimistic update - Remove immediately
+      console.log('[FEED] ⚡ Removing reaction optimistically');
+      setPosts((prev) =>
+        prev.map((p) => {
+          if (p.id === postId) {
+            const reactions = (p.reactions || []).filter(r => r.userId !== user.id);
+            return {
+              ...p,
+              reactions,
+              reactionSummary: calculateReactionSummary(reactions, user.id),
+            };
+          }
+          return p;
+        })
+      );
+
       const { error } = await supabase
         .from('post_reactions')
         .delete()
@@ -667,14 +1350,18 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
 
       if (error) throw error;
 
+      console.log('[FEED] ✅ Reaction removed from database');
       return { success: true };
     } catch (error: any) {
-      console.error('Error removing reaction:', error);
+      console.error('[FEED] ❌ Error removing reaction:', error);
+      // Reload to fix state
+      await loadFeed();
       return { success: false, error: error.message };
     }
   };
 
   const refreshFeed = async () => {
+    console.log('[FEED] 🔄 Manually refreshing feed...');
     await loadFeed();
   };
 
@@ -688,10 +1375,11 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
         unlikePost,
         addComment,
         sharePost,
+        shareToFeed,
         deletePost,
         refreshFeed,
-        addReaction, // ✅ NEW
-        removeReaction, // ✅ NEW
+        addReaction,
+        removeReaction,
       }}
     >
       {children}

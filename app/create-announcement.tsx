@@ -80,6 +80,7 @@ export default function CreateAnnouncementScreen() {
 
   const uploadImage = async (uri: string): Promise<string | null> => {
     try {
+      console.log('📸 Starting image upload...');
       const fileInfo = await FileSystem.getInfoAsync(uri);
       if (!fileInfo.exists) {
         throw new Error('File does not exist');
@@ -92,21 +93,27 @@ export default function CreateAnnouncementScreen() {
       const fileName = `announcement-${Date.now()}.jpg`;
       const filePath = `announcements/${fileName}`;
 
+      console.log('📤 Uploading to storage:', filePath);
       const { data, error } = await supabase.storage
         .from('post-images')
         .upload(filePath, decode(base64), {
           contentType: 'image/jpeg',
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Image upload error:', error);
+        throw error;
+      }
 
+      console.log('✅ Image uploaded successfully');
       const { data: { publicUrl } } = supabase.storage
         .from('post-images')
         .getPublicUrl(filePath);
 
+      console.log('🔗 Public URL generated:', publicUrl);
       return publicUrl;
     } catch (error) {
-      console.error('Error uploading image:', error);
+      console.error('❌ Error uploading image:', error);
       return null;
     }
   };
@@ -149,21 +156,42 @@ export default function CreateAnnouncementScreen() {
   };
 
   const handleCreate = async () => {
-    if (!validateForm()) return;
+    console.log('🚀 handleCreate called');
+    console.log('📋 Validation - Text:', text.trim() ? 'Valid' : 'Empty', '| Pinned:', isPinned, '| Has Image:', !!imageUri);
+    
+    if (!validateForm()) {
+      console.log('❌ Form validation failed');
+      return;
+    }
 
     try {
       setLoading(true);
+      console.log('✅ Form validation passed');
+      console.log('👤 Admin user ID:', user?.id);
 
       let mediaUrls = null;
       let mediaTypes = null;
 
       if (imageUri) {
+        console.log('🖼️ Image selected, uploading...');
         const imageUrl = await uploadImage(imageUri);
         if (imageUrl) {
           mediaUrls = [imageUrl];
           mediaTypes = ['image'];
+          console.log('✅ Image URL added to post');
+        } else {
+          console.warn('⚠️ Image upload failed, continuing without image');
         }
       }
+
+      console.log('📝 Creating post in database...');
+      console.log('📊 Post data:', {
+        user_id: user?.id,
+        text_length: text.trim().length,
+        has_media: !!mediaUrls,
+        is_announcement: true,
+        is_pinned: isPinned,
+      });
 
       const { data, error } = await supabase
         .from('posts')
@@ -180,58 +208,83 @@ export default function CreateAnnouncementScreen() {
         .select()
         .single();
 
-      if (error) throw error;
-
-      // Notify all users who have announcement notifications enabled
-      if (data) {
-        const { data: usersWithNotifs } = await supabase
-          .from('user_notification_settings')
-          .select('user_id')
-          .eq('announcements_enabled', true)
-          .neq('user_id', user?.id);
-
-        if (usersWithNotifs && usersWithNotifs.length > 0) {
-          // Create in-app notifications
-          const notifications = usersWithNotifs.map(setting => ({
-            user_id: setting.user_id,
-            type: 'announcement',
-            title: 'New Announcement',
-            message: `${text.trim().substring(0, 100)}${text.length > 100 ? '...' : ''}`,
-            link: '/(tabs)',
-            related_id: data.id,
-          }));
-
-          await supabase.from('notifications').insert(notifications);
-
-          // Send push notifications
-          for (const setting of usersWithNotifs) {
-            await sendNotificationToUser(setting.user_id, {
-              type: 'announcement',
-              id: data.id,
-              title: 'New Announcement',
-              body: `${text.trim().substring(0, 100)}${text.length > 100 ? '...' : ''}`,
-            });
-          }
-        }
+      if (error) {
+        console.error('❌ Post creation error:', error);
+        console.error('❌ Error details:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+        });
+        throw error;
       }
 
+      console.log('✅ Post created successfully!');
+      console.log('📊 Post ID:', data.id);
+
+      // Create notifications using database function
+      console.log('🔔 Starting notification process...');
+      console.log('🔧 Calling RPC function: create_announcement_notifications');
+      console.log('📦 Function parameters:', {
+        p_post_id: data.id,
+        p_title: 'New Announcement',
+        p_content: text.trim().substring(0, 100),
+        p_sender_id: user?.id,
+      });
+
+      const { data: notificationCount, error: notifError } = await supabase.rpc(
+        'create_announcement_notifications',
+        {
+          p_post_id: data.id,
+          p_title: 'New Announcement',
+          p_content: text.trim().substring(0, 100) + (text.length > 100 ? '...' : ''),
+          p_sender_id: user?.id,
+        }
+      );
+
+      console.log('🔍 RPC function response:', {
+        notificationCount,
+        error: notifError,
+      });
+
+      if (notifError) {
+        console.error('❌ Notification creation error:', notifError);
+        console.error('❌ Error details:', {
+          message: notifError.message,
+          code: notifError.code,
+          details: notifError.details,
+          hint: notifError.hint,
+        });
+        console.warn('⚠️ Post created but notifications failed');
+        // Don't throw - post was created successfully
+      } else {
+        console.log('✅ Notifications created successfully');
+        console.log('📊 Total notifications sent:', notificationCount);
+      }
+
+      console.log('🎉 Announcement creation complete!');
       showAlert(
         'Success!',
-        isPinned ? 'Pinned announcement posted successfully' : 'Announcement posted successfully',
+        notifError 
+          ? (isPinned ? 'Pinned announcement posted (notifications may have failed)' : 'Announcement posted (notifications may have failed)')
+          : (isPinned ? `Pinned announcement posted and ${notificationCount} notification(s) sent` : `Announcement posted and ${notificationCount} notification(s) sent`),
         'success'
       );
 
+      console.log('🏠 Navigating back after delay...');
       setTimeout(() => {
         router.back();
       }, 1500);
     } catch (error: any) {
-      console.error('Error creating announcement:', error);
+      console.error('❌ Fatal error in handleCreate:', error);
+      console.error('❌ Error stack:', error.stack);
       showAlert(
         'Error',
         error.message || 'Failed to create announcement',
         'error'
       );
     } finally {
+      console.log('🏁 handleCreate finished, setting loading to false');
       setLoading(false);
     }
   };
@@ -252,78 +305,71 @@ export default function CreateAnnouncementScreen() {
             Create Announcement
           </Text>
         </View>
-        <View style={styles.backButton} />
+        <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
+      {/* Form */}
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Info Banner */}
-        <View style={[styles.infoBanner, { backgroundColor: colors.primary + '15', borderColor: colors.primary }]}>
+        <View style={[styles.infoBanner, { backgroundColor: colors.primary + '10', borderColor: colors.primary }]}>
           <Megaphone size={20} color={colors.primary} />
-          <Text style={[styles.infoBannerText, { color: colors.primary }]}>
-            This announcement will be visible to all users in their feed
+          <Text style={[styles.infoBannerText, { color: colors.text }]}>
+            Announcements are highlighted posts that all volunteers will see and receive notifications for.
           </Text>
         </View>
 
         {/* Announcement Text */}
-        <View style={styles.section}>
+        <View style={styles.field}>
           <Text style={[styles.label, { color: colors.text }]}>
-            Announcement Text <Text style={{ color: colors.error }}>*</Text>
+            Announcement Message <Text style={{ color: colors.error }}>*</Text>
           </Text>
           <TextInput
-            style={[
-              styles.textArea,
-              {
-                backgroundColor: colors.card,
-                color: colors.text,
-                borderColor: colors.border,
-              },
-            ]}
-            placeholder="What would you like to announce?"
-            placeholderTextColor={colors.textSecondary}
+            style={[styles.input, styles.textArea, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
             value={text}
             onChangeText={setText}
+            placeholder="Write your announcement here... (e.g., Upcoming beach cleanup this Saturday!)"
+            placeholderTextColor={colors.textSecondary}
             multiline
             numberOfLines={6}
             textAlignVertical="top"
           />
-        </View>
-
-        {/* Pin Toggle */}
-        <View style={styles.section}>
-          <View style={styles.toggleRow}>
-            <View style={styles.toggleLabel}>
-              <Pin size={20} color={colors.primary} />
-              <Text style={[styles.label, { color: colors.text, marginLeft: 8 }]}>
-                Pin to Top
-              </Text>
-            </View>
-            <Switch
-              value={isPinned}
-              onValueChange={setIsPinned}
-              trackColor={{ false: colors.border, true: colors.primary + '80' }}
-              thumbColor={isPinned ? colors.primary : colors.textSecondary}
-            />
-          </View>
-          <Text style={[styles.helperText, { color: colors.textSecondary }]}>
-            Pinned announcements will appear at the top of the feed
+          <Text style={[styles.charCount, { color: colors.textSecondary }]}>
+            {text.length} characters
           </Text>
         </View>
 
-        {/* Image Upload */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: colors.text }]}>Image (Optional)</Text>
+        {/* Pin to Top */}
+        <View style={[styles.pinSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.pinContent}>
+            <Pin size={20} color={isPinned ? colors.primary : colors.textSecondary} />
+            <View style={styles.pinText}>
+              <Text style={[styles.pinTitle, { color: colors.text }]}>Pin to Top</Text>
+              <Text style={[styles.pinSubtitle, { color: colors.textSecondary }]}>
+                Keep this announcement at the top of the feed
+              </Text>
+            </View>
+          </View>
+          <Switch
+            value={isPinned}
+            onValueChange={setIsPinned}
+            trackColor={{ false: colors.border, true: colors.primary + '40' }}
+            thumbColor={isPinned ? colors.primary : colors.textSecondary}
+          />
+        </View>
+
+        {/* Image Upload (Optional) */}
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.text }]}>
+            Image (Optional)
+          </Text>
           {imageUri ? (
             <View style={styles.imagePreviewContainer}>
               <Image source={{ uri: imageUri }} style={styles.imagePreview} />
               <TouchableOpacity
-                style={[styles.removeImageButton, { backgroundColor: colors.error }]}
+                style={styles.removeImageButton}
                 onPress={() => setImageUri(null)}
               >
-                <X size={16} color="#FFFFFF" />
+                <X size={20} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
           ) : (
@@ -333,34 +379,62 @@ export default function CreateAnnouncementScreen() {
             >
               <ImageIcon size={32} color={colors.textSecondary} />
               <Text style={[styles.imagePickerText, { color: colors.textSecondary }]}>
-                Add Image
+                Tap to upload image
               </Text>
             </TouchableOpacity>
           )}
         </View>
 
+        {/* Preview Section */}
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.text }]}>Preview</Text>
+          <View style={[styles.previewCard, { backgroundColor: colors.primary + '10', borderColor: colors.primary }]}>
+            <View style={styles.previewHeader}>
+              <Megaphone size={16} color={colors.primary} />
+              <Text style={[styles.previewBadge, { color: colors.primary }]}>
+                ANNOUNCEMENT
+              </Text>
+              {isPinned && (
+                <>
+                  <Text style={[styles.previewDivider, { color: colors.primary }]}>•</Text>
+                  <Pin size={14} color={colors.primary} />
+                  <Text style={[styles.previewBadge, { color: colors.primary }]}>
+                    PINNED
+                  </Text>
+                </>
+              )}
+            </View>
+            {text.trim() ? (
+              <Text style={[styles.previewText, { color: colors.text }]}>
+                {text}
+              </Text>
+            ) : (
+              <Text style={[styles.previewPlaceholder, { color: colors.textSecondary }]}>
+                Your announcement text will appear here...
+              </Text>
+            )}
+          </View>
+        </View>
+
         {/* Create Button */}
         <TouchableOpacity
-          style={[
-            styles.createButton,
-            { backgroundColor: colors.primary },
-            loading && { opacity: 0.5 },
-          ]}
+          style={[styles.createButton, { backgroundColor: colors.primary }, loading && styles.createButtonDisabled]}
           onPress={handleCreate}
           disabled={loading}
         >
+          <Megaphone size={20} color="#FFFFFF" />
           <Text style={styles.createButtonText}>
-            {loading ? 'Creating...' : 'Post Announcement'}
+            {loading ? 'Posting...' : 'Post Announcement'}
           </Text>
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Alert */}
+      {/* Custom Alert */}
       <CustomAlert
         visible={alertVisible}
-        type={alertConfig.type}
         title={alertConfig.title}
         message={alertConfig.message}
+        type={alertConfig.type}
         onClose={() => setAlertVisible(false)}
       />
     </KeyboardAvoidingView>
@@ -376,13 +450,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 16,
     borderBottomWidth: 1,
   },
   backButton: {
     width: 40,
-    height: 40,
-    justifyContent: 'center',
   },
   headerTitleContainer: {
     flexDirection: 'row',
@@ -398,89 +470,137 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+    paddingBottom: 32,
   },
   infoBanner: {
     flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
+    padding: 16,
+    borderRadius: 12,
     borderWidth: 1,
-    marginBottom: 20,
-    gap: 8,
+    gap: 12,
+    marginBottom: 24,
   },
   infoBannerText: {
     flex: 1,
     fontSize: 14,
     lineHeight: 20,
   },
-  section: {
-    marginBottom: 24,
+  field: {
+    marginBottom: 20,
   },
   label: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     marginBottom: 8,
   },
-  textArea: {
+  input: {
     borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 16,
     fontSize: 16,
-    minHeight: 120,
   },
-  toggleRow: {
+  textArea: {
+    minHeight: 150,
+  },
+  charCount: {
+    fontSize: 12,
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  pinSection: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 20,
   },
-  toggleLabel: {
+  pinContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
+    flex: 1,
   },
-  helperText: {
-    fontSize: 14,
-    lineHeight: 20,
+  pinText: {
+    flex: 1,
+  },
+  pinTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  pinSubtitle: {
+    fontSize: 13,
   },
   imagePickerButton: {
-    height: 150,
-    borderRadius: 8,
+    height: 180,
     borderWidth: 2,
     borderStyle: 'dashed',
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
   },
   imagePickerText: {
-    fontSize: 16,
-    fontWeight: '500',
+    fontSize: 14,
   },
   imagePreviewContainer: {
     position: 'relative',
-    height: 200,
-    borderRadius: 8,
+    height: 180,
+    borderRadius: 12,
     overflow: 'hidden',
   },
   imagePreview: {
     width: '100%',
     height: '100%',
-    borderRadius: 8,
   },
   removeImageButton: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 20,
+    padding: 8,
+  },
+  previewCard: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  previewHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
+    marginBottom: 12,
+  },
+  previewBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  previewDivider: {
+    fontSize: 11,
+  },
+  previewText: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  previewPlaceholder: {
+    fontSize: 15,
+    fontStyle: 'italic',
   },
   createButton: {
-    paddingVertical: 16,
-    borderRadius: 8,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 18,
+    borderRadius: 12,
     marginTop: 8,
+  },
+  createButtonDisabled: {
+    opacity: 0.6,
   },
   createButtonText: {
     color: '#FFFFFF',

@@ -20,7 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
-import { 
+import {
   ChevronLeft,
   Calendar,
   MapPin,
@@ -68,7 +68,7 @@ export default function CreateOpportunityScreen() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [contactPersonName, setContactPersonName] = useState('');
   const [contactPersonPhone, setContactPersonPhone] = useState('');
-  
+
   // Array fields
   const [requirements, setRequirements] = useState<string[]>([]);
   const [currentRequirement, setCurrentRequirement] = useState('');
@@ -133,44 +133,9 @@ export default function CreateOpportunityScreen() {
 
       if (error) throw error;
 
- 
-
-  // Notify all users who have opportunity notifications enabled
-   if (data) {
-     const { data: usersWithNotifs } = await supabase
-       .from('user_notification_settings')
-       .select('user_id')
-       .eq('opportunities_enabled', true)
-       .neq('user_id', user?.id);
-
-     if (usersWithNotifs && usersWithNotifs.length > 0) {
-       // Create in-app notifications
-       const notifications = usersWithNotifs.map(setting => ({
-         user_id: setting.user_id,
-         type: 'opportunity',
-         title: 'New Opportunity Available',
-         message: `${title.trim()} - ${organizationName.trim()}`,
-         link: `/opportunity/${data.id}`,
-         related_id: data.id,
-       }));
-
-       await supabase.from('notifications').insert(notifications);
-
-       // Send push notifications
-       for (const setting of usersWithNotifs) {
-         await sendNotificationToUser(setting.user_id, {
-           type: 'opportunity',
-           id: data.id,
-           title: 'New Opportunity Available',
-           body: `${title.trim()} - ${organizationName.trim()}`,
-         });
-       }
-     }
-   }
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('post-images')
-        .getPublicUrl(filePath);
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from('post-images').getPublicUrl(filePath);
 
       return publicUrl;
     } catch (error) {
@@ -318,28 +283,20 @@ export default function CreateOpportunityScreen() {
 
       // Notify all users who have opportunity notifications enabled
       if (data) {
-        const { data: usersWithNotifs } = await supabase
-          .from('user_notification_settings')
-          .select('user_id')
-          .eq('opportunities_enabled', true)
-          .neq('user_id', user?.id);
+        const { data: userIds, error: notifError } = await supabase.rpc(
+          'create_opportunity_notifications',
+          {
+            p_opportunity_id: data.id,
+            p_title: title.trim(),
+            p_organization_name: organizationName.trim(),
+            p_sender_id: user?.id,
+          }
+        );
 
-        if (usersWithNotifs && usersWithNotifs.length > 0) {
-          // Create in-app notifications
-          const notifications = usersWithNotifs.map(setting => ({
-            user_id: setting.user_id,
-            type: 'opportunity',
-            title: 'New Opportunity Available',
-            message: `${title.trim()} - ${organizationName.trim()}`,
-            link: `/opportunity/${data.id}`,
-            related_id: data.id,
-          }));
-
-          await supabase.from('notifications').insert(notifications);
-
-          // Send push notifications
-          for (const setting of usersWithNotifs) {
-            await sendNotificationToUser(setting.user_id, {
+        if (!notifError && userIds && userIds.length > 0) {
+          // Send push notifications using the returned user IDs
+          for (const userIdObj of userIds) {
+            await sendNotificationToUser(userIdObj.user_id, {
               type: 'opportunity',
               id: data.id,
               title: 'New Opportunity Available',
@@ -349,11 +306,7 @@ export default function CreateOpportunityScreen() {
         }
       }
 
-      showAlert(
-        'Success!',
-        'Opportunity created successfully',
-        'success'
-      );
+      showAlert('Success!', 'Opportunity created successfully', 'success');
 
       // Wait a bit then navigate back
       setTimeout(() => {
@@ -361,11 +314,7 @@ export default function CreateOpportunityScreen() {
       }, 1500);
     } catch (error: any) {
       console.error('Error creating opportunity:', error);
-      showAlert(
-        'Error',
-        error.message || 'Failed to create opportunity',
-        'error'
-      );
+      showAlert('Error', error.message || 'Failed to create opportunity', 'error');
     } finally {
       setLoading(false);
     }
@@ -381,17 +330,11 @@ export default function CreateOpportunityScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ChevronLeft size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>
-          Create Opportunity
-        </Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Create Opportunity</Text>
         <View style={styles.backButton} />
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         {/* Title */}
         <View style={styles.field}>
           <Text style={[styles.label, { color: colors.text }]}>
@@ -435,7 +378,7 @@ export default function CreateOpportunityScreen() {
           </TouchableOpacity>
           {showCategoryPicker && (
             <View style={[styles.pickerContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              {CATEGORIES.map((cat) => (
+              {CATEGORIES.map(cat => (
                 <TouchableOpacity
                   key={cat.value}
                   style={[styles.pickerItem, { borderBottomColor: colors.border }]}
@@ -444,9 +387,7 @@ export default function CreateOpportunityScreen() {
                     setShowCategoryPicker(false);
                   }}
                 >
-                  <Text style={[styles.pickerItemText, { color: colors.text }]}>
-                    {cat.label}
-                  </Text>
+                  <Text style={[styles.pickerItemText, { color: colors.text }]}>{cat.label}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -498,7 +439,7 @@ export default function CreateOpportunityScreen() {
           >
             <Calendar size={20} color={colors.textSecondary} style={{ marginRight: 8 }} />
             <Text style={[styles.selectButtonText, { color: colors.text }]}>
-              {date.toLocaleDateString('en-US', { 
+              {date.toLocaleDateString('en-US', {
                 weekday: 'short',
                 year: 'numeric',
                 month: 'short',
@@ -666,8 +607,8 @@ export default function CreateOpportunityScreen() {
               autoCapitalize="none"
               keyboardType="url"
             />
-            <TouchableOpacity 
-              onPress={addLink} 
+            <TouchableOpacity
+              onPress={addLink}
               style={[styles.addLinkButton, { backgroundColor: colors.primary }]}
               disabled={!currentLinkLabel.trim() || !currentLinkUrl.trim()}
             >
@@ -704,7 +645,7 @@ export default function CreateOpportunityScreen() {
           <Text style={[styles.fieldDescription, { color: colors.textSecondary }]}>
             Provide a lead contact for volunteers to reach out to
           </Text>
-          
+
           <TextInput
             style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text, marginTop: 8 }]}
             value={contactPersonName}
@@ -712,7 +653,7 @@ export default function CreateOpportunityScreen() {
             placeholder="Contact person name"
             placeholderTextColor={colors.textSecondary}
           />
-          
+
           <TextInput
             style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text, marginTop: 8 }]}
             value={contactPersonPhone}
@@ -970,11 +911,6 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   createButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-createButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
