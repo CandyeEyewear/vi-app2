@@ -20,16 +20,19 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Plus, Search } from 'lucide-react-native';
+import { Plus, Search, Camera, Image as ImageIcon } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useFeed } from '../../contexts/FeedContext';
 import { Colors } from '../../constants/colors';
 import FeedPostCard from '../../components/cards/FeedPostCard';
 import CustomAlert from '../../components/CustomAlert';
+import { FeedSkeleton } from '../../components/SkeletonLayouts';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../../services/supabase';
+import { uploadMultipleImages } from '../../services/imageUpload';
+import { uploadVideo, getVideoSize, formatFileSize, isVideoTooLarge } from '../../services/videoUtils';
 
 export default function FeedScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -44,6 +47,7 @@ export default function FeedScreen() {
   const [postText, setPostText] = useState('');
   const [selectedMedia, setSelectedMedia] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [notificationCount, setNotificationCount] = useState(0);
 
   // Load notification count on mount and refresh periodically
@@ -117,80 +121,121 @@ const loadNotificationCount = async () => {
      });
    }, [posts, activeTab]);
 
-  const handleCreatePost = async () => {
-    if (!postText.trim() && selectedMedia.length === 0) {
-      showAlert('Error', 'Please add some text or media to your post', 'error');
-      return;
-    }
-
-    setSubmitting(true);
-    
+  const handleSubmitPost = async () => {
     try {
-      // Upload images to Supabase Storage using FileSystem (Expo Go compatible)
-      const uploadedUrls: string[] = [];
+      setSubmitting(true);
+      setUploadProgress(0);
+
+      if (!postText.trim() && selectedMedia.length === 0) {
+        showAlert('Error', 'Please add some text or media', 'error');
+        return;
+      }
+
+      let uploadedUrls: string[] = [];
       const mediaTypes: ('image' | 'video')[] = [];
 
-      for (const mediaUri of selectedMedia) {
-        try {
-          // Get file extension
-          const ext = mediaUri.split('.').pop()?.toLowerCase() || 'jpg';
-          const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
-          const filePath = `${user?.id}/${fileName}`;
+      // Upload media
+      if (selectedMedia.length > 0) {
+        console.log('📤 Uploading', selectedMedia.length, 'media files...');
+        
+        for (let i = 0; i < selectedMedia.length; i++) {
+          const mediaUri = selectedMedia[i];
+          const isVideo = mediaUri.endsWith('.mp4') || 
+                         mediaUri.endsWith('.mov') || 
+                         mediaUri.endsWith('.MOV');
 
-          // Read file as base64 using FileSystem (works in Expo Go!)
-          const base64 = await FileSystem.readAsStringAsync(mediaUri, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
+          if (isVideo) {
+            // Check video size first
+            const size = await getVideoSize(mediaUri);
+            if (isVideoTooLarge(size)) {
+              showAlert(
+                'Video Too Large',
+                `Video ${i + 1} is ${formatFileSize(size)}. Maximum is 50MB. Please choose a shorter video.`,
+                'error'
+              );
+              return;
+            }
 
-          // Convert base64 to ArrayBuffer for Supabase
-          const arrayBuffer = decode(base64);
+            // Upload video with progress
+            console.log(`🎥 Uploading video ${i + 1}/${selectedMedia.length}...`);
+            const result = await uploadVideo(
+              mediaUri,
+              user?.id || '',
+              'videos',
+              (progress) => {
+                const overallProgress = ((i / selectedMedia.length) * 100) + 
+                                       (progress / selectedMedia.length);
+                setUploadProgress(Math.round(overallProgress));
+              }
+            );
 
-          // Determine content type
-          const contentType = ext === 'png' ? 'image/png' : 'image/jpeg';
+            if (!result.success) {
+              showAlert('Upload Error', result.error || 'Failed to upload video', 'error');
+              return;
+            }
 
-          // Upload to Supabase Storage
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('post-images')
-            .upload(filePath, arrayBuffer, {
-              contentType: contentType,
-              upsert: false,
-            });
+            uploadedUrls.push(result.videoUrl!);
+            mediaTypes.push('video');
+            console.log('✅ Video uploaded successfully');
 
-          if (uploadError) {
-            console.error('Upload error:', uploadError);
-            throw uploadError;
+          } else {
+            // Upload image
+            console.log(`📸 Uploading image ${i + 1}/${selectedMedia.length}...`);
+            const { urls, errors } = await uploadMultipleImages(
+              [mediaUri],
+              user?.id || '',
+              'posts'
+            );
+
+            if (errors.length > 0) {
+              showAlert('Upload Error', errors[0], 'error');
+              return;
+            }
+
+            uploadedUrls.push(...urls);
+            mediaTypes.push('image');
           }
-
-          // Get public URL
-          const { data: urlData } = supabase.storage
-            .from('post-images')
-            .getPublicUrl(filePath);
-
-          uploadedUrls.push(urlData.publicUrl);
-          mediaTypes.push('image');
-        } catch (error) {
-          console.error('Error uploading image:', error);
-          showAlert('Error', 'Failed to upload one or more images', 'error');
         }
       }
 
-      // Create post with uploaded image URLs
-      // Create post with uploaded image URLs and visibility based on active tab
-   const visibility = activeTab === 'forYou' ? 'public' : 'circle';
-   const response = await createPost(postText, uploadedUrls, mediaTypes, visibility);
+      // Create post
+      const visibility = activeTab === 'forYou' ? 'public' : 'circle';
+      const response = await createPost(postText, uploadedUrls, mediaTypes, visibility);
 
       if (response.success) {
         setPostText('');
         setSelectedMedia([]);
         setShowCreateModal(false);
-        // Post created successfully - no alert needed, just close modal smoothly!
+        setUploadProgress(0);
+        // Success!
       } else {
         showAlert('Error', response.error || 'Failed to create post', 'error');
       }
     } catch (error: any) {
+      console.error('❌ Error creating post:', error);
       showAlert('Error', error.message || 'Failed to create post', 'error');
     } finally {
       setSubmitting(false);
+      setUploadProgress(0);
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    
+    if (status !== 'granted') {
+      showAlert('Permission Needed', 'Please allow access to your camera', 'warning');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setSelectedMedia(prev => [...prev, result.assets[0].uri]);
     }
   };
 
@@ -209,7 +254,7 @@ const loadNotificationCount = async () => {
     });
 
     if (!result.canceled) {
-      setSelectedMedia(result.assets.map(asset => asset.uri));
+      setSelectedMedia(prev => [...prev, ...result.assets.map(asset => asset.uri)]);
     }
   };
 
@@ -309,8 +354,8 @@ const renderTabs = () => (
         }
         ListEmptyComponent={
           loading ? (
-            <View style={styles.emptyContainer}>
-              <ActivityIndicator size="large" color={Colors.light.primary} />
+            <View style={styles.listContent}>
+              <FeedSkeleton count={3} />
             </View>
           ) : (
             <View style={styles.emptyContainer}>
@@ -345,7 +390,7 @@ const renderTabs = () => (
               </TouchableOpacity>
               <Text style={styles.modalTitle}>Create Post</Text>
               <TouchableOpacity
-                onPress={handleCreatePost}
+                onPress={handleSubmitPost}
                 disabled={submitting || (!postText.trim() && selectedMedia.length === 0)}
               >
                 <Text
@@ -410,13 +455,34 @@ const renderTabs = () => (
                 </View>
               )}
 
-              <TouchableOpacity
-                style={styles.mediaButton}
-                onPress={handlePickImage}
-                disabled={submitting}
-              >
-                <Text style={styles.mediaButtonText}>Add Photo/Video</Text>
-              </TouchableOpacity>
+              {/* Upload Progress */}
+              {submitting && uploadProgress > 0 && (
+                <View style={styles.progressContainer}>
+                  <View style={styles.progressBar}>
+                    <View style={[styles.progressFill, { width: `${uploadProgress}%` }]} />
+                  </View>
+                  <Text style={styles.progressText}>{uploadProgress}% uploaded</Text>
+                </View>
+              )}
+
+              <View style={styles.mediaButtonsContainer}>
+                <TouchableOpacity
+                  style={styles.mediaButtonHalf}
+                  onPress={handleTakePhoto}
+                  disabled={submitting}
+                >
+                  <Camera size={20} color={Colors.light.primary} />
+                  <Text style={styles.mediaButtonText}>Camera</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.mediaButtonHalf}
+                  onPress={handlePickImage}
+                  disabled={submitting}
+                >
+                  <ImageIcon size={20} color={Colors.light.primary} />
+                  <Text style={styles.mediaButtonText}>Library</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </View>
@@ -618,9 +684,27 @@ headerRight: {
     borderRadius: 8,
     alignItems: 'center',
   },
+  mediaButtonsContainer: {
+    flexDirection: 'row',
+    marginTop: 16,
+    gap: 8,
+  },
+  mediaButtonHalf: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 12,
+    backgroundColor: Colors.light.card,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+  },
   mediaButtonText: {
     fontSize: 16,
     color: Colors.light.primary,
+    fontWeight: '600',
   },
 visibilityIndicator: {
      backgroundColor: Colors.light.card,
@@ -689,4 +773,27 @@ avatarContainer: {
      color: '#FFFFFF',
      textAlign: 'center',
    },
+  progressContainer: {
+    padding: 16,
+    backgroundColor: Colors.light.card,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: Colors.light.border,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: Colors.light.primary,
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 12,
+    color: Colors.light.textSecondary,
+    textAlign: 'center',
+  },
 });

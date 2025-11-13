@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Post } from '../types';
 import { Colors } from '../constants/colors';
+import LinkText from './LinkText';
 
 const { width } = Dimensions.get('window');
 
@@ -54,7 +55,7 @@ export default function SharedPostCard({ originalPost }: SharedPostCardProps) {
       </View>
 
       {/* Original Post Content */}
-      <Text style={styles.text}>{originalPost.text}</Text>
+      <LinkText text={originalPost.text} style={styles.text} />
 
       {/* Original Post Media */}
       {originalPost.mediaUrls && originalPost.mediaUrls.length > 0 && (

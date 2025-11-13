@@ -24,6 +24,7 @@ import { Conversation } from '../../types';
 import CustomAlert from '../../components/CustomAlert';
 import { useAlert, showErrorAlert } from '../../hooks/useAlert';
 import OnlineStatusDot from '../../components/OnlineStatusDot';
+import { ConversationsSkeleton } from '../../components/SkeletonLayouts';
 
 export default function MessagesScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -188,8 +189,8 @@ export default function MessagesScreen() {
           }
           ListEmptyComponent={
             loading ? (
-              <View style={styles.emptyContainer}>
-                <ActivityIndicator size="large" color={colors.tint} />
+              <View style={styles.listContent}>
+                <ConversationsSkeleton count={4} />
               </View>
             ) : (
               <View style={styles.emptyContainer}>

@@ -260,6 +260,32 @@ export default function CreateAnnouncementScreen() {
       } else {
         console.log('✅ Notifications created successfully');
         console.log('📊 Total notifications sent:', notificationCount);
+        
+        // Send push notifications to users with announcements enabled
+        if (!notifError && notificationCount && notificationCount > 0) {
+          // Get all user IDs who should receive push notifications
+          const { data: users, error: usersError } = await supabase
+            .from('users')
+            .select('id, push_token, notification_settings')
+            .not('push_token', 'is', null);
+
+          if (!usersError && users) {
+            const enabledUsers = users.filter(user => 
+              user.notification_settings?.announcements !== false
+            );
+
+            console.log('📤 Sending push to', enabledUsers.length, 'users with announcements enabled');
+
+            for (const userObj of enabledUsers) {
+              await sendNotificationToUser(userObj.id, {
+                type: 'announcement',
+                id: data.id,
+                title: 'New Announcement',
+                body: text.trim().substring(0, 100) + (text.length > 100 ? '...' : ''),
+              });
+            }
+          }
+        }
       }
 
       console.log('🎉 Announcement creation complete!');

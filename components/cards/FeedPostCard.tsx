@@ -32,6 +32,9 @@ import ReactionPicker from '../ReactionPicker';
 import ShareModal from '../ShareModal';
 import ShareCommentModal from '../ShareCommentModal';
 import SharedPostCard from '../SharedPostCard';
+import ImageCollage from '../ImageCollage';
+import VideoPlayer from '../VideoPlayer';
+import LinkText from '../LinkText';
 
 const { width } = Dimensions.get('window');
 
@@ -148,10 +151,12 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
 
   const handleShareExternal = async () => {
     try {
-      const shareMessage = `Check out this post from ${post.user.fullName} on VIbe:\n\n${post.text}`;
+      const postUrl = `https://volunteersinc.org/post?id=${post.id}`;
+      const shareMessage = `Check out this post from ${post.user.fullName} on VIbe:\n\n${post.text}\n\n${postUrl}`;
       
       await Share.share({
         message: shareMessage,
+        url: postUrl,
         title: 'Share from VIbe',
       });
 
@@ -275,7 +280,7 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
       )}
 
       {/* Content */}
-      <Text style={styles.text}>{post.text}</Text>
+      <LinkText text={post.text} style={styles.text} />
 
       {/* NEW: Render Shared Post if this is a share */}
       {post.sharedPost && (
@@ -285,18 +290,33 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
         />
       )}
 
-      {/* Media - Only show if NOT a shared post */}
+      {/* Media - Videos and Images */}
       {!post.sharedPost && post.mediaUrls && post.mediaUrls.length > 0 && (
-        <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
-          {post.mediaUrls.map((url, index) => (
-            <Image
-              key={index}
-              source={{ uri: url }}
-              style={styles.media}
-              resizeMode="cover"
-            />
-          ))}
-        </ScrollView>
+        <View style={styles.mediaContainer}>
+          {post.mediaUrls.map((url, index) => {
+            const mediaType = post.mediaTypes?.[index] || 'image';
+            
+            // Render video
+            if (mediaType === 'video') {
+              return (
+                <VideoPlayer
+                  key={`video-${index}`}
+                  uri={url}
+                  style={{ marginBottom: 8 }}
+                />
+              );
+            }
+            return null;
+          })}
+          
+          {/* Render images with ImageCollage */}
+          {(() => {
+            const imageUrls = post.mediaUrls.filter((_, i) => 
+              (post.mediaTypes?.[i] || 'image') === 'image'
+            );
+            return imageUrls.length > 0 ? <ImageCollage images={imageUrls} /> : null;
+          })()}
+        </View>
       )}
 
       {/* Stats - Hidden for announcements */}
@@ -416,12 +436,13 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
                             {formatTimeAgo(comment.createdAt)}
                           </Text>
                         </View>
-                        <Text style={[
-                          styles.modalCommentText,
-                          isOwnComment && styles.modalCommentTextOwn
-                        ]}>
-                          {comment.text}
-                        </Text>
+                        <LinkText
+                          text={comment.text}
+                          style={[
+                            styles.modalCommentText,
+                            isOwnComment && styles.modalCommentTextOwn
+                          ]}
+                        />
                       </View>
                     </TouchableOpacity>
                   </View>
@@ -676,6 +697,9 @@ const styles = StyleSheet.create({
     width: width - 2,
     height: 300,
     backgroundColor: Colors.light.card,
+  },
+  mediaContainer: {
+    marginVertical: 8,
   },
   stats: {
     flexDirection: 'row',

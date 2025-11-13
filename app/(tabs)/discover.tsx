@@ -22,6 +22,7 @@ import { Opportunity, OpportunityCategory } from '../../types';
 import { Colors } from '../../constants/colors';
 import { OpportunityCard } from '../../components/cards/OpportunityCard';
 import { supabase } from '../../services/supabase';
+import { OpportunitiesSkeleton } from '../../components/SkeletonLayouts';
 
 const CATEGORIES: { value: OpportunityCategory | 'all'; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -218,8 +219,8 @@ export default function DiscoverScreen() {
           }
           ListEmptyComponent={
             loading ? (
-              <View style={styles.emptyContainer}>
-                <ActivityIndicator size="large" color={colors.tint} />
+              <View style={styles.listContent}>
+                <OpportunitiesSkeleton count={4} />
               </View>
             ) : (
               <View style={styles.emptyContainer}>

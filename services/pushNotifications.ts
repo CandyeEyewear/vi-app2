@@ -47,7 +47,7 @@ export async function registerForPushNotifications(): Promise<string | null> {
     let finalStatus = existingStatus;
 
     if (existingStatus !== 'granted') {
-      console.log('[PUSH] 📝 Requesting new notification permissions...');
+      console.log('[PUSH] 🔐 Requesting new notification permissions...');
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
       console.log('[PUSH] Permission request result:', status);
@@ -105,7 +105,8 @@ export async function registerForPushNotifications(): Promise<string | null> {
 }
 
 /**
- * Save push token to database
+ * Save push token to database (users table)
+ * 🛠️ FIXED: Now uses users.push_token column instead of push_tokens table
  */
 export async function savePushToken(userId: string, token: string): Promise<boolean> {
   console.log('[PUSH] 💾 Attempting to save push token to database...');
@@ -116,15 +117,14 @@ export async function savePushToken(userId: string, token: string): Promise<bool
     const timestamp = new Date().toISOString();
     console.log('[PUSH] Timestamp:', timestamp);
     
+    // 🛠️ FIXED: Save to users table instead of push_tokens table
     const { error } = await supabase
-      .from('push_tokens')
-      .upsert({
-        user_id: userId,
-        token: token,
+      .from('users')
+      .update({
+        push_token: token,
         updated_at: timestamp,
-      }, {
-        onConflict: 'user_id'
-      });
+      })
+      .eq('id', userId);
 
     if (error) {
       console.error('[PUSH] ❌ Database error saving push token:', error);
@@ -134,7 +134,7 @@ export async function savePushToken(userId: string, token: string): Promise<bool
       throw error;
     }
     
-    console.log('[PUSH] ✅ Push token saved successfully to database');
+    console.log('[PUSH] ✅ Push token saved successfully to users table');
     return true;
   } catch (error) {
     console.error('[PUSH] ❌ Exception while saving push token:', error);
@@ -144,16 +144,18 @@ export async function savePushToken(userId: string, token: string): Promise<bool
 
 /**
  * Remove push token from database (on logout)
+ * 🛠️ FIXED: Now uses users.push_token column instead of push_tokens table
  */
 export async function removePushToken(userId: string): Promise<boolean> {
   console.log('[PUSH] 🗑️ Attempting to remove push token from database...');
   console.log('[PUSH] User ID:', userId);
   
   try {
+    // 🛠️ FIXED: Update users table instead of deleting from push_tokens
     const { error } = await supabase
-      .from('push_tokens')
-      .delete()
-      .eq('user_id', userId);
+      .from('users')
+      .update({ push_token: null })
+      .eq('id', userId);
 
     if (error) {
       console.error('[PUSH] ❌ Database error removing push token:', error);
@@ -162,7 +164,7 @@ export async function removePushToken(userId: string): Promise<boolean> {
       throw error;
     }
     
-    console.log('[PUSH] ✅ Push token removed successfully from database');
+    console.log('[PUSH] ✅ Push token removed successfully from users table');
     return true;
   } catch (error) {
     console.error('[PUSH] ❌ Exception while removing push token:', error);
@@ -172,30 +174,37 @@ export async function removePushToken(userId: string): Promise<boolean> {
 
 /**
  * Send push notification via Expo Push API
+ * Supports single token or array of tokens
  */
 export async function sendPushNotification(
-  expoPushToken: string,
-  notification: PushNotificationData
+  expoPushTokens: string | string[],
+  notification: Omit<PushNotificationData, 'id'> & { id?: string },
+  badge?: number
 ): Promise<boolean> {
+  const tokens = Array.isArray(expoPushTokens) ? expoPushTokens : [expoPushTokens];
+  
   console.log('[PUSH] 📤 Sending push notification...');
-  console.log('[PUSH] Token (first 20 chars):', expoPushToken.substring(0, 20) + '...');
+  console.log('[PUSH] Number of recipients:', tokens.length);
   console.log('[PUSH] Notification type:', notification.type);
   console.log('[PUSH] Title:', notification.title);
   console.log('[PUSH] Body:', notification.body);
+  console.log('[PUSH] Badge count:', badge);
   
   try {
-    const message = {
-      to: expoPushToken,
+    // Build messages for all tokens
+    const messages = tokens.map(token => ({
+      to: token,
       sound: 'default',
       title: notification.title,
       body: notification.body,
+      badge: badge, // 🔴 ADD BADGE COUNT
       data: { 
         type: notification.type,
         id: notification.id,
         ...notification.data 
       },
       priority: 'high',
-    };
+    }));
 
     console.log('[PUSH] Sending to Expo Push API...');
     const response = await fetch('https://exp.host/--/api/v2/push/send', {
@@ -204,18 +213,22 @@ export async function sendPushNotification(
         Accept: 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(message),
+      body: JSON.stringify(messages),
     });
 
     const result = await response.json();
     console.log('[PUSH] API Response:', JSON.stringify(result, null, 2));
     
-    if (result.data?.status === 'error') {
-      console.error('[PUSH] ❌ Push notification API error:', result.data.message);
-      return false;
+    // Check for errors in response
+    if (result.data) {
+      const errors = result.data.filter((r: any) => r.status === 'error');
+      if (errors.length > 0) {
+        console.error('[PUSH] ❌ Push notification API errors:', errors);
+        return false;
+      }
     }
 
-    console.log('[PUSH] ✅ Push notification sent successfully');
+    console.log('[PUSH] ✅ Push notification sent successfully to', tokens.length, 'recipient(s)');
     return true;
   } catch (error) {
     console.error('[PUSH] ❌ Error sending push notification:', error);
@@ -225,41 +238,145 @@ export async function sendPushNotification(
 
 /**
  * Send notification to a specific user by their user ID
+ * 🛠️ FIXED: Now uses users.push_token column via RPC function
+ * 🔴 INCLUDES BADGE COUNT for app icon
  */
 export async function sendNotificationToUser(
   userId: string,
-  notification: PushNotificationData
+  notification: Omit<PushNotificationData, 'id'> & { id?: string }
 ): Promise<boolean> {
   console.log('[PUSH] 👤 Sending notification to user...');
   console.log('[PUSH] Target user ID:', userId);
   console.log('[PUSH] Notification type:', notification.type);
   
   try {
-    // Get user's push token from database
-    console.log('[PUSH] 🔍 Fetching user push token from database...');
-    const { data, error } = await supabase
-      .from('push_tokens')
-      .select('token')
-      .eq('user_id', userId)
-      .single();
+    // 🛠️ FIXED: Use RPC function that bypasses RLS
+    console.log('[PUSH] 🔍 Fetching user push token via RPC...');
+    const { data: token, error } = await supabase
+      .rpc('get_push_token', { p_user_id: userId });
 
     if (error) {
-      console.error('[PUSH] ❌ Database error fetching push token:', error);
+      console.error('[PUSH] ❌ RPC error fetching push token:', error);
       return false;
     }
 
-    if (!data) {
+    if (!token) {
       console.log('[PUSH] ⚠️ No push token found for user:', userId);
       return false;
     }
 
     console.log('[PUSH] ✅ Push token found for user');
-    console.log('[PUSH] Token (first 20 chars):', data.token.substring(0, 20) + '...');
+    console.log('[PUSH] Token (first 20 chars):', token.substring(0, 20) + '...');
 
-    // Send the notification
-    return await sendPushNotification(data.token, notification);
+    // 🔴 GET UNREAD COUNT FOR BADGE
+    console.log('[PUSH] 📊 Fetching unread notification count for badge...');
+    const { count: unreadCount } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('is_read', false);
+
+    const badgeCount = (unreadCount || 0) + 1; // +1 for the notification we're about to create
+    console.log('[PUSH] 🔴 Badge count:', badgeCount);
+
+    // Send the notification with badge
+    return await sendPushNotification(token, notification, badgeCount);
   } catch (error) {
     console.error('[PUSH] ❌ Error sending notification to user:', error);
     return false;
+  }
+}
+
+/**
+ * Send notification to multiple users
+ * Useful for announcements and opportunities
+ */
+export async function sendNotificationToUsers(
+  userIds: string[],
+  notification: Omit<PushNotificationData, 'id'> & { id?: string }
+): Promise<{ sent: number; failed: number }> {
+  console.log('[PUSH] 👥 Sending notification to multiple users...');
+  console.log('[PUSH] Number of users:', userIds.length);
+  console.log('[PUSH] Notification type:', notification.type);
+  
+  try {
+    // Fetch all push tokens for these users
+    console.log('[PUSH] 🔍 Fetching push tokens for all users...');
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('id, push_token')
+      .in('id', userIds);
+
+    if (error) {
+      console.error('[PUSH] ❌ Database error fetching push tokens:', error);
+      return { sent: 0, failed: userIds.length };
+    }
+
+    // Filter out users without tokens
+    const tokensToSend = users
+      ?.filter(user => user.push_token)
+      .map(user => user.push_token) || [];
+
+    console.log('[PUSH] 📊 Found', tokensToSend.length, 'valid push tokens out of', userIds.length, 'users');
+
+    if (tokensToSend.length === 0) {
+      console.log('[PUSH] ⚠️ No users with push tokens found');
+      return { sent: 0, failed: userIds.length };
+    }
+
+    // 🔴 For bulk notifications, we send badge: 1 to all
+    // Individual users will see different counts, but we can't query each individually
+    // Badge will auto-update when they open the app
+    const success = await sendPushNotification(tokensToSend, notification, 1);
+
+    if (success) {
+      console.log('[PUSH] ✅ Notifications sent to all users with tokens');
+      return { sent: tokensToSend.length, failed: userIds.length - tokensToSend.length };
+    } else {
+      console.error('[PUSH] ❌ Failed to send notifications');
+      return { sent: 0, failed: userIds.length };
+    }
+  } catch (error) {
+    console.error('[PUSH] ❌ Error sending notifications to users:', error);
+    return { sent: 0, failed: userIds.length };
+  }
+}
+
+/**
+ * Clear badge count (call when user opens app or reads all notifications)
+ * This removes the red dot from the app icon
+ */
+export async function clearBadgeCount(): Promise<void> {
+  console.log('[PUSH] 🔴 Clearing badge count...');
+  
+  try {
+    await Notifications.setBadgeCountAsync(0);
+    console.log('[PUSH] ✅ Badge count cleared');
+  } catch (error) {
+    console.error('[PUSH] ❌ Error clearing badge count:', error);
+  }
+}
+
+/**
+ * Update badge count to show current unread notifications
+ * Call this when user reads/deletes notifications
+ */
+export async function updateBadgeCount(userId: string): Promise<void> {
+  console.log('[PUSH] 🔴 Updating badge count for user:', userId);
+  
+  try {
+    const { count: unreadCount } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('is_read', false);
+
+    const badgeNumber = unreadCount || 0;
+    console.log('[PUSH] 📊 Setting badge to:', badgeNumber);
+    
+    await Notifications.setBadgeCountAsync(badgeNumber);
+    console.log('[PUSH] ✅ Badge count updated');
+  } catch (error) {
+    console.error('[PUSH] ❌ Error updating badge count:', error);
   }
 }

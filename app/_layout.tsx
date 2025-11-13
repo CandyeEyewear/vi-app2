@@ -6,6 +6,7 @@
 import { useEffect, useRef } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import * as Notifications from 'expo-notifications';
+import * as Linking from 'expo-linking';
 import { AuthProvider } from '../contexts/AuthContext';
 import { FeedProvider } from '../contexts/FeedContext';
 import { MessagingProvider } from '../contexts/MessagingContext';
@@ -37,9 +38,47 @@ function AppContent() {
           case 'message':
             router.push(`/conversation/${data.id}` as any);
             break;
+          case 'post':
+            router.push(`/post/${data.id}` as any);
+            break;
         }
       }
     });
+
+    // Deep link handler
+    const handleDeepLink = (event: { url: string }) => {
+      console.log('[DEEP LINK] Received:', event.url);
+      const parsed = Linking.parse(event.url);
+      
+      // Handle vi-app://post/[id] format
+      if (parsed.path) {
+        const pathParts = parsed.path.split('/').filter(Boolean);
+        if (pathParts[0] === 'post' && pathParts[1]) {
+          const postId = pathParts[1];
+          console.log('[DEEP LINK] Navigating to post:', postId);
+          router.push(`/post/${postId}` as any);
+          return;
+        }
+      }
+      
+      // Fallback: check queryParams
+      if (parsed.queryParams?.id) {
+        const postId = Array.isArray(parsed.queryParams.id) ? parsed.queryParams.id[0] : parsed.queryParams.id;
+        console.log('[DEEP LINK] Navigating to post (from query):', postId);
+        router.push(`/post/${postId}` as any);
+      }
+    };
+
+    // Handle initial URL (app opened via deep link)
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        console.log('[DEEP LINK] Initial URL:', url);
+        handleDeepLink({ url });
+      }
+    });
+
+    // Listen for deep links while app is running
+    const subscription = Linking.addEventListener('url', handleDeepLink);
 
     return () => {
       if (notificationListener.current) {
@@ -48,6 +87,7 @@ function AppContent() {
       if (responseListener.current) {
         Notifications.removeNotificationSubscription(responseListener.current);
       }
+      subscription.remove();
     };
   }, [router]);
 
@@ -61,6 +101,7 @@ function AppContent() {
       <Stack.Screen name="conversation/[id]" />
       <Stack.Screen name="opportunity/[id]" />
       <Stack.Screen name="profile/[id]" />
+      <Stack.Screen name="post/[id]" />
     </Stack>
   );
 }

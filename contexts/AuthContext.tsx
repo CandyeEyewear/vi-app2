@@ -5,6 +5,7 @@
 
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { registerForPushNotifications, savePushToken, removePushToken } from '../services/pushNotifications';
+import { createHubSpotContact } from '../services/hubspotService';
 import { User, RegisterFormData, LoginFormData, ApiResponse } from '../types';
 import { supabase } from '../services/supabase';
 
@@ -68,6 +69,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AUTH] 👂 Setting up auth state listener...');
       const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(async (event, session) => {
         console.log('[AUTH] 🔔 Auth state changed:', event);
+
+        // ✅ ADD THIS LINE:
+        if (event === 'TOKEN_REFRESHED') return; // Ignore token refresh!
+
         if (session) {
           console.log('[AUTH] Session active - User ID:', session.user.id);
           await loadUserProfile(session.user.id);
@@ -340,6 +345,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } else {
         console.log('[AUTH] ⚠️ No push token received (may be running on simulator)');
+      }
+
+      // Create contact in HubSpot
+      try {
+        await createHubSpotContact({
+          email: data.email,
+          fullName: data.fullName,
+          phone: data.phone,
+          location: data.location,
+          bio: data.bio,
+          areasOfExpertise: data.areasOfExpertise,
+          education: data.education,
+        });
+        console.log('[AUTH] ✅ HubSpot contact created successfully');
+      } catch (hubspotError) {
+        // Don't fail signup if HubSpot fails - just log the error
+        console.error('[AUTH] ⚠️ Failed to create HubSpot contact:', hubspotError);
       }
 
       console.log('[AUTH] 🎉 Sign up process completed successfully');

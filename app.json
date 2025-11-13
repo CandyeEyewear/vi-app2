@@ -2,7 +2,7 @@
   "expo": {
     "name": "VIbe",
     "slug": "vibe-volunteer-app",
-    "scheme": "vibe",
+    "scheme": "vi-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -20,8 +20,10 @@
         "NSCameraUsageDescription": "VIbe uses your camera to capture volunteer photos and upload media.",
         "NSPhotoLibraryUsageDescription": "VIbe needs access to your photo library so you can attach images to posts and opportunities.",
         "NSPhotoLibraryAddUsageDescription": "VIbe saves photos or images you create within the app.",
-        "NSLocationWhenInUseUsageDescription": "Location is used to show nearby volunteer opportunities and events."
-      }
+        "NSLocationWhenInUseUsageDescription": "Location is used to show nearby volunteer opportunities and events.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "y"
     },
     "android": {
       "package": "org.volunteersinc.vibe",

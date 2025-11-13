@@ -20,6 +20,7 @@ import { Colors } from '../constants/colors';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import CustomAlert from '../components/CustomAlert';
+import { NotificationsSkeleton } from '../components/SkeletonLayouts';
 
 interface Notification {
   id: string;
@@ -252,8 +253,8 @@ export default function NotificationsScreen() {
 
       {/* Notifications List */}
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
+        <View style={styles.listContent}>
+          <NotificationsSkeleton count={5} />
         </View>
       ) : (
         <FlatList
