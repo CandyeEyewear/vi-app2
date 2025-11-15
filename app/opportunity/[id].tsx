@@ -97,6 +97,41 @@ export default function OpportunityDetailsScreen() {
     }
   }, [opportunityId]);
 
+  // Calculate and log check-in window debug info
+  useEffect(() => {
+    if (opportunity && (opportunity.dateStart || opportunity.dateEnd)) {
+      const now = new Date();
+      const startDate = opportunity.dateStart ? new Date(opportunity.dateStart) : null;
+      const endDate = opportunity.dateEnd ? new Date(opportunity.dateEnd) : null;
+      
+      let isWithinCheckInWindow = false;
+      if (startDate && endDate) {
+        // Set end date to end of day for comparison
+        const endDateForComparison = new Date(endDate);
+        endDateForComparison.setHours(23, 59, 59, 999);
+        isWithinCheckInWindow = now >= startDate && now <= endDateForComparison;
+      } else if (startDate) {
+        isWithinCheckInWindow = now >= startDate;
+      } else if (endDate) {
+        const endDateForComparison = new Date(endDate);
+        endDateForComparison.setHours(23, 59, 59, 999);
+        isWithinCheckInWindow = now <= endDateForComparison;
+      }
+      
+      const hasSignedUp = isSignedUp;
+
+      // After the isWithinCheckInWindow calculation (around line 108)
+      console.log('📅 Check-in Debug:', {
+        hasSignedUp,
+        isWithinCheckInWindow,
+        dateStart: opportunity.dateStart,
+        dateEnd: opportunity.dateEnd,
+        currentDate: new Date().toISOString(),
+        opportunityId: opportunity.id
+      });
+    }
+  }, [opportunity, isSignedUp]);
+
   const loadOpportunityDetails = async () => {
     try {
       setLoading(true);

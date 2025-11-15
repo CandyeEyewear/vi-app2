@@ -489,15 +489,17 @@ setCircleStatus('pending');
               <View style={styles.statsGrid}>
                 <View style={styles.statCard}>
                   <Text style={styles.statValue}>{profileUser.totalHours}</Text>
-                  <Text style={styles.statLabel}>Hours</Text>
+                  <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit={true}>Hours</Text>
                 </View>
                 <View style={styles.statCard}>
                   <Text style={styles.statValue}>{profileUser.activitiesCompleted}</Text>
-                  <Text style={styles.statLabel}>Activities</Text>
+                  <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit={true}>
+                    {profileUser.activitiesCompleted === 1 ? 'Activity' : 'Activities'}
+                  </Text>
                 </View>
                 <View style={styles.statCard}>
                   <Text style={styles.statValue}>{profileUser.organizationsHelped}</Text>
-                  <Text style={styles.statLabel}>Organizations</Text>
+                  <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit={true}>Entity/Org</Text>
                 </View>
               </View>
             </View>
@@ -732,8 +734,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   statLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.light.textSecondary,
+    textAlign: 'center',
+    minHeight: 16,
   },
   achievementsGrid: {
     flexDirection: 'row',

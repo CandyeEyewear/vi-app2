@@ -171,15 +171,17 @@ export default function ProfileScreen() {
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>
             <Text style={styles.statValue}>{user.totalHours}</Text>
-            <Text style={styles.statLabel}>Hours</Text>
+            <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit={true}>Hours</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statValue}>{user.activitiesCompleted}</Text>
-            <Text style={styles.statLabel}>Activities</Text>
+            <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit={true}>
+              {user.activitiesCompleted === 1 ? 'Activity' : 'Activities'}
+            </Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statValue}>{user.organizationsHelped}</Text>
-            <Text style={styles.statLabel}>Organizations</Text>
+            <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit={true}>Entity/Org</Text>
           </View>
         </View>
       </View>
@@ -416,8 +418,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   statLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.light.textSecondary,
+    textAlign: 'center',
+    minHeight: 16,
   },
   achievementsGrid: {
     flexDirection: 'row',
