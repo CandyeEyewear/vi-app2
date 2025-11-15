@@ -41,6 +41,13 @@ function AppContent() {
           case 'post':
             router.push(`/post/${data.id}` as any);
             break;
+          case 'opportunity_submitted':
+            router.push(`/(admin)/opportunity-review/${data.id}` as any);
+            break;
+          case 'opportunity_approved':
+          case 'opportunity_rejected':
+            router.push(`/opportunity/${data.id}` as any);
+            break;
         }
       }
     });
@@ -50,7 +57,20 @@ function AppContent() {
       console.log('[DEEP LINK] Received:', event.url);
       const parsed = Linking.parse(event.url);
       
-      // Handle vi-app://post/[id] format
+      // Handle invite links: https://vibe.volunteersinc.org/invite?code=XXX or vibe://invite?code=XXX
+      if (parsed.hostname === 'vibe.volunteersinc.org' || parsed.scheme === 'vibe') {
+        if (parsed.path === '/invite' || parsed.path?.includes('invite')) {
+          const inviteCode = parsed.queryParams?.code || parsed.queryParams?.ref || parsed.queryParams?.invite;
+          if (inviteCode) {
+            const code = Array.isArray(inviteCode) ? inviteCode[0] : inviteCode;
+            console.log('[DEEP LINK] Navigating to register with invite code:', code);
+            router.push(`/register?code=${code}` as any);
+            return;
+          }
+        }
+      }
+      
+      // Handle vibe://post/[id] format
       if (parsed.path) {
         const pathParts = parsed.path.split('/').filter(Boolean);
         if (pathParts[0] === 'post' && pathParts[1]) {
@@ -58,6 +78,22 @@ function AppContent() {
           console.log('[DEEP LINK] Navigating to post:', postId);
           router.push(`/post/${postId}` as any);
           return;
+        }
+        // Handle vibe://reset-password format
+        if (pathParts[0] === 'reset-password') {
+          console.log('[DEEP LINK] Navigating to reset password');
+          router.push('/reset-password' as any);
+          return;
+        }
+        // Handle vibe://invite?code=XXX format
+        if (pathParts[0] === 'invite') {
+          const inviteCode = parsed.queryParams?.code || parsed.queryParams?.ref || parsed.queryParams?.invite;
+          if (inviteCode) {
+            const code = Array.isArray(inviteCode) ? inviteCode[0] : inviteCode;
+            console.log('[DEEP LINK] Navigating to register with invite code:', code);
+            router.push(`/register?code=${code}` as any);
+            return;
+          }
         }
       }
       
@@ -95,6 +131,8 @@ function AppContent() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="login" />
       <Stack.Screen name="register" />
+      <Stack.Screen name="forgot-password" />
+      <Stack.Screen name="reset-password" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="edit-profile" />
       <Stack.Screen name="settings" />
@@ -102,6 +140,9 @@ function AppContent() {
       <Stack.Screen name="opportunity/[id]" />
       <Stack.Screen name="profile/[id]" />
       <Stack.Screen name="post/[id]" />
+      <Stack.Screen name="propose-opportunity" />
+      <Stack.Screen name="(admin)/opportunity-reviews" />
+      <Stack.Screen name="(admin)/opportunity-review/[id]" />
     </Stack>
   );
 }

@@ -14,11 +14,12 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
-  Alert,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
+import CustomAlert from '../components/CustomAlert';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -27,10 +28,29 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({
+    title: '',
+    message: '',
+    type: 'error' as 'success' | 'error' | 'warning',
+  });
+
+  const showAlert = (title: string, message: string, type: 'success' | 'error' | 'warning' = 'error') => {
+    setAlertConfig({ title, message, type });
+    setAlertVisible(true);
+  };
+
+  const handleTerms = () => {
+    Linking.openURL('https://volunteersinc.org/terms-and-conditions');
+  };
+
+  const handlePrivacyPolicy = () => {
+    Linking.openURL('https://volunteersinc.org/vibe-privacy-policy');
+  };
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      showAlert('Missing Information', 'Please fill in all fields', 'error');
       return;
     }
 
@@ -39,7 +59,26 @@ export default function LoginScreen() {
     if (response.success) {
       router.replace('/(tabs)/feed');
     } else {
-      Alert.alert('Login Failed', response.error || 'Please check your credentials');
+      // Provide user-friendly error messages
+      let errorMessage = 'Please check your credentials and try again.';
+      
+      if (response.error) {
+        const errorLower = response.error.toLowerCase();
+        if (errorLower.includes('invalid login credentials') || 
+            errorLower.includes('email not confirmed') ||
+            errorLower.includes('invalid password') ||
+            errorLower.includes('user not found')) {
+          errorMessage = 'Invalid email or password. Please check your credentials and try again.';
+        } else if (errorLower.includes('too many requests')) {
+          errorMessage = 'Too many login attempts. Please wait a moment and try again.';
+        } else if (errorLower.includes('network') || errorLower.includes('connection')) {
+          errorMessage = 'Network error. Please check your internet connection and try again.';
+        } else {
+          errorMessage = response.error;
+        }
+      }
+      
+      showAlert('Login Failed', errorMessage, 'error');
     }
   };
 
@@ -100,7 +139,10 @@ export default function LoginScreen() {
           </View>
 
           {/* Forgot Password */}
-          <TouchableOpacity style={styles.forgotPassword}>
+          <TouchableOpacity 
+            style={styles.forgotPassword}
+            onPress={() => router.push('/forgot-password')}
+          >
             <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
           </TouchableOpacity>
 
@@ -129,15 +171,24 @@ export default function LoginScreen() {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={handleTerms}>
             <Text style={styles.footerLink}>Terms of Service</Text>
           </TouchableOpacity>
           <Text style={styles.footerDivider}>•</Text>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={handlePrivacyPolicy}>
             <Text style={styles.footerLink}>Privacy Policy</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Custom Alert */}
+      <CustomAlert
+        visible={alertVisible}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        type={alertConfig.type}
+        onClose={() => setAlertVisible(false)}
+      />
     </KeyboardAvoidingView>
   );
 }

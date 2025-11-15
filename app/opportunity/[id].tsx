@@ -119,8 +119,13 @@ export default function OpportunityDetailsScreen() {
         location: data.location,
         latitude: data.latitude,
         longitude: data.longitude,
-        date: data.date,
-        duration: data.duration,
+        mapLink: data.map_link,
+        date: data.date || data.date_start,
+        dateStart: data.date_start,
+        dateEnd: data.date_end,
+        timeStart: data.time_start,
+        timeEnd: data.time_end,
+        duration: data.duration || (data.time_start && data.time_end ? `${data.time_start} - ${data.time_end}` : undefined),
         spotsAvailable: data.spots_available,
         spotsTotal: data.spots_total,
         requirements: data.requirements,
@@ -172,6 +177,31 @@ export default function OpportunityDetailsScreen() {
 
   const handleSignUp = async () => {
     if (!user || !opportunity) return;
+
+    // Check if signup is within date range
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    if (opportunity.dateStart || opportunity.dateEnd) {
+      const startDate = opportunity.dateStart ? new Date(opportunity.dateStart) : null;
+      const endDate = opportunity.dateEnd ? new Date(opportunity.dateEnd) : null;
+      
+      if (startDate) {
+        const start = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+        if (today < start) {
+          showAlert('Not Available', 'Sign-ups are not yet open for this opportunity', 'warning');
+          return;
+        }
+      }
+      
+      if (endDate) {
+        const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+        if (today > end) {
+          showAlert('Closed', 'Sign-ups for this opportunity have closed', 'warning');
+          return;
+        }
+      }
+    }
 
     if (opportunity.spotsAvailable <= 0) {
       showAlert('Full', 'This opportunity is currently full', 'warning');
@@ -312,6 +342,7 @@ const handleShareQRCode = async () => {
       healthcare: '#EF4444',
       community: '#8B5CF6',
       poorRelief: '#F59E0B',
+      viEngage: '#FF6B35',
     };
     return categoryColors[category] || colors.primary;
   };
@@ -547,30 +578,66 @@ const handleQRScan = async (scannedCode: string) => {
 
             {/* Info Cards */}
             <View style={styles.infoGrid}>
-              <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <MapPin size={20} color={colors.primary} />
+              <TouchableOpacity 
+                style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+                onPress={() => {
+                  if (opportunity.mapLink) {
+                    Linking.openURL(opportunity.mapLink);
+                  }
+                }}
+                disabled={!opportunity.mapLink}
+                activeOpacity={opportunity.mapLink ? 0.7 : 1}
+              >
+                <MapPin size={20} color={opportunity.mapLink ? colors.primary : colors.textSecondary} />
                 <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Location</Text>
-                <Text style={[styles.infoValue, { color: colors.text }]} numberOfLines={2}>
+                <Text style={[
+                  styles.infoValue, 
+                  { color: colors.text },
+                  !opportunity.mapLink && { color: colors.textSecondary }
+                ]} numberOfLines={2}>
                   {opportunity.location}
                 </Text>
-              </View>
+              </TouchableOpacity>
 
               <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <Calendar size={20} color={colors.primary} />
                 <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Date</Text>
                 <Text style={[styles.infoValue, { color: colors.text }]}>
-                  {new Date(opportunity.date).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                  })}
+                  {opportunity.dateStart && opportunity.dateEnd ? (
+                    opportunity.dateStart === opportunity.dateEnd ? (
+                      new Date(opportunity.dateStart).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })
+                    ) : (
+                      `${new Date(opportunity.dateStart).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                      })} - ${new Date(opportunity.dateEnd).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}`
+                    )
+                  ) : (
+                    new Date(opportunity.date).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })
+                  )}
                 </Text>
               </View>
 
               <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <Clock size={20} color={colors.primary} />
-                <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Duration</Text>
-                <Text style={[styles.infoValue, { color: colors.text }]}>{opportunity.duration}</Text>
+                <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Time</Text>
+                <Text style={[styles.infoValue, { color: colors.text }]}>
+                  {opportunity.timeStart && opportunity.timeEnd 
+                    ? `${opportunity.timeStart} - ${opportunity.timeEnd}`
+                    : opportunity.duration || 'TBD'}
+                </Text>
               </View>
 
               <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>

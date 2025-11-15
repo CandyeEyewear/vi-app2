@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors } from '../../constants/colors';
-import { Shield } from 'lucide-react-native';
+import { Shield, ShoppingBag, Plus, Edit, Settings, Calendar } from 'lucide-react-native';
 import StreakBadge from '../../components/StreakBadge';
 
 export default function ProfileScreen() {
@@ -105,6 +105,26 @@ export default function ProfileScreen() {
         <Text style={[styles.email, { color: colors.textSecondary }]}>{user.email}</Text>
         {user.location && (
           <Text style={[styles.location, { color: colors.textSecondary }]}>{user.location}</Text>
+        )}
+        {user.dateOfBirth && (
+          <View style={[styles.ageRow, { marginTop: 8 }]}>
+            <Calendar size={16} color={colors.textSecondary} />
+            <Text style={[styles.ageText, { color: colors.textSecondary, marginLeft: 8 }]}>
+              {(() => {
+                const calculateAge = (dob: string) => {
+                  const today = new Date();
+                  const birthDate = new Date(dob);
+                  let age = today.getFullYear() - birthDate.getFullYear();
+                  const monthDiff = today.getMonth() - birthDate.getMonth();
+                  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                    age--;
+                  }
+                  return age;
+                };
+                return `${calculateAge(user.dateOfBirth)} years old`;
+              })()}
+            </Text>
+          </View>
         )}
       </View>
 
@@ -210,19 +230,53 @@ export default function ProfileScreen() {
 
       {/* Actions */}
       <View style={styles.section}>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => router.push('/edit-profile')}
-        >
-          <Text style={styles.actionButtonText}>Edit Profile</Text>
-        </TouchableOpacity>
+        <View style={styles.actionButtonsContainer}>
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/edit-profile')}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.actionButtonIcon, { backgroundColor: colors.primary + '15' }]}>
+              <Edit size={20} color={colors.primary} />
+            </View>
+            <Text style={[styles.actionButtonText, { color: colors.text }]}>Edit Profile</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => router.push('/settings')}
-        >
-          <Text style={styles.actionButtonText}>Settings</Text>
-        </TouchableOpacity>
+          {!isAdmin && (
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={() => router.push('/propose-opportunity')}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.actionButtonIcon, { backgroundColor: colors.primary + '15' }]}>
+                <Plus size={20} color={colors.primary} />
+              </View>
+              <Text style={[styles.actionButtonText, { color: colors.text }]}>Propose Opportunity</Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/vi-shopp-screen')}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.actionButtonIcon, { backgroundColor: colors.primary + '15' }]}>
+              <ShoppingBag size={20} color={colors.primary} />
+            </View>
+            <Text style={[styles.actionButtonText, { color: colors.text }]}>VI Shopp</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/settings')}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.actionButtonIcon, { backgroundColor: colors.primary + '15' }]}>
+              <Settings size={20} color={colors.primary} />
+            </View>
+            <Text style={[styles.actionButtonText, { color: colors.text }]}>Settings</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Logout Button */}
@@ -394,6 +448,14 @@ const styles = StyleSheet.create({
   infoRow: {
     marginBottom: 16,
   },
+  ageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ageText: {
+    fontSize: 14,
+  },
   infoLabel: {
     fontSize: 14,
     fontWeight: '600',
@@ -422,19 +484,28 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.light.primary,
   },
+  actionButtonsContainer: {
+    gap: 12,
+  },
   actionButton: {
-    backgroundColor: Colors.light.card,
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 16,
     borderRadius: 12,
-    marginBottom: 12,
     borderWidth: 1,
-    borderColor: Colors.light.border,
+    gap: 12,
+  },
+  actionButtonIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   actionButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.light.text,
-    textAlign: 'center',
+    flex: 1,
   },
   logoutSection: {
     padding: 16,

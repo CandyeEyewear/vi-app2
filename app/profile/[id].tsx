@@ -16,7 +16,7 @@ import {
      Linking,
    } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
-import { ChevronLeft, MessageCircle, Phone, Mail, UserPlus, UserCheck } from 'lucide-react-native';
+import { ChevronLeft, MessageCircle, Phone, Mail, UserPlus, UserCheck, Calendar } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useFeed } from '../../contexts/FeedContext';
 import { useMessaging } from '../../contexts/MessagingContext';
@@ -79,10 +79,12 @@ useFocusEffect(
         fullName: data.full_name,
         phone: data.phone,
         location: data.location,
+        country: data.country,
         bio: data.bio,
         areasOfExpertise: data.areas_of_expertise,
         education: data.education,
         avatarUrl: data.avatar_url,
+        dateOfBirth: data.date_of_birth,
         role: data.role,
         isPrivate: data.is_private,
         totalHours: data.total_hours,
@@ -175,12 +177,22 @@ const handleAddToCircle = async () => {
          });
 
 // Send push notification
-await sendNotificationToUser(profileUser.id, {
-  type: 'circle_request',
-  id: currentUser.id,
-  title: 'New Circle Request',
-  body: `${currentUser.fullName} wants to add you to their circle`,
-});
+try {
+  console.log('[PROFILE] 📤 Sending circle request push notification to user:', profileUser.id.substring(0, 8) + '...');
+  const pushResult = await sendNotificationToUser(profileUser.id, {
+    type: 'circle_request',
+    id: currentUser.id,
+    title: 'New Circle Request',
+    body: `${currentUser.fullName} wants to add you to their circle`,
+  });
+  if (pushResult) {
+    console.log('[PROFILE] ✅ Push notification sent successfully');
+  } else {
+    console.error('[PROFILE] ❌ Failed to send push notification');
+  }
+} catch (pushError) {
+  console.error('[PROFILE] ❌ Exception sending push notification:', pushError);
+}
 
 setCircleStatus('pending');
 
@@ -360,6 +372,26 @@ setCircleStatus('pending');
           <Text style={styles.name}>{profileUser.fullName}</Text>
           {profileUser.location && (
             <Text style={styles.location}>{profileUser.location}</Text>
+          )}
+          {profileUser.dateOfBirth && (
+            <View style={styles.ageRow}>
+              <Calendar size={16} color={Colors.light.textSecondary} />
+              <Text style={[styles.ageText, { color: Colors.light.textSecondary, marginLeft: 8 }]}>
+                {(() => {
+                  const calculateAge = (dob: string) => {
+                    const today = new Date();
+                    const birthDate = new Date(dob);
+                    let age = today.getFullYear() - birthDate.getFullYear();
+                    const monthDiff = today.getMonth() - birthDate.getMonth();
+                    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                      age--;
+                    }
+                    return age;
+                  };
+                  return `${calculateAge(profileUser.dateOfBirth)} years old`;
+                })()}
+              </Text>
+            </View>
           )}
           
           {isPrivateProfile && (
@@ -630,6 +662,15 @@ const styles = StyleSheet.create({
   location: {
     fontSize: 14,
     color: Colors.light.textSecondary,
+  },
+  ageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  ageText: {
+    fontSize: 14,
   },
   privateNotice: {
     marginTop: 12,

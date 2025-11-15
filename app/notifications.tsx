@@ -24,7 +24,7 @@ import { NotificationsSkeleton } from '../components/SkeletonLayouts';
 
 interface Notification {
   id: string;
-  type: 'circle_request' | 'announcement' | 'opportunity' | 'message';
+  type: 'circle_request' | 'announcement' | 'opportunity' | 'message' | 'opportunity_submitted' | 'opportunity_approved' | 'opportunity_rejected';
   title: string;
   message: string;
   link: string | null;

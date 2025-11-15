@@ -16,7 +16,7 @@ import {
       } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Lock, Trash2, HelpCircle, FileText, Shield, X, Mail } from 'lucide-react-native';
+import { ChevronLeft, Lock, Trash2, HelpCircle, FileText, Shield, X, Mail, UserPlus, ChevronRight } from 'lucide-react-native';
 import CustomAlert from '../components/CustomAlert';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
@@ -25,7 +25,7 @@ import { useEffect } from 'react';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { user, updateProfile } = useAuth();
+  const { user, updateProfile, isAdmin } = useAuth();
 
 const insets = useSafeAreaInsets();
   
@@ -34,6 +34,7 @@ const insets = useSafeAreaInsets();
      announcements_enabled: true,
      opportunities_enabled: true,
      messages_enabled: true,
+     opportunity_proposals_enabled: true,
    });
 
    const [loading, setLoading] = useState(true);
@@ -95,6 +96,7 @@ const insets = useSafeAreaInsets();
            announcements_enabled: data.announcements_enabled,
            opportunities_enabled: data.opportunities_enabled,
            messages_enabled: data.messages_enabled,
+           opportunity_proposals_enabled: data.opportunity_proposals_enabled,
          });
        }
      } catch (error) {
@@ -346,6 +348,24 @@ const handleDeleteAccount = async () => {
          disabled={loading}
        />
      </View>
+
+     {isAdmin && (
+       <View style={styles.settingRow}>
+         <View style={styles.settingInfo}>
+           <Text style={styles.settingLabel}>Opportunity Proposals</Text>
+           <Text style={styles.settingDescription}>
+             Get notified when volunteers submit opportunity proposals
+           </Text>
+         </View>
+         <Switch
+           value={notificationSettings.opportunity_proposals_enabled}
+           onValueChange={(value) => updateNotificationSetting('opportunity_proposals_enabled', value)}
+           trackColor={{ false: Colors.light.border, true: Colors.light.primary }}
+           thumbColor="#FFFFFF"
+           disabled={loading}
+         />
+       </View>
+     )}
    </View>
         {/* Account */}
    <View style={styles.section}>
@@ -355,6 +375,18 @@ const handleDeleteAccount = async () => {
        <Lock size={20} color={Colors.light.text} />
        <Text style={styles.menuItemText}>Change Password</Text>
        <ChevronLeft size={20} color={Colors.light.textSecondary} style={{ transform: [{ rotate: '180deg' }] }} />
+     </TouchableOpacity>
+
+     <TouchableOpacity 
+       style={styles.menuItem} 
+       onPress={() => router.push('/invite-friends')}
+     >
+       <UserPlus size={24} color="#2196F3" />
+       <View style={styles.menuItemContent}>
+         <Text style={styles.menuItemTitle}>Invite Friends</Text>
+         <Text style={styles.menuItemSubtitle}>Share your invite link</Text>
+       </View>
+       <ChevronRight size={20} color="#9E9E9E" />
      </TouchableOpacity>
 
      <View style={styles.settingRow}>
@@ -755,6 +787,20 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: Colors.light.text,
+  },
+  menuItemContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  menuItemTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.light.text,
+    marginBottom: 2,
+  },
+  menuItemSubtitle: {
+    fontSize: 13,
+    color: Colors.light.textSecondary,
   },
   menuItemChevron: {
     fontSize: 24,

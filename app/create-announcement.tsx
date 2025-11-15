@@ -262,40 +262,83 @@ export default function CreateAnnouncementScreen() {
         console.log('📊 Total notifications sent:', notificationCount);
         
         // Send push notifications to users with announcements enabled
-        if (!notifError && notificationCount && notificationCount > 0) {
-          // Get all user IDs who should receive push notifications
+        if (!notifError && notificationCount && Array.isArray(notificationCount) && notificationCount.length > 0) {
+          console.log('🔔 Starting push notification process...');
+          
+          // Get all users with push tokens
           const { data: users, error: usersError } = await supabase
             .from('users')
-            .select('id, push_token, notification_settings')
+            .select('id, push_token')
             .not('push_token', 'is', null);
 
+          console.log('📊 Users query result:', { 
+            error: usersError, 
+            userCount: users?.length || 0 
+          });
+
           if (!usersError && users) {
-            const enabledUsers = users.filter(user => 
-              user.notification_settings?.announcements !== false
-            );
+            console.log('✅ Found', users.length, 'users with push tokens');
+            
+            // Get notification settings for these users
+            const { data: settingsData, error: settingsError } = await supabase
+              .from('user_notification_settings')
+              .select('user_id, announcements_enabled')
+              .in('user_id', users.map(u => u.id));
 
-            console.log('📤 Sending push to', enabledUsers.length, 'users with announcements enabled');
+            console.log('📊 Settings query result:', { 
+              error: settingsError, 
+              settingsCount: settingsData?.length || 0 
+            });
 
-            for (const userObj of enabledUsers) {
-              await sendNotificationToUser(userObj.id, {
-                type: 'announcement',
-                id: data.id,
-                title: 'New Announcement',
-                body: text.trim().substring(0, 100) + (text.length > 100 ? '...' : ''),
+            if (!settingsError && settingsData) {
+              // Filter users who have announcements enabled
+              const settingsMap = new Map(settingsData.map(s => [s.user_id, s.announcements_enabled]));
+              
+              const enabledUsers = users.filter(user => {
+                const setting = settingsMap.get(user.id);
+                return setting === true || setting === undefined;
               });
+
+              console.log('✅ Found', enabledUsers.length, 'users with announcements enabled');
+
+              for (const userObj of enabledUsers) {
+                console.log('📤 Sending push to user:', userObj.id.substring(0, 8) + '...');
+                try {
+                  await sendNotificationToUser(userObj.id, {
+                    type: 'announcement',
+                    id: data.id,
+                    title: 'New Announcement',
+                    body: text.trim().substring(0, 100) + (text.length > 100 ? '...' : ''),
+                  });
+                  console.log('✅ Push sent to user:', userObj.id.substring(0, 8) + '...');
+                } catch (pushError) {
+                  console.error('❌ Failed to send push to user:', userObj.id, pushError);
+                }
+              }
+              
+              console.log('🎉 Push notification process complete!');
             }
           }
         }
       }
 
       console.log('🎉 Announcement creation complete!');
-      showAlert(
-        'Success!',
-        notifError 
-          ? (isPinned ? 'Pinned announcement posted (notifications may have failed)' : 'Announcement posted (notifications may have failed)')
-          : (isPinned ? `Pinned announcement posted and ${notificationCount} notification(s) sent` : `Announcement posted and ${notificationCount} notification(s) sent`),
-        'success'
-      );
+      
+      // Build success message
+      let successMessage = '';
+      if (notifError) {
+        successMessage = isPinned 
+          ? 'Pinned announcement posted (notifications may have failed)' 
+          : 'Announcement posted (notifications may have failed)';
+      } else {
+        const count = notificationCount || 0;
+        const countText = count === 1 ? 'notification' : 'notifications';
+        successMessage = isPinned
+          ? `Pinned announcement posted and ${count} ${countText} sent`
+          : `Announcement posted and ${count} ${countText} sent`;
+      }
+      
+      showAlert('Success!', successMessage, 'success');
 
       console.log('🏠 Navigating back after delay...');
       setTimeout(() => {

@@ -4,7 +4,7 @@
  * Works with Supabase database trigger for automatic profile creation
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,30 +17,43 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../services/supabase';
 import { Colors } from '../constants/colors';
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const { invite, code } = useLocalSearchParams<{ invite?: string; code?: string }>();
   const [loading, setLoading] = useState(false);
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
     phone: '',
     location: '',
+    country: 'Jamaica',
     password: '',
     confirmPassword: '',
     bio: '',
     areasOfExpertise: '',
     education: '',
+    dateOfBirth: '',
   });
   const [showPassword, setShowPassword] = useState(false);
 
+  // Capture invite code from URL (supports both 'code' and 'invite' parameters)
+  useEffect(() => {
+    const inviteParam = code || invite;
+    if (inviteParam && typeof inviteParam === 'string') {
+      setInviteCode(inviteParam);
+      console.log('Invite code detected:', inviteParam);
+    }
+  }, [invite, code]);
+
   const handleRegister = async () => {
     // Validation
-    if (!formData.fullName || !formData.email || !formData.phone || !formData.location || !formData.password) {
+    if (!formData.fullName || !formData.email || !formData.phone || !formData.location || !formData.country || !formData.password) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
@@ -62,6 +75,30 @@ export default function RegisterScreen() {
       return;
     }
 
+    // Validate DOB
+    if (!formData.dateOfBirth) {
+      Alert.alert('Error', 'Please enter your date of birth');
+      return;
+    }
+
+    // Calculate age
+    const calculateAge = (dob: string) => {
+      const today = new Date();
+      const birthDate = new Date(dob);
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      return age;
+    };
+
+    const age = calculateAge(formData.dateOfBirth);
+    if (age < 18) {
+      Alert.alert('Age Restriction', 'You must be 18 or older to register for VIbe');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -79,9 +116,12 @@ export default function RegisterScreen() {
             full_name: formData.fullName.trim(),
             phone: formData.phone.trim(),
             location: formData.location.trim(),
+            country: formData.country.trim(),
             bio: formData.bio.trim() || null,
             areas_of_expertise: expertiseArray.length > 0 ? expertiseArray : null,
             education: formData.education.trim() || null,
+            date_of_birth: formData.dateOfBirth,
+            invite_code: inviteCode || null, // Include invite code if present
           },
         },
       });
@@ -132,6 +172,12 @@ export default function RegisterScreen() {
           </TouchableOpacity>
           <Text style={styles.title}>Join VIbe</Text>
           <Text style={styles.subtitle}>Create your volunteer account</Text>
+          
+          {inviteCode && (
+            <View style={styles.inviteBanner}>
+              <Text style={styles.inviteText}>🎉 You were invited by a friend!</Text>
+            </View>
+          )}
         </View>
 
         {/* Required Fields Section */}
@@ -190,6 +236,31 @@ export default function RegisterScreen() {
               onChangeText={(value) => updateField('location', value)}
               editable={!loading}
             />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Country*</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Jamaica"
+              placeholderTextColor={Colors.light.textSecondary}
+              value={formData.country}
+              onChangeText={(value) => updateField('country', value)}
+              editable={!loading}
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Date of Birth*</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={Colors.light.textSecondary}
+              value={formData.dateOfBirth}
+              onChangeText={(value) => updateField('dateOfBirth', value)}
+              editable={!loading}
+            />
+            <Text style={styles.helperText}>You must be 18 or older to register</Text>
           </View>
 
           <View style={styles.inputContainer}>
@@ -415,6 +486,19 @@ const styles = StyleSheet.create({
   loginLink: {
     fontSize: 14,
     color: Colors.light.primary,
+    fontWeight: '600',
+  },
+  inviteBanner: {
+    backgroundColor: '#E3F2FD',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.light.primary,
+  },
+  inviteText: {
+    fontSize: 14,
+    color: '#1976D2',
     fontWeight: '600',
   },
 });

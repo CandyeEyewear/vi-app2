@@ -84,13 +84,13 @@ export default function LinkText({ text, style, linkStyle }: LinkTextProps) {
       {parts.map((part, index) => {
         if (part.isLink && part.url) {
           return (
-            <Text key={index}>
-              <Text
-                style={[styles.link, linkStyle]}
-                onPress={() => handleLinkPress(part.url!)}
-              >
-                {part.text}
-              </Text>
+            <Text
+              key={index}
+              style={[styles.link, linkStyle]}
+              onPress={() => handleLinkPress(part.url!)}
+              suppressHighlighting={false}
+            >
+              {part.text}
             </Text>
           );
         }

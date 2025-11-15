@@ -25,6 +25,7 @@ export function OpportunityCard({ opportunity, onPress }: OpportunityCardProps) 
       healthcare: '#EF4444',
       community: '#8B5CF6',
       poorRelief: '#F59E0B',
+      viEngage: '#FF6B35',
       animals: '#EC4899',
       seniors: '#EC4899',
     };
@@ -75,7 +76,23 @@ export function OpportunityCard({ opportunity, onPress }: OpportunityCardProps) 
           <View style={styles.detailRow}>
             <Clock size={14} color={colors.textSecondary} />
             <Text style={[styles.detailText, { color: colors.textSecondary }]}>
-              {opportunity.duration}
+              {(() => {
+                // Show time range if available
+                if (opportunity.timeStart && opportunity.timeEnd) {
+                  const formatTime = (time: string) => {
+                    // Convert 24-hour time to 12-hour format with am/pm
+                    const [hours, minutes] = time.split(':');
+                    const hour24 = parseInt(hours, 10);
+                    const hour12 = hour24 === 0 ? 12 : hour24 > 12 ? hour24 - 12 : hour24;
+                    const ampm = hour24 >= 12 ? 'pm' : 'am';
+                    const minStr = minutes && minutes !== '00' ? `:${minutes}` : '';
+                    return `${hour12}${minStr}${ampm}`;
+                  };
+                  return `${formatTime(opportunity.timeStart)} - ${formatTime(opportunity.timeEnd)}`;
+                }
+                // Fall back to duration if available
+                return opportunity.duration || 'TBA';
+              })()}
             </Text>
           </View>
         </View>
@@ -93,10 +110,37 @@ export function OpportunityCard({ opportunity, onPress }: OpportunityCardProps) 
             </Text>
           </View>
           <Text style={[styles.date, { color: colors.text }]}>
-            {new Date(opportunity.date).toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-            })}
+            {(() => {
+              // Always show date range if available
+              if (opportunity.dateStart && opportunity.dateEnd) {
+                const startDate = new Date(opportunity.dateStart);
+                const endDate = new Date(opportunity.dateEnd);
+                const startMonth = startDate.toLocaleDateString('en-US', { month: 'short' });
+                const endMonth = endDate.toLocaleDateString('en-US', { month: 'short' });
+                const startDay = startDate.getDate();
+                const endDay = endDate.getDate();
+
+                // Same month: "Dec 10-16"
+                if (startMonth === endMonth) {
+                  // If same day, still show as range
+                  if (startDay === endDay) {
+                    return `${startMonth} ${startDay}`;
+                  }
+                  return `${startMonth} ${startDay}-${endDay}`;
+                }
+                // Different months: "Dec 10 - Jan 5"
+                return `${startMonth} ${startDay} - ${endMonth} ${endDay}`;
+              }
+              // Fall back to single date
+              if (opportunity.date) {
+                const date = new Date(opportunity.date);
+                return date.toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                });
+              }
+              return 'TBA';
+            })()}
           </Text>
         </View>
       </View>

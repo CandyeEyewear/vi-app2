@@ -33,10 +33,12 @@ export default function EditProfileScreen() {
     email: user?.email || '',
     phone: user?.phone || '',
     location: user?.location || '',
+    country: user?.country || '',
     bio: user?.bio || '',
     education: user?.education || '',
     areasOfExpertise: user?.areasOfExpertise?.join(', ') || '',
     avatarUrl: user?.avatarUrl || '',
+    dateOfBirth: user?.dateOfBirth || '',
   });
   
   const [saving, setSaving] = useState(false);
@@ -54,7 +56,7 @@ export default function EditProfileScreen() {
   };
 
   const handleSave = async () => {
-    if (!formData.fullName || !formData.email || !formData.phone || !formData.location) {
+    if (!formData.fullName || !formData.email || !formData.phone || !formData.location || !formData.country) {
       showAlert('Error', 'Please fill in all required fields', 'error');
       return;
     }
@@ -70,10 +72,12 @@ export default function EditProfileScreen() {
       email: formData.email,
       phone: formData.phone,
       location: formData.location,
+      country: formData.country,
       bio: formData.bio || undefined,
       education: formData.education || undefined,
       areasOfExpertise: expertiseArray,
       avatarUrl: formData.avatarUrl || undefined,
+      dateOfBirth: formData.dateOfBirth || undefined,
     });
 
     setSaving(false);
@@ -269,6 +273,31 @@ export default function EditProfileScreen() {
                 onChangeText={(value) => updateField('location', value)}
                 editable={!saving}
               />
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Country*</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Jamaica"
+                placeholderTextColor={Colors.light.textSecondary}
+                value={formData.country}
+                onChangeText={(value) => updateField('country', value)}
+                editable={!saving}
+              />
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Date of Birth*</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={Colors.light.textSecondary}
+                value={formData.dateOfBirth}
+                onChangeText={(value) => updateField('dateOfBirth', value)}
+                editable={!saving}
+              />
+              <Text style={styles.hint}>You must be 18 or older to register</Text>
             </View>
           </View>
 

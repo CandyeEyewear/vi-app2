@@ -29,6 +29,8 @@
     "android": {
       "package": "org.volunteersinc.vibe",
       "versionCode": 1,
+      "targetSdkVersion": 35,
+      "compileSdkVersion": 35,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#2196F3"

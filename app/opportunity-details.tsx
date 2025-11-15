@@ -255,6 +255,7 @@ export default function OpportunityDetailsScreen() {
       healthcare: '#EF4444',
       community: '#8B5CF6',
       poorRelief: '#F59E0B',
+      viEngage: '#FF6B35',
     };
     return categoryColors[category] || colors.primary;
   };

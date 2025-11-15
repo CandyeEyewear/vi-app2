@@ -23,6 +23,7 @@ import { Colors } from '../../constants/colors';
 import { OpportunityCard } from '../../components/cards/OpportunityCard';
 import { supabase } from '../../services/supabase';
 import { OpportunitiesSkeleton } from '../../components/SkeletonLayouts';
+import { useAuth } from '../../contexts/AuthContext';
 
 const CATEGORIES: { value: OpportunityCategory | 'all'; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -31,6 +32,7 @@ const CATEGORIES: { value: OpportunityCategory | 'all'; label: string }[] = [
   { value: 'healthcare', label: 'Healthcare' },
   { value: 'poorRelief', label: 'Poor Relief' },
   { value: 'community', label: 'Community' },
+  { value: 'viEngage', label: 'VI Engage' },
 ];
 
 export default function DiscoverScreen() {
@@ -38,6 +40,7 @@ export default function DiscoverScreen() {
   const colors = Colors[colorScheme];
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { isAdmin } = useAuth();
   const categoryScrollRef = useRef<FlatList>(null);
   
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -69,6 +72,7 @@ export default function DiscoverScreen() {
         .from('opportunities')
         .select('*')
         .eq('status', 'active')
+        .or('proposal_status.is.null,proposal_status.eq.approved')
         .order('date', { ascending: true });
 
       if (error) throw error;
@@ -83,7 +87,12 @@ export default function DiscoverScreen() {
         location: opp.location,
         latitude: opp.latitude,
         longitude: opp.longitude,
+        mapLink: opp.map_link,
         date: opp.date,
+        dateStart: opp.date_start,
+        dateEnd: opp.date_end,
+        timeStart: opp.time_start,
+        timeEnd: opp.time_end,
         duration: opp.duration,
         spotsAvailable: opp.spots_available,
         spotsTotal: opp.spots_total,
@@ -97,7 +106,32 @@ export default function DiscoverScreen() {
         updatedAt: opp.updated_at,
       }));
 
-      setOpportunities(opportunitiesData);
+      // Filter out past opportunities for non-admin users
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Reset time to start of day
+      
+      let filteredData = opportunitiesData;
+      if (!isAdmin) {
+        filteredData = opportunitiesData.filter((opp) => {
+          // Use dateEnd if available, otherwise use date
+          const opportunityDate = opp.dateEnd 
+            ? new Date(opp.dateEnd)
+            : opp.date 
+            ? new Date(opp.date)
+            : null;
+          
+          if (!opportunityDate) return true; // Keep if no date info
+          
+          // Set time to end of day for the opportunity date
+          const oppDateEnd = new Date(opportunityDate);
+          oppDateEnd.setHours(23, 59, 59, 999);
+          
+          // Keep opportunities that haven't ended yet (still in the future)
+          return oppDateEnd >= today;
+        });
+      }
+
+      setOpportunities(filteredData);
     } catch (error) {
       console.error('Error loading opportunities:', error);
     } finally {

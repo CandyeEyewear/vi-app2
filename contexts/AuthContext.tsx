@@ -16,6 +16,8 @@ interface AuthContextType {
   signUp: (data: RegisterFormData) => Promise<ApiResponse<User>>;
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<User>) => Promise<ApiResponse<User>>;
+  forgotPassword: (email: string) => Promise<ApiResponse<void>>;
+  resetPassword: (newPassword: string) => Promise<ApiResponse<void>>;
   isAdmin: boolean;
 }
 
@@ -129,10 +131,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         fullName: profileData.full_name,
         phone: profileData.phone,
         location: profileData.location,
+        country: profileData.country,
         bio: profileData.bio,
         areasOfExpertise: profileData.areas_of_expertise,
         education: profileData.education,
         avatarUrl: profileData.avatar_url,
+        dateOfBirth: profileData.date_of_birth,
         role: profileData.role,
         isPrivate: profileData.is_private,
         totalHours: profileData.total_hours,
@@ -146,6 +150,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AUTH] 📦 User data transformed successfully');
       setUser(userData);
       console.log('[AUTH] ✅ User state updated');
+      
+      // Register for push notifications if we don't have a token yet
+      if (!profileData.push_token) {
+        try {
+          console.log('[AUTH] 🔔 No push token found, registering...');
+          const pushToken = await registerForPushNotifications();
+          if (pushToken) {
+            console.log('[AUTH] 💾 Saving new push token...');
+            const saveResult = await savePushToken(userId, pushToken);
+            if (saveResult) {
+              console.log('[AUTH] ✅ Push token saved successfully');
+            } else {
+              console.error('[AUTH] ❌ Failed to save push token to database');
+            }
+          } else {
+            console.log('[AUTH] ⚠️ No push token received (may be running on simulator or permissions denied)');
+          }
+        } catch (error: any) {
+          console.error('[AUTH] ❌ Push notification registration error:', error);
+          console.error('[AUTH] ❌ Error message:', error?.message);
+          console.error('[AUTH] ❌ Error stack:', error?.stack);
+        }
+      } else {
+        console.log('[AUTH] ✅ Push token already exists');
+      }
     } catch (error) {
       console.error('[AUTH] ❌ Exception while loading user:', error);
       setUser(null);
@@ -222,18 +251,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Register for push notifications
       console.log('[AUTH] 🔔 Registering for push notifications...');
-      const pushToken = await registerForPushNotifications();
-      
-      if (pushToken) {
-        console.log('[AUTH] ✅ Push token received, saving to database...');
-        const saveResult = await savePushToken(authData.user.id, pushToken);
-        if (saveResult) {
-          console.log('[AUTH] ✅ Push token saved successfully');
+      try {
+        const pushToken = await registerForPushNotifications();
+        
+        if (pushToken) {
+          console.log('[AUTH] ✅ Push token received, saving to database...');
+          const saveResult = await savePushToken(authData.user.id, pushToken);
+          if (saveResult) {
+            console.log('[AUTH] ✅ Push token saved successfully');
+          } else {
+            console.error('[AUTH] ❌ Failed to save push token to database');
+          }
         } else {
-          console.log('[AUTH] ⚠️ Failed to save push token');
+          console.log('[AUTH] ⚠️ No push token received (may be running on simulator or permissions denied)');
         }
-      } else {
-        console.log('[AUTH] ⚠️ No push token received (may be running on simulator)');
+      } catch (pushError: any) {
+        console.error('[AUTH] ❌ Push notification registration error:', pushError);
+        console.error('[AUTH] ❌ Error message:', pushError?.message);
+        console.error('[AUTH] ❌ Error stack:', pushError?.stack);
       }
 
       console.log('[AUTH] 🎉 Sign in process completed successfully');
@@ -333,18 +368,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Register for push notifications
       console.log('[AUTH] 🔔 Registering for push notifications...');
-      const pushToken = await registerForPushNotifications();
-      
-      if (pushToken) {
-        console.log('[AUTH] ✅ Push token received, saving to database...');
-        const saveResult = await savePushToken(authData.user.id, pushToken);
-        if (saveResult) {
-          console.log('[AUTH] ✅ Push token saved successfully');
+      try {
+        const pushToken = await registerForPushNotifications();
+        
+        if (pushToken) {
+          console.log('[AUTH] ✅ Push token received, saving to database...');
+          const saveResult = await savePushToken(authData.user.id, pushToken);
+          if (saveResult) {
+            console.log('[AUTH] ✅ Push token saved successfully');
+          } else {
+            console.error('[AUTH] ❌ Failed to save push token to database');
+          }
         } else {
-          console.log('[AUTH] ⚠️ Failed to save push token');
+          console.log('[AUTH] ⚠️ No push token received (may be running on simulator or permissions denied)');
         }
-      } else {
-        console.log('[AUTH] ⚠️ No push token received (may be running on simulator)');
+      } catch (pushError: any) {
+        console.error('[AUTH] ❌ Push notification registration error:', pushError);
+        console.error('[AUTH] ❌ Error message:', pushError?.message);
+        console.error('[AUTH] ❌ Error stack:', pushError?.stack);
       }
 
       // Create contact in HubSpot
@@ -425,10 +466,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           full_name: updates.fullName,
           phone: updates.phone,
           location: updates.location,
+          country: updates.country,
           bio: updates.bio,
           areas_of_expertise: updates.areasOfExpertise,
           education: updates.education,
           avatar_url: updates.avatarUrl,
+          date_of_birth: updates.dateOfBirth,
           is_private: updates.isPrivate,
           updated_at: new Date().toISOString(),
         })
@@ -449,10 +492,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         fullName: data.full_name,
         phone: data.phone,
         location: data.location,
+        country: data.country,
         bio: data.bio,
         areasOfExpertise: data.areas_of_expertise,
         education: data.education,
         avatarUrl: data.avatar_url,
+        dateOfBirth: data.date_of_birth,
         isPrivate: data.is_private,
         updatedAt: data.updated_at,
       };
@@ -469,6 +514,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const forgotPassword = async (email: string): Promise<ApiResponse<void>> => {
+    console.log('[AUTH] 🔑 Starting forgot password process...');
+    console.log('[AUTH] Email:', email);
+    
+    try {
+      if (!email) {
+        return { success: false, error: 'Email is required' };
+      }
+
+      // Send password reset email via Supabase
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'vibe://reset-password',
+      });
+
+      if (error) {
+        console.error('[AUTH] ❌ Failed to send reset email:', error.message);
+        return { success: false, error: error.message };
+      }
+
+      console.log('[AUTH] ✅ Password reset email sent successfully');
+      return { success: true };
+    } catch (error: any) {
+      console.error('[AUTH] ❌ Exception during forgot password:', error);
+      return { success: false, error: error.message || 'Failed to send reset email' };
+    }
+  };
+
+  const resetPassword = async (newPassword: string): Promise<ApiResponse<void>> => {
+    console.log('[AUTH] 🔐 Starting password reset process...');
+    
+    try {
+      if (!newPassword || newPassword.length < 6) {
+        return { success: false, error: 'Password must be at least 6 characters' };
+      }
+
+      // Update password via Supabase
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) {
+        console.error('[AUTH] ❌ Failed to reset password:', error.message);
+        return { success: false, error: error.message };
+      }
+
+      console.log('[AUTH] ✅ Password reset successfully');
+      return { success: true };
+    } catch (error: any) {
+      console.error('[AUTH] ❌ Exception during password reset:', error);
+      return { success: false, error: error.message || 'Failed to reset password' };
+    }
+  };
+
   const isAdmin = user?.role === 'admin';
 
   return (
@@ -480,6 +578,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signUp,
         signOut,
         updateProfile,
+        forgotPassword,
+        resetPassword,
         isAdmin,
       }}
     >

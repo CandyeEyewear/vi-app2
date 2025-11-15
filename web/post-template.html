@@ -21,15 +21,15 @@
   <meta name="twitter:image" content="{{POST_IMAGE}}" />
   
   <!-- App Deep Link -->
-  <meta property="al:ios:url" content="vi-app://post/{{POST_ID}}" />
+  <meta property="al:ios:url" content="vibe://post/{{POST_ID}}" />
   <meta property="al:ios:app_store_id" content="" />
   <meta property="al:ios:app_name" content="VIbe" />
-  <meta property="al:android:url" content="vi-app://post/{{POST_ID}}" />
+  <meta property="al:android:url" content="vibe://post/{{POST_ID}}" />
   <meta property="al:android:app_name" content="VIbe" />
   <meta property="al:android:package" content="org.volunteersinc.vibe" />
   
   <!-- Fallback redirect -->
-  <meta http-equiv="refresh" content="0;url=vi-app://post/{{POST_ID}}">
+  <meta http-equiv="refresh" content="0;url=vibe://post/{{POST_ID}}">
   
   <style>
     body {
@@ -105,7 +105,7 @@
     <p class="description">{{POST_TEXT}}</p>
     
     <div style="text-align: center;">
-      <a href="vi-app://post/{{POST_ID}}" class="button">Open in VIbe App</a>
+      <a href="vibe://post/{{POST_ID}}" class="button">Open in VIbe App</a>
     </div>
     
     <p style="text-align: center; color: #999; font-size: 14px; margin-top: 24px;">
@@ -116,7 +116,7 @@
   <script>
     // Try to open app, fallback to download page
     setTimeout(function() {
-      window.location.href = 'vi-app://post/{{POST_ID}}';
+      window.location.href = 'vibe://post/{{POST_ID}}';
     }, 100);
     
     // Fallback after 2 seconds

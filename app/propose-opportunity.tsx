@@ -1,6 +1,6 @@
 /**
- * Create Opportunity Screen
- * Form for admins to create new volunteering opportunities
+ * Propose Opportunity Screen
+ * Form for volunteers to propose new volunteering opportunities
  */
 
 import React, { useState, useEffect } from 'react';
@@ -49,7 +49,7 @@ const CATEGORIES = [
   { value: 'viEngage', label: 'VI Engage' },
 ];
 
-export default function CreateOpportunityScreen() {
+export default function ProposeOpportunityScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const insets = useSafeAreaInsets();
@@ -354,7 +354,7 @@ export default function CreateOpportunityScreen() {
     return { isValid: true };
   };
 
-  const handleCreate = async () => {
+  const handlePropose = async () => {
     // Validate form
     const validation = validateForm();
     if (!validation.isValid) {
@@ -404,7 +404,7 @@ export default function CreateOpportunityScreen() {
         .insert({
           title: title.trim(),
           organization_name: organizationName.trim(),
-          organization_verified: true, // Admin-created opportunities are verified
+          organization_verified: false, // Proposals are not verified until approved
           category,
           description: description.trim(),
           location: location.trim(),
@@ -423,7 +423,9 @@ export default function CreateOpportunityScreen() {
           contact_person_name: contactPersonName.trim() || null,
           contact_person_phone: contactPersonPhone.trim() || null,
           status: 'active',
+          proposal_status: 'pending',
           created_by: user.id,
+          submitted_by: user.id,
         })
         .select()
         .single();
@@ -437,78 +439,82 @@ export default function CreateOpportunityScreen() {
         throw new Error('Failed to create opportunity. No data returned from server.');
       }
 
-      // Notify all users who have opportunity notifications enabled
+      // Notify all admin users about the new proposal
       if (data) {
-        // Create notification records using RPC function
-        const { data: userIds, error: notifError } = await supabase.rpc(
-          'create_opportunity_notifications',
-          {
-            p_opportunity_id: data.id,
-            p_title: title.trim(),
-            p_organization_name: organizationName.trim(),
-            p_sender_id: user?.id,
-          }
-        );
+        console.log('🔔 Starting notification process for opportunity proposal...');
+        
+        // Get all admin users
+        const { data: adminUsers, error: adminError } = await supabase
+          .from('users')
+          .select('id, push_token, full_name')
+          .eq('role', 'admin')
+          .not('push_token', 'is', null);
 
-        if (!notifError && userIds && Array.isArray(userIds) && userIds.length > 0) {
-          console.log('🔔 Starting push notification process for opportunity...');
-          console.log('📊 Users to notify:', userIds.length);
-          
-          // Get all users with push tokens
-          const userIdsArray = userIds.map(u => u.user_id);
-          const { data: users, error: usersError } = await supabase
-            .from('users')
-            .select('id, push_token')
-            .in('id', userIdsArray)
-            .not('push_token', 'is', null);
+        console.log('📊 Admin users query result:', { 
+          error: adminError, 
+          adminCount: adminUsers?.length || 0 
+        });
 
-          console.log('📊 Users query result:', { 
-            error: usersError, 
-            userCount: users?.length || 0 
+        if (!adminError && adminUsers && adminUsers.length > 0) {
+          // Get notification settings for admins
+          const { data: settingsData, error: settingsError } = await supabase
+            .from('user_notification_settings')
+            .select('user_id, opportunity_proposals_enabled')
+            .in('user_id', adminUsers.map(u => u.id));
+
+          console.log('📊 Settings query result:', { 
+            error: settingsError, 
+            settingsCount: settingsData?.length || 0 
           });
 
-          if (!usersError && users) {
-            console.log('✅ Found', users.length, 'users with push tokens');
-            
-            // Get notification settings for these users
-            const { data: settingsData, error: settingsError } = await supabase
-              .from('user_notification_settings')
-              .select('user_id, opportunities_enabled')
-              .in('user_id', users.map(u => u.id));
+          // Create notification records for admins
+          const notifications = adminUsers.map(admin => ({
+            user_id: admin.id,
+            type: 'opportunity_submitted',
+            title: 'New Opportunity Proposal',
+            message: `${user?.fullName || 'A volunteer'} submitted a new opportunity: ${title.trim()}`,
+            link: `/opportunity-review/${data.id}`,
+            related_id: data.id,
+            is_read: false,
+          }));
 
-            console.log('📊 Settings query result:', { 
-              error: settingsError, 
-              settingsCount: settingsData?.length || 0 
+          const { error: notifInsertError } = await supabase
+            .from('notifications')
+            .insert(notifications);
+
+          if (notifInsertError) {
+            console.error('❌ Error creating notification records:', notifInsertError);
+          } else {
+            console.log('✅ Created notification records for', notifications.length, 'admins');
+          }
+
+          // Send push notifications to admins with proposals enabled
+          if (!settingsError && settingsData) {
+            const settingsMap = new Map(settingsData.map(s => [s.user_id, s.opportunity_proposals_enabled]));
+            
+            const enabledAdmins = adminUsers.filter(admin => {
+              const setting = settingsMap.get(admin.id);
+              return setting === true || setting === undefined; // Default to enabled
             });
 
-            if (!settingsError && settingsData) {
-              // Filter users who have opportunities enabled
-              const settingsMap = new Map(settingsData.map(s => [s.user_id, s.opportunities_enabled]));
-              
-              const enabledUsers = users.filter(user => {
-                const setting = settingsMap.get(user.id);
-                return setting === true || setting === undefined;
-              });
+            console.log('✅ Found', enabledAdmins.length, 'admins with proposals enabled');
 
-              console.log('✅ Found', enabledUsers.length, 'users with opportunities enabled');
-
-              for (const userObj of enabledUsers) {
-                console.log('📤 Sending push to user:', userObj.id.substring(0, 8) + '...');
-                try {
-                  await sendNotificationToUser(userObj.id, {
-                    type: 'opportunity',
-                    id: data.id,
-                    title: 'New Opportunity Available',
-                    body: `${title.trim()} - ${organizationName.trim()}`,
-                  });
-                  console.log('✅ Push sent to user:', userObj.id.substring(0, 8) + '...');
-                } catch (pushError) {
-                  console.error('❌ Failed to send push to user:', userObj.id, pushError);
-                }
+            for (const admin of enabledAdmins) {
+              console.log('📤 Sending push to admin:', admin.id.substring(0, 8) + '...');
+              try {
+                await sendNotificationToUser(admin.id, {
+                  type: 'opportunity_submitted',
+                  id: data.id,
+                  title: 'New Opportunity Proposal',
+                  body: `${user?.fullName || 'A volunteer'} submitted: ${title.trim()}`,
+                });
+                console.log('✅ Push sent to admin:', admin.id.substring(0, 8) + '...');
+              } catch (pushError) {
+                console.error('❌ Failed to send push to admin:', admin.id, pushError);
               }
-              
-              console.log('🎉 Push notification process complete!');
             }
+            
+            console.log('🎉 Push notification process complete!');
           }
         }
       }
@@ -516,18 +522,18 @@ export default function CreateOpportunityScreen() {
       // Show success message
       showAlert(
         'Success!',
-        'Opportunity created successfully. Volunteers will be notified.',
+        'Your opportunity proposal has been submitted for review!',
         'success'
       );
 
-      // Wait a bit then navigate back
+      // Wait a bit then navigate to profile
       setTimeout(() => {
-        router.back();
+        router.push('/(tabs)/profile');
       }, 2000);
     } catch (error: any) {
       console.error('Error creating opportunity:', error);
       const errorMessage = getErrorMessage(error);
-      showAlert('Failed to Create Opportunity', errorMessage, 'error');
+      showAlert('Failed to Submit Proposal', errorMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -543,7 +549,7 @@ export default function CreateOpportunityScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ChevronLeft size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Create Opportunity</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Propose Opportunity</Text>
         <View style={styles.backButton} />
       </View>
 
@@ -1013,17 +1019,17 @@ export default function CreateOpportunityScreen() {
         {/* Create Button */}
         <TouchableOpacity
           style={[styles.createButton, { backgroundColor: colors.primary }, (loading || !isOnline) && styles.createButtonDisabled]}
-          onPress={handleCreate}
+          onPress={handlePropose}
           disabled={loading || !isOnline}
         >
           {loading ? (
             <View style={styles.buttonLoadingContainer}>
               <ActivityIndicator size="small" color="#FFFFFF" />
-              <Text style={styles.createButtonText}>Creating Opportunity...</Text>
+              <Text style={styles.createButtonText}>Submitting Proposal...</Text>
             </View>
           ) : (
             <Text style={styles.createButtonText}>
-              {!isOnline ? 'No Internet Connection' : 'Create Opportunity'}
+              {!isOnline ? 'No Internet Connection' : 'Submit Proposal'}
             </Text>
           )}
         </TouchableOpacity>

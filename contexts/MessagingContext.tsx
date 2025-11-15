@@ -335,16 +335,22 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   const recipientId = convData.participants.find((id: string) => id !== user.id);
   
   if (recipientId) {
+    console.log('💬 Message sent, checking notification settings for recipient:', recipientId.substring(0, 8) + '...');
+    
     const { data: settings } = await supabase
       .from('user_notification_settings')
       .select('messages_enabled')
       .eq('user_id', recipientId)
       .single();
 
-    // 🛠️ FIXED VERSION 🛠️
+    console.log('📊 Recipient notification settings:', settings);
+
     const shouldSendNotification = settings?.messages_enabled === true;
+    console.log('🔔 Should send push notification?', shouldSendNotification);
 
     if (shouldSendNotification) {
+      console.log('✅ Creating database notification...');
+      
       await supabase
         .from('notifications')
         .insert({
@@ -356,13 +362,27 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
           related_id: conversationId,
         });
 
+      console.log('📤 Sending push notification to recipient...');
+      
       // Send push notification
-      await sendNotificationToUser(recipientId, {
-        type: 'message',
-        id: conversationId,
-        title: 'New Message',
-        body: `${user.fullName}: ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}`,
-      });
+      try {
+        const pushResult = await sendNotificationToUser(recipientId, {
+          type: 'message',
+          id: conversationId,
+          title: 'New Message',
+          body: `${user.fullName}: ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}`,
+        });
+        
+        if (pushResult) {
+          console.log('✅ Push notification sent!');
+        } else {
+          console.error('❌ Failed to send push notification');
+        }
+      } catch (pushError) {
+        console.error('❌ Exception sending push notification:', pushError);
+      }
+    } else {
+      console.log('⏭️ Skipping push notification (disabled in settings)');
     }
   }
 }

@@ -206,7 +206,10 @@ export async function sendPushNotification(
       priority: 'high',
     }));
 
-    console.log('[PUSH] Sending to Expo Push API...');
+    console.log('[PUSH] 📡 Sending to Expo Push API...');
+    console.log('[PUSH] Request URL: https://exp.host/--/api/v2/push/send');
+    console.log('[PUSH] Request payload size:', JSON.stringify(messages).length, 'bytes');
+    
     const response = await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
       headers: {
@@ -216,22 +219,44 @@ export async function sendPushNotification(
       body: JSON.stringify(messages),
     });
 
+    console.log('[PUSH] 📥 API Response status:', response.status, response.statusText);
+    
+    if (!response.ok) {
+      console.error('[PUSH] ❌ API request failed with status:', response.status);
+      const errorText = await response.text();
+      console.error('[PUSH] ❌ Error response body:', errorText);
+      return false;
+    }
+
     const result = await response.json();
-    console.log('[PUSH] API Response:', JSON.stringify(result, null, 2));
+    console.log('[PUSH] 📊 API Response:', JSON.stringify(result, null, 2));
     
     // Check for errors in response
     if (result.data) {
       const errors = result.data.filter((r: any) => r.status === 'error');
       if (errors.length > 0) {
-        console.error('[PUSH] ❌ Push notification API errors:', errors);
+        console.error('[PUSH] ❌ Push notification API errors:', errors.length, 'errors found');
+        errors.forEach((err: any, index: number) => {
+          console.error(`[PUSH] ❌ Error ${index + 1}:`, {
+            token: err.expoPushToken?.substring(0, 20) + '...',
+            message: err.message,
+            details: err.details,
+          });
+        });
         return false;
       }
+      
+      // Log success details
+      const successes = result.data.filter((r: any) => r.status === 'ok');
+      console.log('[PUSH] ✅ Successfully sent to', successes.length, 'recipient(s)');
     }
 
     console.log('[PUSH] ✅ Push notification sent successfully to', tokens.length, 'recipient(s)');
     return true;
-  } catch (error) {
-    console.error('[PUSH] ❌ Error sending push notification:', error);
+  } catch (error: any) {
+    console.error('[PUSH] ❌ Exception sending push notification:', error);
+    console.error('[PUSH] ❌ Error message:', error?.message);
+    console.error('[PUSH] ❌ Error stack:', error?.stack);
     return false;
   }
 }
@@ -270,19 +295,35 @@ export async function sendNotificationToUser(
 
     // 🔴 GET UNREAD COUNT FOR BADGE
     console.log('[PUSH] 📊 Fetching unread notification count for badge...');
-    const { count: unreadCount } = await supabase
+    const { count: unreadCount, error: badgeError } = await supabase
       .from('notifications')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', userId)
       .eq('is_read', false);
 
+    if (badgeError) {
+      console.error('[PUSH] ❌ Error fetching badge count:', badgeError);
+      console.error('[PUSH] ⚠️ Continuing with badge count 0');
+    }
+
     const badgeCount = (unreadCount || 0) + 1; // +1 for the notification we're about to create
     console.log('[PUSH] 🔴 Badge count:', badgeCount);
 
     // Send the notification with badge
-    return await sendPushNotification(token, notification, badgeCount);
-  } catch (error) {
-    console.error('[PUSH] ❌ Error sending notification to user:', error);
+    console.log('[PUSH] 📤 Calling sendPushNotification...');
+    const sendResult = await sendPushNotification(token, notification, badgeCount);
+    
+    if (sendResult) {
+      console.log('[PUSH] ✅ Notification sent successfully to user:', userId.substring(0, 8) + '...');
+    } else {
+      console.error('[PUSH] ❌ Failed to send notification to user:', userId.substring(0, 8) + '...');
+    }
+    
+    return sendResult;
+  } catch (error: any) {
+    console.error('[PUSH] ❌ Exception sending notification to user:', userId.substring(0, 8) + '...');
+    console.error('[PUSH] ❌ Error message:', error?.message);
+    console.error('[PUSH] ❌ Error stack:', error?.stack);
     return false;
   }
 }
@@ -309,6 +350,14 @@ export async function sendNotificationToUsers(
 
     if (error) {
       console.error('[PUSH] ❌ Database error fetching push tokens:', error);
+      console.error('[PUSH] ❌ Error code:', error.code);
+      console.error('[PUSH] ❌ Error message:', error.message);
+      console.error('[PUSH] ❌ Error details:', error.details);
+      return { sent: 0, failed: userIds.length };
+    }
+
+    if (!users || users.length === 0) {
+      console.log('[PUSH] ⚠️ No users found in database');
       return { sent: 0, failed: userIds.length };
     }
 
@@ -318,6 +367,7 @@ export async function sendNotificationToUsers(
       .map(user => user.push_token) || [];
 
     console.log('[PUSH] 📊 Found', tokensToSend.length, 'valid push tokens out of', userIds.length, 'users');
+    console.log('[PUSH] 📊 Users without tokens:', userIds.length - tokensToSend.length);
 
     if (tokensToSend.length === 0) {
       console.log('[PUSH] ⚠️ No users with push tokens found');
@@ -327,6 +377,7 @@ export async function sendNotificationToUsers(
     // 🔴 For bulk notifications, we send badge: 1 to all
     // Individual users will see different counts, but we can't query each individually
     // Badge will auto-update when they open the app
+    console.log('[PUSH] 📤 Sending bulk notification to', tokensToSend.length, 'users...');
     const success = await sendPushNotification(tokensToSend, notification, 1);
 
     if (success) {
@@ -336,8 +387,10 @@ export async function sendNotificationToUsers(
       console.error('[PUSH] ❌ Failed to send notifications');
       return { sent: 0, failed: userIds.length };
     }
-  } catch (error) {
-    console.error('[PUSH] ❌ Error sending notifications to users:', error);
+  } catch (error: any) {
+    console.error('[PUSH] ❌ Exception sending notifications to users:', error);
+    console.error('[PUSH] ❌ Error message:', error?.message);
+    console.error('[PUSH] ❌ Error stack:', error?.stack);
     return { sent: 0, failed: userIds.length };
   }
 }

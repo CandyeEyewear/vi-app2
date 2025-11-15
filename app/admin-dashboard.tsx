@@ -38,6 +38,7 @@ interface DashboardStats {
   pendingPosts: number;
   totalPosts: number;
   totalVolunteerHours: number;
+  pendingOpportunityProposals: number;
 }
 
 export default function AdminDashboardScreen() {
@@ -81,12 +82,19 @@ export default function AdminDashboardScreen() {
 
       const totalHours = usersData?.reduce((sum, user) => sum + (user.total_hours || 0), 0) || 0;
 
+      // Get pending opportunity proposals
+      const { count: pendingProposalsCount } = await supabase
+        .from('opportunities')
+        .select('*', { count: 'exact', head: true })
+        .eq('proposal_status', 'pending');
+
       setStats({
         totalVolunteers: volunteersCount || 0,
         activeOpportunities: opportunitiesCount || 0,
         pendingPosts: 0, // We'll implement moderation later
         totalPosts: postsCount || 0,
         totalVolunteerHours: totalHours,
+        pendingOpportunityProposals: pendingProposalsCount || 0,
       });
     } catch (error) {
       console.error('Error loading dashboard stats:', error);
@@ -273,6 +281,37 @@ export default function AdminDashboardScreen() {
             </View>
           </TouchableOpacity>
 
+          {/* Opportunity Reviews */}
+          <TouchableOpacity
+            style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/(admin)/opportunity-reviews')}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.actionIconContainer, { backgroundColor: '#F59E0B' + '15' }]}>
+              <FileText size={24} color="#F59E0B" />
+              {stats && stats.pendingOpportunityProposals > 0 && (
+                <View style={[styles.badge, { backgroundColor: colors.error }]}>
+                  <Text style={styles.badgeText}>
+                    {stats.pendingOpportunityProposals > 99 ? '99+' : stats.pendingOpportunityProposals}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.actionContent}>
+              <Text style={[styles.actionTitle, { color: colors.text }]}>
+                Opportunity Reviews
+              </Text>
+              <Text style={[styles.actionSubtitle, { color: colors.textSecondary }]}>
+                Review pending opportunity proposals
+                {stats && stats.pendingOpportunityProposals > 0 && (
+                  <Text style={{ fontWeight: '600', color: colors.error }}>
+                    {' '}({stats.pendingOpportunityProposals} pending)
+                  </Text>
+                )}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
           {/* User Management */}
           <TouchableOpacity
   style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -402,6 +441,23 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
   actionContent: {
     flex: 1,

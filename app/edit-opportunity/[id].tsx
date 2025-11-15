@@ -45,6 +45,7 @@ const CATEGORIES = [
   { value: 'healthcare', label: 'Healthcare' },
   { value: 'poorRelief', label: 'Poor Relief' },
   { value: 'community', label: 'Community' },
+  { value: 'viEngage', label: 'VI Engage' },
 ];
 
 export default function EditOpportunityScreen() {
@@ -62,9 +63,13 @@ export default function EditOpportunityScreen() {
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
-  const [date, setDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [duration, setDuration] = useState('');
+  const [mapLink, setMapLink] = useState('');
+  const [startDate, setStartDate] = useState(new Date());
+  const [endDate, setEndDate] = useState(new Date());
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  const [startTime, setStartTime] = useState('09:00');
+  const [endTime, setEndTime] = useState('17:00');
   const [spotsTotal, setSpotsTotal] = useState('');
   const [impactStatement, setImpactStatement] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -116,8 +121,11 @@ export default function EditOpportunityScreen() {
       setCategory(data.category);
       setDescription(data.description);
       setLocation(data.location);
-      setDate(new Date(data.date));
-      setDuration(data.duration);
+      setMapLink(data.map_link || '');
+      setStartDate(new Date(data.date_start || data.date));
+      setEndDate(new Date(data.date_end || data.date));
+      setStartTime(data.time_start || '09:00');
+      setEndTime(data.time_end || '17:00');
       setSpotsTotal(data.spots_total.toString());
       setImpactStatement(data.impact_statement || '');
       setImageUri(data.image_url);
@@ -269,8 +277,12 @@ export default function EditOpportunityScreen() {
       showAlert('Validation Error', 'Please enter a location', 'error');
       return false;
     }
-    if (!duration.trim()) {
-      showAlert('Validation Error', 'Please enter a duration', 'error');
+    if (endDate < startDate) {
+      showAlert('Validation Error', 'End date must be after start date', 'error');
+      return false;
+    }
+    if (!startTime.trim() || !endTime.trim()) {
+      showAlert('Validation Error', 'Please enter both start and end times', 'error');
       return false;
     }
     if (!spotsTotal || parseInt(spotsTotal) <= 0) {
@@ -302,8 +314,11 @@ export default function EditOpportunityScreen() {
           category,
           description: description.trim(),
           location: location.trim(),
-          date: date.toISOString(),
-          duration: duration.trim(),
+          map_link: mapLink.trim() || null,
+          date_start: startDate.toISOString(),
+          date_end: endDate.toISOString(),
+          time_start: startTime.trim(),
+          time_end: endTime.trim(),
           spots_total: spotsNum,
           requirements: requirements.length > 0 ? requirements : null,
           skills_needed: skillsNeeded.length > 0 ? skillsNeeded : null,
@@ -464,56 +479,140 @@ export default function EditOpportunityScreen() {
           </View>
         </View>
 
-        {/* Date */}
+        {/* Google Maps Link */}
         <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.text }]}>
-            Date <Text style={{ color: colors.error }}>*</Text>
+          <Text style={[styles.label, { color: colors.text }]}>Google Maps Link (Optional)</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+            placeholder="https://maps.google.com/?q=18.0179,-76.8099"
+            placeholderTextColor={colors.textSecondary}
+            value={mapLink}
+            onChangeText={setMapLink}
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+          <Text style={[styles.helperText, { color: colors.textSecondary }]}>
+            Paste a Google Maps link so volunteers can easily find the location
           </Text>
-          <TouchableOpacity
-            style={[styles.input, styles.selectButton, { backgroundColor: colors.card, borderColor: colors.border }]}
-            onPress={() => setShowDatePicker(true)}
-          >
-            <Calendar size={20} color={colors.textSecondary} style={{ marginRight: 8 }} />
-            <Text style={[styles.selectButtonText, { color: colors.text }]}>
-              {date.toLocaleDateString('en-US', { 
-                weekday: 'short',
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric'
-              })}
-            </Text>
-          </TouchableOpacity>
-          {showDatePicker && (
-            <DateTimePicker
-              value={date}
-              mode="date"
-              display="default"
-              onChange={(event, selectedDate) => {
-                setShowDatePicker(false);
-                if (selectedDate) {
-                  setDate(selectedDate);
-                }
-              }}
-              minimumDate={new Date()}
-            />
-          )}
         </View>
 
-        {/* Duration */}
+        {/* Date Range */}
         <View style={styles.field}>
           <Text style={[styles.label, { color: colors.text }]}>
-            Duration <Text style={{ color: colors.error }}>*</Text>
+            Date Range <Text style={{ color: colors.error }}>*</Text>
           </Text>
-          <View style={styles.iconInput}>
-            <Clock size={20} color={colors.textSecondary} />
-            <TextInput
-              style={[styles.inputWithIcon, { color: colors.text }]}
-              value={duration}
-              onChangeText={setDuration}
-              placeholder="e.g., 3 hours, Full day"
-              placeholderTextColor={colors.textSecondary}
-            />
+          
+          {/* Start Date */}
+          <View style={styles.dateRangeRow}>
+            <View style={styles.dateRangeItem}>
+              <Text style={[styles.dateRangeLabel, { color: colors.textSecondary }]}>Start Date</Text>
+              <TouchableOpacity
+                style={[styles.input, styles.selectButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+                onPress={() => setShowStartDatePicker(true)}
+              >
+                <Calendar size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
+                <Text style={[styles.selectButtonText, { color: colors.text }]}>
+                  {startDate.toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric'
+                  })}
+                </Text>
+              </TouchableOpacity>
+              {showStartDatePicker && (
+                <DateTimePicker
+                  value={startDate}
+                  mode="date"
+                  display="default"
+                  onChange={(event, selectedDate) => {
+                    setShowStartDatePicker(false);
+                    if (selectedDate) {
+                      setStartDate(selectedDate);
+                      // Auto-set end date if it's before start date
+                      if (endDate < selectedDate) {
+                        setEndDate(selectedDate);
+                      }
+                    }
+                  }}
+                  minimumDate={new Date()}
+                />
+              )}
+            </View>
+
+            {/* End Date */}
+            <View style={styles.dateRangeItem}>
+              <Text style={[styles.dateRangeLabel, { color: colors.textSecondary }]}>End Date</Text>
+              <TouchableOpacity
+                style={[styles.input, styles.selectButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+                onPress={() => setShowEndDatePicker(true)}
+              >
+                <Calendar size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
+                <Text style={[styles.selectButtonText, { color: colors.text }]}>
+                  {endDate.toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric'
+                  })}
+                </Text>
+              </TouchableOpacity>
+              {showEndDatePicker && (
+                <DateTimePicker
+                  value={endDate}
+                  mode="date"
+                  display="default"
+                  onChange={(event, selectedDate) => {
+                    setShowEndDatePicker(false);
+                    if (selectedDate) {
+                      setEndDate(selectedDate);
+                    }
+                  }}
+                  minimumDate={startDate}
+                />
+              )}
+            </View>
           </View>
+        </View>
+
+        {/* Time Range */}
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.text }]}>
+            Time Range <Text style={{ color: colors.error }}>*</Text>
+          </Text>
+          
+          <View style={styles.timeRangeRow}>
+            <View style={styles.timeRangeItem}>
+              <Text style={[styles.timeRangeLabel, { color: colors.textSecondary }]}>Start Time</Text>
+              <View style={styles.iconInput}>
+                <Clock size={18} color={colors.textSecondary} />
+                <TextInput
+                  style={[styles.inputWithIcon, { color: colors.text }]}
+                  value={startTime}
+                  onChangeText={setStartTime}
+                  placeholder="09:00"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="numeric"
+                />
+              </View>
+            </View>
+
+            <View style={styles.timeRangeItem}>
+              <Text style={[styles.timeRangeLabel, { color: colors.textSecondary }]}>End Time</Text>
+              <View style={styles.iconInput}>
+                <Clock size={18} color={colors.textSecondary} />
+                <TextInput
+                  style={[styles.inputWithIcon, { color: colors.text }]}
+                  value={endTime}
+                  onChangeText={setEndTime}
+                  placeholder="17:00"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="numeric"
+                />
+              </View>
+            </View>
+          </View>
+          <Text style={[styles.helperText, { color: colors.textSecondary }]}>
+            Format: HH:MM (24-hour format, e.g., 09:00, 17:30)
+          </Text>
         </View>
 
         {/* Total Spots */}
@@ -935,5 +1034,33 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  dateRangeRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  dateRangeItem: {
+    flex: 1,
+  },
+  dateRangeLabel: {
+    fontSize: 12,
+    marginBottom: 6,
+    fontWeight: '500',
+  },
+  timeRangeRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  timeRangeItem: {
+    flex: 1,
+  },
+  timeRangeLabel: {
+    fontSize: 12,
+    marginBottom: 6,
+    fontWeight: '500',
+  },
+  helperText: {
+    fontSize: 12,
+    marginTop: 6,
   },
 });

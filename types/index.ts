@@ -14,10 +14,12 @@ export interface User {
   fullName: string;
   phone: string;
   location: string;
+  country?: string;
   bio?: string;
   areasOfExpertise?: string[];
   education?: string;
   avatarUrl?: string;
+  dateOfBirth?: string;
   role: UserRole;
   isPrivate?: boolean; // Privacy setting for profile visibility
   
@@ -59,7 +61,8 @@ export type OpportunityCategory =
   | 'education' 
   | 'healthcare' 
   | 'poorRelief'
-  | 'community';
+  | 'community'
+  | 'viEngage';
 
 export type OpportunityStatus = 'active' | 'full' | 'completed' | 'cancelled';
 
@@ -75,10 +78,15 @@ export interface Opportunity {
   location: string;
   latitude?: number;
   longitude?: number;
+  mapLink?: string;
   
   // Timing
-  date: string;
-  duration: string; // e.g., "3 hours", "Full day"
+  date: string; // Legacy field, use date_start/date_end
+  dateStart?: string;
+  dateEnd?: string;
+  timeStart?: string;
+  timeEnd?: string;
+  duration?: string; // Legacy field, use time_start/time_end
   
   // Capacity
   spotsAvailable: number;
