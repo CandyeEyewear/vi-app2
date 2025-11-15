@@ -51,17 +51,23 @@ export default function OpportunityGroupChat({ opportunityId }: OpportunityGroup
 
   useEffect(() => {
     loadMessages();
-    setupRealtimeSubscription();
+    const cleanup = setupRealtimeSubscription();
 
     return () => {
       // Cleanup typing timeout
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
+      // Cleanup real-time subscription
+      if (cleanup) {
+        cleanup();
+      }
     };
   }, [opportunityId]);
 
   const setupRealtimeSubscription = () => {
+    console.log('[CHAT] 🔔 Setting up real-time subscription for opportunity:', opportunityId);
+    
     // Subscribe to new messages
     const messageSubscription = supabase
       .channel(`opportunity-chat-${opportunityId}`)
@@ -74,6 +80,8 @@ export default function OpportunityGroupChat({ opportunityId }: OpportunityGroup
           filter: `opportunity_id=eq.${opportunityId}`,
         },
         async (payload) => {
+          console.log('[CHAT] 📨 New message received via real-time:', payload.new.id);
+          
           // Fetch user details for the new message
           const { data: userData } = await supabase
             .from('users')
@@ -96,18 +104,36 @@ export default function OpportunityGroupChat({ opportunityId }: OpportunityGroup
               } as any,
             };
 
-            setMessages((prev) => [...prev, newMessage]);
+            console.log('[CHAT] ✅ Adding new message to state:', newMessage.id);
+            setMessages((prev) => {
+              // Check if message already exists to prevent duplicates
+              if (prev.some(msg => msg.id === newMessage.id)) {
+                console.log('[CHAT] ⚠️ Message already exists, skipping:', newMessage.id);
+                return prev;
+              }
+              return [...prev, newMessage];
+            });
             
             // Scroll to bottom
             setTimeout(() => {
               flatListRef.current?.scrollToEnd({ animated: true });
             }, 100);
+          } else {
+            console.error('[CHAT] ❌ Could not fetch user data for message:', payload.new.id);
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[CHAT] 📡 Subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('[CHAT] ✅ Successfully subscribed to real-time updates');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('[CHAT] ❌ Channel subscription error');
+        }
+      });
 
     return () => {
+      console.log('[CHAT] 🧹 Cleaning up real-time subscription');
       messageSubscription.unsubscribe();
     };
   };

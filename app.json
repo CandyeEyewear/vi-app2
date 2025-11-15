@@ -33,6 +33,7 @@
       },
       "package": "org.volunteersinc.vibe",
       "targetSdkVersion": 35,
+      "compileSdkVersion": 35,
       "permissions": [
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
