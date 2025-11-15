@@ -17,6 +17,7 @@ import {
   ActivityIndicator,
   Image,
   useColorScheme,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -28,6 +29,7 @@ import FeedPostCard from '../../components/cards/FeedPostCard';
 import CustomAlert from '../../components/CustomAlert';
 import { FeedSkeleton } from '../../components/SkeletonLayouts';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../../services/supabase';
@@ -123,6 +125,10 @@ const loadNotificationCount = async () => {
 
   const handleSubmitPost = async () => {
     try {
+      console.log('🚀 [POST] handleSubmitPost called');
+      console.log('📊 [POST] Media count:', selectedMedia.length);
+      console.log('📝 [POST] Text length:', postText.trim().length);
+      
       setSubmitting(true);
       setUploadProgress(0);
 
@@ -131,12 +137,19 @@ const loadNotificationCount = async () => {
         return;
       }
 
+      console.log('📤 [POST] Starting post creation...');
+      
       let uploadedUrls: string[] = [];
       const mediaTypes: ('image' | 'video')[] = [];
 
       // Upload media
       if (selectedMedia.length > 0) {
-        console.log('📤 Uploading', selectedMedia.length, 'media files...');
+        console.log('📤 [POST] Uploading', selectedMedia.length, 'media files...');
+        console.log('📸 [POST] Media details:', selectedMedia.map((uri, i) => ({
+          index: i,
+          uri: uri.substring(0, 50) + '...',
+          isVideo: uri.endsWith('.mp4') || uri.endsWith('.mov') || uri.endsWith('.MOV')
+        })));
         
         for (let i = 0; i < selectedMedia.length; i++) {
           const mediaUri = selectedMedia[i];
@@ -145,8 +158,14 @@ const loadNotificationCount = async () => {
                          mediaUri.endsWith('.MOV');
 
           if (isVideo) {
+            console.log(`🎥 [POST] Processing video ${i + 1}/${selectedMedia.length}...`);
+            console.log(`🎥 [POST] Video URI: ${mediaUri.substring(0, 50)}...`);
+            
             // Check video size first
+            console.log(`🎥 [POST] Checking video size...`);
             const size = await getVideoSize(mediaUri);
+            console.log(`🎥 [POST] Video size: ${formatFileSize(size)}`);
+            
             if (isVideoTooLarge(size)) {
               showAlert(
                 'Video Too Large',
@@ -157,7 +176,7 @@ const loadNotificationCount = async () => {
             }
 
             // Upload video with progress
-            console.log(`🎥 Uploading video ${i + 1}/${selectedMedia.length}...`);
+            console.log(`🎥 [POST] Uploading video ${i + 1}/${selectedMedia.length}...`);
             const result = await uploadVideo(
               mediaUri,
               user?.id || '',
@@ -166,21 +185,26 @@ const loadNotificationCount = async () => {
                 const overallProgress = ((i / selectedMedia.length) * 100) + 
                                        (progress / selectedMedia.length);
                 setUploadProgress(Math.round(overallProgress));
+                console.log(`🎥 [POST] Upload progress: ${progress}% (Overall: ${Math.round(overallProgress)}%)`);
               }
             );
 
             if (!result.success) {
+              console.error(`🎥 [POST] ❌ Upload error for video ${i}:`, result.error);
               showAlert('Upload Error', result.error || 'Failed to upload video', 'error');
               return;
             }
 
             uploadedUrls.push(result.videoUrl!);
             mediaTypes.push('video');
-            console.log('✅ Video uploaded successfully');
+            console.log(`🎥 [POST] ✅ Video ${i + 1} uploaded successfully`);
+            console.log(`🎥 [POST] Video URL: ${result.videoUrl?.substring(0, 50)}...`);
 
           } else {
             // Upload image
-            console.log(`📸 Uploading image ${i + 1}/${selectedMedia.length}...`);
+            console.log(`📸 [POST] Uploading image ${i + 1}/${selectedMedia.length}...`);
+            console.log(`📸 [POST] Image URI: ${mediaUri.substring(0, 50)}...`);
+            
             const { urls, errors } = await uploadMultipleImages(
               [mediaUri],
               user?.id || '',
@@ -188,31 +212,45 @@ const loadNotificationCount = async () => {
             );
 
             if (errors.length > 0) {
+              console.error(`📸 [POST] ❌ Upload error for image ${i}:`, errors[0]);
               showAlert('Upload Error', errors[0], 'error');
               return;
             }
 
             uploadedUrls.push(...urls);
             mediaTypes.push('image');
+            console.log(`📸 [POST] ✅ Image ${i + 1} uploaded successfully`);
+            console.log(`📸 [POST] Image URL: ${urls[0]?.substring(0, 50)}...`);
           }
         }
+        
+        console.log('📸 [POST] ✅ All media uploaded successfully');
+        console.log('📸 [POST] Total URLs:', uploadedUrls.length);
+        console.log('📸 [POST] Media types:', mediaTypes);
       }
 
+      console.log('📝 [POST] Creating post in database...');
+      console.log('📝 [POST] Visibility:', activeTab === 'forYou' ? 'public' : 'circle');
+      
       // Create post
       const visibility = activeTab === 'forYou' ? 'public' : 'circle';
       const response = await createPost(postText, uploadedUrls, mediaTypes, visibility);
 
       if (response.success) {
+        console.log('✅ [POST] Post created successfully');
         setPostText('');
         setSelectedMedia([]);
         setShowCreateModal(false);
         setUploadProgress(0);
         // Success!
       } else {
+        console.error('❌ [POST] Failed to create post:', response.error);
         showAlert('Error', response.error || 'Failed to create post', 'error');
       }
     } catch (error: any) {
-      console.error('❌ Error creating post:', error);
+      console.error('❌ [POST] Error in handleSubmitPost:', error);
+      console.error('❌ [POST] Error message:', error.message);
+      console.error('❌ [POST] Error stack:', error.stack);
       showAlert('Error', error.message || 'Failed to create post', 'error');
     } finally {
       setSubmitting(false);
@@ -220,41 +258,93 @@ const loadNotificationCount = async () => {
     }
   };
 
-  const handleTakePhoto = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    
-    if (status !== 'granted') {
-      showAlert('Permission Needed', 'Please allow access to your camera', 'warning');
-      return;
-    }
 
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.8,
-    });
+  const pickImage = async (useCamera: boolean = false) => {
+    try {
+      console.log('📸 [IMAGE] Starting image picker...', { useCamera });
+      
+      const { status } = useCamera
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
 
-    if (!result.canceled && result.assets[0]) {
-      setSelectedMedia(prev => [...prev, result.assets[0].uri]);
-    }
-  };
+      console.log('📸 [IMAGE] Permission status:', status);
 
-  const handlePickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
-    if (status !== 'granted') {
-      showAlert('Permission Needed', 'Please allow access to your photos', 'warning');
-      return;
-    }
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', `Camera/Library access is required`);
+        return;
+      }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
-      allowsMultipleSelection: true,
-      quality: 0.8,
-    });
+      console.log('📸 [IMAGE] Launching picker...');
+      
+      const result = useCamera
+        ? await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: false,  // Must be false
+            quality: 0.2,  // Very low to prevent memory issues
+            base64: false,
+            exif: false,
+          })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.All,
+            allowsMultipleSelection: true,
+            quality: 0.5,
+            base64: false,
+            exif: false,
+          });
 
-    if (!result.canceled) {
-      setSelectedMedia(prev => [...prev, ...result.assets.map(asset => asset.uri)]);
+      console.log('📸 [IMAGE] Picker result:', {
+        cancelled: result.canceled,
+        assetsCount: result.assets?.length
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        console.log('📸 [IMAGE] Processing assets...');
+        console.log('📸 [IMAGE] Asset details:', result.assets.map(asset => ({
+          uri: asset.uri.substring(0, 50) + '...',
+          width: asset.width,
+          height: asset.height,
+          fileSize: asset.fileSize
+        })));
+
+        // For camera, apply image resizing
+        if (useCamera && result.assets[0]) {
+          try {
+            console.log('📸 [IMAGE] Resizing camera image...');
+            const manipResult = await ImageManipulator.manipulateAsync(
+              result.assets[0].uri,
+              [{ resize: { width: 1024 } }], // Max width 1024px to prevent memory issues
+              { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+            );
+            console.log('📸 [IMAGE] ✅ Image resized successfully');
+            setSelectedMedia(prev => {
+              const newMedia = [...prev, manipResult.uri];
+              console.log('📸 [IMAGE] ✅ Image added successfully. Total count:', newMedia.length);
+              return newMedia;
+            });
+          } catch (error) {
+            console.error('📸 [IMAGE] ❌ Error resizing image:', error);
+            // Fallback to original if resizing fails
+            setSelectedMedia(prev => {
+              const newMedia = [...prev, result.assets[0].uri];
+              console.log('📸 [IMAGE] ⚠️ Using original image. Total count:', newMedia.length);
+              return newMedia;
+            });
+          }
+        } else {
+          // For gallery, add all selected assets
+          console.log('📸 [IMAGE] Adding gallery images...');
+          setSelectedMedia(prev => {
+            const newMedia = [...prev, ...result.assets.map(asset => asset.uri)];
+            console.log('📸 [IMAGE] ✅ Images added successfully. Total count:', newMedia.length);
+            return newMedia;
+          });
+        }
+      } else {
+        console.log('📸 [IMAGE] ⏭️ Picker cancelled or no assets');
+      }
+    } catch (error: any) {
+      console.error('📸 [IMAGE] ❌ Error in pickImage:', error);
+      Alert.alert('Error', 'Failed to pick image');
     }
   };
 
@@ -468,7 +558,7 @@ const renderTabs = () => (
               <View style={styles.mediaButtonsContainer}>
                 <TouchableOpacity
                   style={styles.mediaButtonHalf}
-                  onPress={handleTakePhoto}
+                  onPress={() => pickImage(true)}
                   disabled={submitting}
                 >
                   <Camera size={20} color={Colors.light.primary} />
@@ -476,7 +566,7 @@ const renderTabs = () => (
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.mediaButtonHalf}
-                  onPress={handlePickImage}
+                  onPress={() => pickImage(false)}
                   disabled={submitting}
                 >
                   <ImageIcon size={20} color={Colors.light.primary} />

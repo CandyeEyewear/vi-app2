@@ -27,18 +27,26 @@
       }
     },
     "android": {
-      "package": "org.volunteersinc.vibe",
-      "targetSdkVersion": 35,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#2196F3"
+        "backgroundColor": "#ffffff"
       },
+      "package": "org.volunteersinc.vibe",
+      "targetSdkVersion": 35,
       "permissions": [
-        "android.permission.CAMERA",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.RECORD_AUDIO"
       ],
+      "config": {
+        "googleMobileAdsAppId": "ca-app-pub-3940256099942544~3347511713"
+      },
+      "softwareKeyboardLayoutMode": "pan",
+      "largeHeap": true,
       "intentFilters": [
         {
           "action": "VIEW",
