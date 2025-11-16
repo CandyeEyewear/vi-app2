@@ -28,7 +28,10 @@
     "production": {
       "android": {
         "buildType": "app-bundle",
-        "autoIncrement": true
+        "autoIncrement": true,
+        "compileSdkVersion": 35,
+        "targetSdkVersion": 35,
+        "buildToolsVersion": "34.0.0"
       },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://drshtkrhszeaxpmectex.supabase.co",
