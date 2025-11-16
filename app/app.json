@@ -28,7 +28,6 @@
     },
     "android": {
       "package": "org.volunteersinc.vibe",
-      "versionCode": 1,
       "targetSdkVersion": 35,
       "compileSdkVersion": 35,
       "adaptiveIcon": {
