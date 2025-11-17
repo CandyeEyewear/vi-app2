@@ -15,6 +15,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Linking,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -100,9 +101,11 @@ export default function LoginScreen() {
       >
         {/* Logo Section */}
         <View style={styles.logoSection}>
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>VIbe</Text>
-          </View>
+          <Image 
+            source={require('../assets/images/icon.png')} 
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
           <Text style={styles.tagline}>Changing Communities Through Volunteerism</Text>
         </View>
 
@@ -228,19 +231,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 48,
   },
-  logoCircle: {
+  logoImage: {
     width: 80,
     height: 80,
-    borderRadius: 40,
-    backgroundColor: Colors.light.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
     marginBottom: 16,
-  },
-  logoText: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
   },
   tagline: {
     fontSize: 14,
@@ -305,11 +299,11 @@ const styles = StyleSheet.create({
   },
   forgotPasswordText: {
     fontSize: 14,
-    color: Colors.light.primary,
+    color: '#2196F3',
     fontWeight: '600',
   },
   loginButton: {
-    backgroundColor: Colors.light.primary,
+    backgroundColor: '#2196F3',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -334,7 +328,7 @@ const styles = StyleSheet.create({
   },
   registerLink: {
     fontSize: 14,
-    color: Colors.light.primary,
+    color: '#2196F3',
     fontWeight: '600',
   },
   footer: {
