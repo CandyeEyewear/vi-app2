@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "771771235452",
+    "project_id": "vibe-app-b3075",
+    "storage_bucket": "vibe-app-b3075.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:771771235452:android:831ce2e4a5f79c89775df9",
+        "android_client_info": {
+          "package_name": "org.volunteersinc.vibe"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAtESSneu3m8hvHe-XnA5pjVuzKQgU9nOI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
