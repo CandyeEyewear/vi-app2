@@ -4,7 +4,8 @@
  */
 
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { registerForPushNotifications, savePushToken, removePushToken } from '../services/pushNotifications';
+import { registerForFCMNotifications, setupFCMHandlers } from '../services/fcmNotifications';
+import { savePushToken, removePushToken } from '../services/pushNotifications';
 import { createHubSpotContact } from '../services/hubspotService';
 import { User, RegisterFormData, LoginFormData, ApiResponse } from '../types';
 import { supabase } from '../services/supabase';
@@ -91,6 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initializeAuth();
     setupAuthListener();
+    setupFCMHandlers();
 
     // Cleanup subscription on unmount
     return () => {
@@ -170,7 +172,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!profileData.push_token) {
         try {
           console.log('[AUTH] 🔔 No push token found, registering...');
-          const pushToken = await registerForPushNotifications();
+          const pushToken = await registerForFCMNotifications();
           if (pushToken) {
             console.log('[AUTH] 💾 Saving new push token...');
             const saveResult = await savePushToken(userId, pushToken);
@@ -267,7 +269,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Register for push notifications
       console.log('[AUTH] 🔔 Registering for push notifications...');
       try {
-        const pushToken = await registerForPushNotifications();
+        const pushToken = await registerForFCMNotifications();
         
         if (pushToken) {
           console.log('[AUTH] ✅ Push token received, saving to database...');
@@ -463,7 +465,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Register for push notifications (non-blocking)
       try {
-        const pushToken = await registerForPushNotifications();
+        const pushToken = await registerForFCMNotifications();
         if (pushToken) {
           await savePushToken(authData.user.id, pushToken);
           console.log('[AUTH] ✅ Push notifications registered');

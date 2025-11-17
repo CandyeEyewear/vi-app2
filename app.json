@@ -3,7 +3,7 @@
     "name": "VIbe",
     "slug": "vibe-volunteer-app",
     "scheme": "vibe",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "splash": {
@@ -29,11 +29,12 @@
       }
     },
     "android": {
+      "package": "org.volunteersinc.vibe",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#2196F3"
       },
-      "package": "org.volunteersinc.vibe",
       "permissions": [
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
@@ -72,6 +73,16 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#2196F3",
+          "sounds": []
+        }
+      ],
       "expo-router",
       "expo-image-picker",
       "expo-location",

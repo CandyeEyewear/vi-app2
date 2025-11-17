@@ -10,6 +10,10 @@ import * as Linking from 'expo-linking';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { FeedProvider } from '../contexts/FeedContext';
 import { MessagingProvider } from '../contexts/MessagingContext';
+import { NetworkProvider } from '../contexts/NetworkContext';
+import ErrorBoundary from '../components/ErrorBoundary';
+import NetworkStatusBanner from '../components/NetworkStatusBanner';
+import { logger } from '../utils/logger';
 
 // Import splash screen with error handling
 let SplashScreen: any = null;
@@ -18,14 +22,14 @@ try {
   // Keep the splash screen visible while we fetch resources
   SplashScreen.preventAutoHideAsync();
 } catch (e) {
-  console.warn('expo-splash-screen not available, splash screen will auto-hide');
+  logger.warn('expo-splash-screen not available, splash screen will auto-hide');
 }
 
 function AppContent() {
   const router = useRouter();
   const { loading: authLoading } = useAuth();
-  const notificationListener = useRef<any>();
-  const responseListener = useRef<any>();
+  const notificationListener = useRef<any>(null);
+  const responseListener = useRef<any>(null);
 
   useEffect(() => {
     // Hide splash screen once auth is initialized
@@ -42,7 +46,7 @@ function AppContent() {
 
   useEffect(() => {
     notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-      console.log('Notification received:', notification);
+      logger.info('Notification received', { notification });
     });
 
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
@@ -78,7 +82,7 @@ function AppContent() {
 
     // Deep link handler
     const handleDeepLink = (event: { url: string }) => {
-      console.log('[DEEP LINK] Received:', event.url);
+      logger.info('[DEEP LINK] Received', { url: event.url });
       const parsed = Linking.parse(event.url);
       
       // Handle invite links: https://vibe.volunteersinc.org/invite?code=XXX or vibe://invite?code=XXX
@@ -87,7 +91,7 @@ function AppContent() {
           const inviteCode = parsed.queryParams?.code || parsed.queryParams?.ref || parsed.queryParams?.invite;
           if (inviteCode) {
             const code = Array.isArray(inviteCode) ? inviteCode[0] : inviteCode;
-            console.log('[DEEP LINK] Navigating to register with invite code:', code);
+            logger.info('[DEEP LINK] Navigating to register with invite code', { code });
             router.push(`/register?code=${code}` as any);
             return;
           }
@@ -99,13 +103,13 @@ function AppContent() {
         const pathParts = parsed.path.split('/').filter(Boolean);
         if (pathParts[0] === 'post' && pathParts[1]) {
           const postId = pathParts[1];
-          console.log('[DEEP LINK] Navigating to post:', postId);
+          logger.info('[DEEP LINK] Navigating to post', { postId });
           router.push(`/post/${postId}` as any);
           return;
         }
         // Handle vibe://reset-password format
         if (pathParts[0] === 'reset-password') {
-          console.log('[DEEP LINK] Navigating to reset password');
+          logger.info('[DEEP LINK] Navigating to reset password');
           router.push('/reset-password' as any);
           return;
         }
@@ -114,7 +118,7 @@ function AppContent() {
           const inviteCode = parsed.queryParams?.code || parsed.queryParams?.ref || parsed.queryParams?.invite;
           if (inviteCode) {
             const code = Array.isArray(inviteCode) ? inviteCode[0] : inviteCode;
-            console.log('[DEEP LINK] Navigating to register with invite code:', code);
+            logger.info('[DEEP LINK] Navigating to register with invite code', { code });
             router.push(`/register?code=${code}` as any);
             return;
           }
@@ -124,7 +128,7 @@ function AppContent() {
       // Fallback: check queryParams
       if (parsed.queryParams?.id) {
         const postId = Array.isArray(parsed.queryParams.id) ? parsed.queryParams.id[0] : parsed.queryParams.id;
-        console.log('[DEEP LINK] Navigating to post (from query):', postId);
+        logger.info('[DEEP LINK] Navigating to post (from query)', { postId });
         router.push(`/post/${postId}` as any);
       }
     };
@@ -132,7 +136,7 @@ function AppContent() {
     // Handle initial URL (app opened via deep link)
     Linking.getInitialURL().then((url) => {
       if (url) {
-        console.log('[DEEP LINK] Initial URL:', url);
+        logger.info('[DEEP LINK] Initial URL', { url });
         handleDeepLink({ url });
       }
     });
@@ -152,33 +156,40 @@ function AppContent() {
   }, [router]);
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="login" />
-      <Stack.Screen name="register" />
-      <Stack.Screen name="forgot-password" />
-      <Stack.Screen name="reset-password" />
-      <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="edit-profile" />
-      <Stack.Screen name="settings" />
-      <Stack.Screen name="conversation/[id]" />
-      <Stack.Screen name="opportunity/[id]" />
-      <Stack.Screen name="profile/[id]" />
-      <Stack.Screen name="post/[id]" />
-      <Stack.Screen name="propose-opportunity" />
-      <Stack.Screen name="(admin)/opportunity-reviews" />
-      <Stack.Screen name="(admin)/opportunity-review/[id]" />
-    </Stack>
+    <>
+      <NetworkStatusBanner />
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="login" />
+        <Stack.Screen name="register" />
+        <Stack.Screen name="forgot-password" />
+        <Stack.Screen name="reset-password" />
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="edit-profile" />
+        <Stack.Screen name="settings" />
+        <Stack.Screen name="conversation/[id]" />
+        <Stack.Screen name="opportunity/[id]" />
+        <Stack.Screen name="profile/[id]" />
+        <Stack.Screen name="post/[id]" />
+        <Stack.Screen name="propose-opportunity" />
+        <Stack.Screen name="(admin)/opportunity-reviews" />
+        <Stack.Screen name="(admin)/opportunity-review/[id]" />
+      </Stack>
+    </>
   );
 }
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <FeedProvider>
-        <MessagingProvider>
-          <AppContent />
-        </MessagingProvider>
-      </FeedProvider>
-    </AuthProvider>
+    // <ErrorBoundary>
+      <NetworkProvider>
+        <AuthProvider>
+          <FeedProvider>
+            <MessagingProvider>
+              <AppContent />
+            </MessagingProvider>
+          </FeedProvider>
+        </AuthProvider>
+      </NetworkProvider>
+    // </ErrorBoundary>
   );
 }
