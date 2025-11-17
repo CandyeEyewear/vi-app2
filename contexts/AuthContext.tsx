@@ -401,14 +401,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { success: false, error: 'Failed to create user account. Please try again.' };
       }
 
-      console.log('[AUTH] ✅ Auth user created, waiting for profile...');
+      console.log('[AUTH] ✅ Auth user created, waiting for trigger to create profile...');
 
-      // Wait for trigger to create profile
+      // Wait for trigger to create profile (with retries)
       let profileData = null;
       let retries = 0;
       const maxRetries = 10;
 
-      while (retries < maxRetries && !profileData) {
+      while (retries < maxRetries) {
         const { data, error } = await supabase
           .from('users')
           .select('*')
@@ -417,21 +417,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         if (data) {
           profileData = data;
+          console.log('[AUTH] ✅ Profile found after', retries + 1, 'attempts');
           break;
+        }
+        
+        if (error && error.code !== 'PGRST116') {
+          console.error('[AUTH] ❌ Error fetching profile:', error);
+          return { success: false, error: error.message };
         }
         
         retries++;
         if (retries < maxRetries) {
+          console.log(`[AUTH] ⏳ Waiting for trigger... (${retries}/${maxRetries})`);
           await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
 
       if (!profileData) {
-        console.error('[AUTH] ❌ Profile creation timed out after', maxRetries, 'retries');
-        return { 
-          success: false, 
-          error: 'Account created but profile setup failed. Please try signing in or contact support if the problem persists.' 
-        };
+        console.error('[AUTH] ❌ Profile creation timed out after trigger');
+        return { success: false, error: 'Profile creation failed - please contact support' };
       }
 
       // Transform to User type
