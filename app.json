@@ -73,6 +73,7 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      "./plugins/withFirebaseManifestFix",
       "@react-native-firebase/app",
       "@react-native-firebase/messaging",
       [
