@@ -36,6 +36,7 @@ import {
 import { supabase } from '../services/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
+import { File } from 'expo-file-system';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import CustomAlert from '../components/CustomAlert';
 import { sendNotificationToUser } from '../services/pushNotifications';
@@ -200,18 +201,26 @@ export default function CreateOpportunityScreen() {
         throw new Error('No internet connection');
       }
 
-      const fileInfo = await FileSystem.getInfoAsync(uri);
-      if (!fileInfo.exists) {
+      // SDK 54: Use fetch + blob for existence and size
+      const response = await fetch(uri);
+      if (!response.ok) {
         throw new Error('Selected file does not exist. Please choose a different image.');
       }
+      const blob = await response.blob();
 
       // Check file size (limit to 10MB)
-      if (fileInfo.size && fileInfo.size > 10 * 1024 * 1024) {
+      if (blob.size > 10 * 1024 * 1024) {
         throw new Error('Image is too large. Please use an image smaller than 10MB.');
       }
-
-      const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          const base64Data = result.split(',')[1];
+          resolve(base64Data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
       });
 
       const fileName = `opportunity-${Date.now()}.jpg`;
@@ -536,7 +545,7 @@ export default function CreateOpportunityScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
@@ -556,7 +565,14 @@ export default function CreateOpportunityScreen() {
         </View>
       )}
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: styles.scrollContent.paddingBottom + insets.bottom + 80 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Title */}
         <View style={styles.field}>
           <Text style={[styles.label, { color: colors.text }]}>

@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
 import CustomAlert from '../components/CustomAlert';
@@ -23,6 +24,7 @@ import { Lock, Eye, EyeOff } from 'lucide-react-native';
 
 export default function ResetPasswordScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const { resetPassword } = useAuth();
   
@@ -89,7 +91,12 @@ export default function ResetPasswordScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: styles.scrollContent.paddingBottom + insets.bottom + 80 }
+        ]}
+      >
         {/* Logo Section */}
         <View style={styles.logoSection}>
           <View style={styles.iconCircle}>

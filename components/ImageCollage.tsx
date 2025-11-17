@@ -19,7 +19,6 @@ import { X } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const POST_WIDTH = SCREEN_WIDTH;
 const GAP = 2;
 
 interface ImageCollageProps {
@@ -30,6 +29,7 @@ interface ImageCollageProps {
 export default function ImageCollage({ images, onImagePress }: ImageCollageProps) {
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
+  const [containerWidth, setContainerWidth] = useState<number>(0);
 
   if (!images || images.length === 0) return null;
 
@@ -43,7 +43,12 @@ export default function ImageCollage({ images, onImagePress }: ImageCollageProps
   };
 
   const renderLayout = () => {
+    if (!containerWidth) return null;
     const count = images.length;
+    const singleSize = containerWidth;
+    const twoRowHeight = containerWidth * 0.5;
+    const threeRowHeight = containerWidth * 0.6;
+    const halfWidth = (containerWidth - GAP) / 2;
 
     // Single image - full width
     if (count === 1) {
@@ -51,7 +56,7 @@ export default function ImageCollage({ images, onImagePress }: ImageCollageProps
         <TouchableOpacity onPress={() => handleImagePress(0)} activeOpacity={0.9}>
           <Image
             source={{ uri: images[0] }}
-            style={styles.singleImage}
+            style={[styles.singleImage, { width: singleSize, height: singleSize }]}
             resizeMode="cover"
           />
         </TouchableOpacity>
@@ -61,7 +66,7 @@ export default function ImageCollage({ images, onImagePress }: ImageCollageProps
     // Two images - side by side
     if (count === 2) {
       return (
-        <View style={styles.twoImageContainer}>
+        <View style={[styles.twoImageContainer, { width: containerWidth, height: twoRowHeight }]}>
           <TouchableOpacity
             style={styles.twoImageLeft}
             onPress={() => handleImagePress(0)}
@@ -69,7 +74,7 @@ export default function ImageCollage({ images, onImagePress }: ImageCollageProps
           >
             <Image
               source={{ uri: images[0] }}
-              style={styles.twoImage}
+              style={[styles.twoImage]}
               resizeMode="cover"
             />
           </TouchableOpacity>
@@ -80,7 +85,7 @@ export default function ImageCollage({ images, onImagePress }: ImageCollageProps
           >
             <Image
               source={{ uri: images[1] }}
-              style={styles.twoImage}
+              style={[styles.twoImage]}
               resizeMode="cover"
             />
           </TouchableOpacity>
@@ -91,7 +96,7 @@ export default function ImageCollage({ images, onImagePress }: ImageCollageProps
     // Three images - one large, two small
     if (count === 3) {
       return (
-        <View style={styles.threeImageContainer}>
+        <View style={[styles.threeImageContainer, { width: containerWidth, height: threeRowHeight }]}>
           <TouchableOpacity
             style={styles.threeImageLeft}
             onPress={() => handleImagePress(0)}
@@ -134,51 +139,30 @@ export default function ImageCollage({ images, onImagePress }: ImageCollageProps
     // Four images - 2x2 grid
     if (count === 4) {
       return (
-        <View style={styles.fourImageContainer}>
-          <TouchableOpacity
-            style={styles.fourImageItem}
-            onPress={() => handleImagePress(0)}
-            activeOpacity={0.9}
-          >
-            <Image
-              source={{ uri: images[0] }}
-              style={styles.fourImage}
-              resizeMode="cover"
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.fourImageItem}
-            onPress={() => handleImagePress(1)}
-            activeOpacity={0.9}
-          >
-            <Image
-              source={{ uri: images[1] }}
-              style={styles.fourImage}
-              resizeMode="cover"
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.fourImageItem}
-            onPress={() => handleImagePress(2)}
-            activeOpacity={0.9}
-          >
-            <Image
-              source={{ uri: images[2] }}
-              style={styles.fourImage}
-              resizeMode="cover"
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.fourImageItem}
-            onPress={() => handleImagePress(3)}
-            activeOpacity={0.9}
-          >
-            <Image
-              source={{ uri: images[3] }}
-              style={styles.fourImage}
-              resizeMode="cover"
-            />
-          </TouchableOpacity>
+        <View style={[styles.fourImageContainer, { width: containerWidth, height: containerWidth }]}>
+          {images.map((uri, index) => {
+            const isLeft = index % 2 === 0;
+            const isTopRow = index < 2;
+            return (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.fourImageItem,
+                  { width: halfWidth, height: halfWidth },
+                  isLeft && { marginRight: GAP },
+                  !isTopRow && { marginTop: GAP },
+                ]}
+                onPress={() => handleImagePress(index)}
+                activeOpacity={0.9}
+              >
+                <Image
+                  source={{ uri }}
+                  style={styles.fourImage}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
+            );
+          })}
         </View>
       );
     }
@@ -189,28 +173,37 @@ export default function ImageCollage({ images, onImagePress }: ImageCollageProps
       const remaining = images.slice(4);
 
       return (
-        <View style={styles.manyImageContainer}>
+        <View style={[styles.manyImageContainer, { width: containerWidth, height: containerWidth }]}>
           {/* First 4 in 2x2 grid */}
           <View style={styles.manyImageGrid}>
-            {firstFour.map((uri, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.manyImageItem}
-                onPress={() => handleImagePress(index)}
-                activeOpacity={0.9}
-              >
-                <Image
-                  source={{ uri }}
-                  style={styles.manyImage}
-                  resizeMode="cover"
-                />
-                {index === 3 && remaining.length > 0 && (
-                  <View style={styles.moreOverlay}>
-                    <Text style={styles.moreText}>+{remaining.length}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            ))}
+            {firstFour.map((uri, index) => {
+              const isLeft = index % 2 === 0;
+              const isTopRow = index < 2;
+              return (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.manyImageItem,
+                    { width: halfWidth, height: halfWidth },
+                    isLeft && { marginRight: GAP },
+                    !isTopRow && { marginTop: GAP },
+                  ]}
+                  onPress={() => handleImagePress(index)}
+                  activeOpacity={0.9}
+                >
+                  <Image
+                    source={{ uri }}
+                    style={styles.manyImage}
+                    resizeMode="cover"
+                  />
+                  {index === 3 && remaining.length > 0 && (
+                    <View style={styles.moreOverlay}>
+                      <Text style={styles.moreText}>+{remaining.length}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
       );
@@ -221,7 +214,12 @@ export default function ImageCollage({ images, onImagePress }: ImageCollageProps
 
   return (
     <>
-      <View style={styles.container}>{renderLayout()}</View>
+      <View
+        style={styles.container}
+        onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+      >
+        {renderLayout()}
+      </View>
 
       {/* Full-screen image viewer */}
       <Modal
@@ -268,24 +266,19 @@ export default function ImageCollage({ images, onImagePress }: ImageCollageProps
 
 const styles = StyleSheet.create({
   container: {
-    width: POST_WIDTH,
     marginBottom: 12,
   },
   // Single image
   singleImage: {
-    width: POST_WIDTH,
-    height: POST_WIDTH,
     backgroundColor: Colors.light.card,
   },
   // Two images
   twoImageContainer: {
     flexDirection: 'row',
-    width: POST_WIDTH,
-    height: POST_WIDTH * 0.5,
-    gap: GAP,
   },
   twoImageLeft: {
     flex: 1,
+    marginRight: GAP,
   },
   twoImageRight: {
     flex: 1,
@@ -298,12 +291,10 @@ const styles = StyleSheet.create({
   // Three images
   threeImageContainer: {
     flexDirection: 'row',
-    width: POST_WIDTH,
-    height: POST_WIDTH * 0.6,
-    gap: GAP,
   },
   threeImageLeft: {
     flex: 1,
+    marginRight: GAP,
   },
   threeImageLarge: {
     width: '100%',
@@ -312,10 +303,10 @@ const styles = StyleSheet.create({
   },
   threeImageRight: {
     flex: 1,
-    gap: GAP,
   },
   threeImageTop: {
     flex: 1,
+    marginBottom: GAP,
   },
   threeImageBottom: {
     flex: 1,
@@ -329,13 +320,8 @@ const styles = StyleSheet.create({
   fourImageContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    width: POST_WIDTH,
-    height: POST_WIDTH,
-    gap: GAP,
   },
   fourImageItem: {
-    width: (POST_WIDTH - GAP) / 2,
-    height: (POST_WIDTH - GAP) / 2,
   },
   fourImage: {
     width: '100%',
@@ -344,19 +330,12 @@ const styles = StyleSheet.create({
   },
   // Many images (5+)
   manyImageContainer: {
-    width: POST_WIDTH,
-    height: POST_WIDTH,
   },
   manyImageGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    width: POST_WIDTH,
-    height: POST_WIDTH,
-    gap: GAP,
   },
   manyImageItem: {
-    width: (POST_WIDTH - GAP) / 2,
-    height: (POST_WIDTH - GAP) / 2,
     position: 'relative',
   },
   manyImage: {

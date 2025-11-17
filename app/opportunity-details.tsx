@@ -325,7 +325,11 @@ export default function OpportunityDetailsScreen() {
         )}
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView} 
+        contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Image */}
         {opportunity.imageUrl && (
           <Image source={{ uri: opportunity.imageUrl }} style={styles.image} />

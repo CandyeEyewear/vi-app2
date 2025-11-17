@@ -8,6 +8,7 @@ import { registerForPushNotifications, savePushToken, removePushToken } from '..
 import { createHubSpotContact } from '../services/hubspotService';
 import { User, RegisterFormData, LoginFormData, ApiResponse } from '../types';
 import { supabase } from '../services/supabase';
+import { cache, CacheKeys } from '../services/cache';
 
 interface AuthContextType {
   user: User | null;
@@ -104,6 +105,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log('[AUTH] 👤 Loading user profile...');
     console.log('[AUTH] User ID:', userId);
     
+    // Check cache first
+    const cacheKey = CacheKeys.userProfile(userId);
+    const cachedUser = cache.get<User>(cacheKey);
+    if (cachedUser) {
+      console.log('[AUTH] ✅ Using cached user profile');
+      setUser(cachedUser);
+      setLoading(false);
+      return;
+    }
+    
     try {
       const { data: profileData, error: profileError } = await supabase
         .from('users')
@@ -146,6 +157,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         createdAt: profileData.created_at,
         updatedAt: profileData.updated_at,
       };
+
+      // Cache the user data (5 minutes TTL)
+      cache.set(cacheKey, userData, 5 * 60 * 1000);
+      console.log('[AUTH] 💾 User profile cached');
 
       console.log('[AUTH] 📦 User data transformed successfully');
       setUser(userData);
@@ -282,66 +297,144 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Helper function to get user-friendly error messages
+  const getSignUpErrorMessage = (error: any): string => {
+    if (!error) return 'An unexpected error occurred';
+
+    const errorCode = error.code;
+    const errorMessage = error.message?.toLowerCase() || '';
+
+    // User already exists / Email already registered
+    if (
+      errorCode === 'signup_disabled' ||
+      errorCode === 'user_already_registered' ||
+      errorMessage.includes('already registered') ||
+      errorMessage.includes('user already exists') ||
+      errorMessage.includes('email already confirmed') ||
+      errorMessage.includes('email address is already registered')
+    ) {
+      return 'This email address is already registered. Please sign in or use a different email.';
+    }
+
+    // Invalid email format
+    if (
+      errorCode === 'invalid_email' ||
+      errorMessage.includes('invalid email') ||
+      errorMessage.includes('email format')
+    ) {
+      return 'Please enter a valid email address.';
+    }
+
+    // Weak password
+    if (
+      errorCode === 'password_too_short' ||
+      errorMessage.includes('password') && errorMessage.includes('short') ||
+      errorMessage.includes('password') && errorMessage.includes('weak')
+    ) {
+      return 'Password must be at least 6 characters long.';
+    }
+
+    // Network/connection errors
+    if (
+      errorCode === 'network_error' ||
+      errorMessage.includes('network') ||
+      errorMessage.includes('connection') ||
+      errorMessage.includes('fetch')
+    ) {
+      return 'Network error. Please check your internet connection and try again.';
+    }
+
+    // Rate limiting
+    if (
+      errorCode === 'too_many_requests' ||
+      errorMessage.includes('too many requests') ||
+      errorMessage.includes('rate limit')
+    ) {
+      return 'Too many signup attempts. Please wait a few minutes and try again.';
+    }
+
+    // Database errors
+    if (
+      errorCode === 'database_error' ||
+      errorMessage.includes('database error') ||
+      errorMessage.includes('saving new user')
+    ) {
+      return 'Database error. Please try again in a moment. If the problem persists, contact support.';
+    }
+
+    // Return the original message if we can't categorize it
+    return error.message || 'Registration failed. Please try again.';
+  };
+
   const signUp = async (data: RegisterFormData): Promise<ApiResponse<User>> => {
-    console.log('[AUTH] 📝 Starting sign up process...');
-    console.log('[AUTH] Email:', data.email);
-    console.log('[AUTH] Full Name:', data.fullName);
-    
     try {
       setLoading(true);
-
-      // Sign up with Supabase Auth
-      console.log('[AUTH] 🔐 Creating Supabase auth account...');
+      
+      console.log('[AUTH] 🚀 Starting signup process (SDK 54)');
+      
+      // Sign up with Supabase Auth - pass ALL data as metadata
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
+        options: {
+          data: {
+            full_name: data.fullName,
+            phone: data.phone,
+            location: data.location,
+            bio: data.bio || '',
+            areas_of_expertise: data.areasOfExpertise || [],
+            education: data.education || '',
+            country: (data as any).country || 'Jamaica',
+          }
+        }
       });
 
       if (authError) {
-        console.error('[AUTH] ❌ Failed to create auth account:', authError.message);
+        console.error('[AUTH] ❌ Signup failed:', authError);
         console.error('[AUTH] Error code:', authError.code);
-        return { success: false, error: authError.message };
+        console.error('[AUTH] Error message:', authError.message);
+        const friendlyError = getSignUpErrorMessage(authError);
+        return { success: false, error: friendlyError };
       }
 
       if (!authData.user) {
-        console.error('[AUTH] ❌ Auth data returned but no user object');
-        return { success: false, error: 'Failed to create user' };
+        return { success: false, error: 'Failed to create user account. Please try again.' };
       }
 
-      console.log('[AUTH] ✅ Auth account created successfully');
-      console.log('[AUTH] User ID:', authData.user.id);
+      console.log('[AUTH] ✅ Auth user created, waiting for profile...');
 
-      // Create user profile
-      console.log('[AUTH] 💾 Creating user profile in database...');
-      const { data: profileData, error: profileError } = await supabase
-        .from('users')
-        .insert({
-          id: authData.user.id,
-          email: data.email,
-          full_name: data.fullName,
-          phone: data.phone,
-          location: data.location,
-          bio: data.bio,
-          areas_of_expertise: data.areasOfExpertise,
-          education: data.education,
-          role: 'volunteer',
-          is_private: false,
-          total_hours: 0,
-          activities_completed: 0,
-          organizations_helped: 0,
-        })
-        .select()
-        .single();
+      // Wait for trigger to create profile
+      let profileData = null;
+      let retries = 0;
+      const maxRetries = 10;
 
-      if (profileError) {
-        console.error('[AUTH] ❌ Failed to create user profile:', profileError.message);
-        console.error('[AUTH] Error code:', profileError.code);
-        console.error('[AUTH] Error details:', profileError.details);
-        return { success: false, error: profileError.message };
+      while (retries < maxRetries && !profileData) {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', authData.user.id)
+          .single();
+        
+        if (data) {
+          profileData = data;
+          break;
+        }
+        
+        retries++;
+        if (retries < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       }
 
-      console.log('[AUTH] ✅ User profile created successfully');
+      if (!profileData) {
+        console.error('[AUTH] ❌ Profile creation timed out after', maxRetries, 'retries');
+        return { 
+          success: false, 
+          error: 'Account created but profile setup failed. Please try signing in or contact support if the problem persists.' 
+        };
+      }
 
+      // Transform to User type
       const userData: User = {
         id: profileData.id,
         email: profileData.email,
@@ -362,55 +455,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         updatedAt: profileData.updated_at,
       };
 
-      console.log('[AUTH] 📦 Setting user state...');
       setUser(userData);
-      console.log('[AUTH] ✅ User state updated');
 
-      // Register for push notifications
-      console.log('[AUTH] 🔔 Registering for push notifications...');
+      // Register for push notifications (non-blocking)
       try {
         const pushToken = await registerForPushNotifications();
-        
         if (pushToken) {
-          console.log('[AUTH] ✅ Push token received, saving to database...');
-          const saveResult = await savePushToken(authData.user.id, pushToken);
-          if (saveResult) {
-            console.log('[AUTH] ✅ Push token saved successfully');
-          } else {
-            console.error('[AUTH] ❌ Failed to save push token to database');
-          }
-        } else {
-          console.log('[AUTH] ⚠️ No push token received (may be running on simulator or permissions denied)');
+          await savePushToken(authData.user.id, pushToken);
+          console.log('[AUTH] ✅ Push notifications registered');
         }
-      } catch (pushError: any) {
-        console.error('[AUTH] ❌ Push notification registration error:', pushError);
-        console.error('[AUTH] ❌ Error message:', pushError?.message);
-        console.error('[AUTH] ❌ Error stack:', pushError?.stack);
+      } catch (pushError) {
+        // Don't fail signup if push notification registration fails
+        console.warn('[AUTH] ⚠️ Push notification registration failed:', pushError);
       }
 
-      // Create contact in HubSpot
-      try {
-        await createHubSpotContact({
-          email: data.email,
-          fullName: data.fullName,
-          phone: data.phone,
-          location: data.location,
-          bio: data.bio,
-          areasOfExpertise: data.areasOfExpertise,
-          education: data.education,
-        });
-        console.log('[AUTH] ✅ HubSpot contact created successfully');
-      } catch (hubspotError) {
-        // Don't fail signup if HubSpot fails - just log the error
-        console.error('[AUTH] ⚠️ Failed to create HubSpot contact:', hubspotError);
-      }
-
-      console.log('[AUTH] 🎉 Sign up process completed successfully');
+      console.log('[AUTH] 🎉 Signup complete!');
       return { success: true, data: userData };
+      
     } catch (error: any) {
-      console.error('[AUTH] ❌ Exception during sign up:', error);
-      console.error('[AUTH] Error message:', error.message);
-      return { success: false, error: error.message };
+      console.error('[AUTH] ❌ Signup error:', error);
+      console.error('[AUTH] Error type:', typeof error);
+      console.error('[AUTH] Error details:', JSON.stringify(error, null, 2));
+      
+      // Handle different error types
+      if (error?.code || error?.message) {
+        const friendlyError = getSignUpErrorMessage(error);
+        return { success: false, error: friendlyError };
+      }
+      
+      // Handle network/connection errors
+      if (error?.name === 'NetworkError' || error?.message?.includes('network')) {
+        return { success: false, error: 'Network error. Please check your internet connection and try again.' };
+      }
+      
+      // Generic fallback
+      return { 
+        success: false, 
+        error: error?.message || 'An unexpected error occurred during registration. Please try again.' 
+      };
     } finally {
       setLoading(false);
     }
@@ -503,6 +585,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
 
       console.log('[AUTH] 📦 Updating user state...');
+      // Update cache with new user data
+      const cacheKey = CacheKeys.userProfile(user.id);
+      cache.set(cacheKey, updatedUser, 5 * 60 * 1000);
+      console.log('[AUTH] 💾 Updated user profile in cache');
+      
       setUser(updatedUser);
       console.log('[AUTH] ✅ Profile update completed successfully');
       

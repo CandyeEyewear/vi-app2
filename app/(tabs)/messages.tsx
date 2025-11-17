@@ -179,7 +179,10 @@ export default function MessagesScreen() {
           data={conversations}
           keyExtractor={(item) => item.id}
           renderItem={renderConversation}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: insets.bottom + 20 }
+          ]}
           refreshControl={
             <RefreshControl
               refreshing={loading}

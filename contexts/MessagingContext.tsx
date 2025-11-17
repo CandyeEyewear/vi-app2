@@ -42,7 +42,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
-  // SIMPLE REAL-TIME SUBSCRIPTION LIKE NOTIFICATIONS
+  // SIMPLE REAL-TIME SUBSCRIPTION LIKE NOTIFICATIONS (narrowed events)
   useEffect(() => {
     if (!user) return;
 
@@ -52,7 +52,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       .on(
         'postgres_changes',
         {
-          event: '*', // Listen to ALL events (INSERT, UPDATE, DELETE)
+          event: 'INSERT', // Only new messages affect conversation previews/unreads
           schema: 'public',
           table: 'messages',
         },
@@ -69,7 +69,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       .on(
         'postgres_changes',
         {
-          event: '*', // Listen to ALL events
+          event: 'UPDATE', // Creation handled by messages; updates change ordering
           schema: 'public',
           table: 'conversations',
         },
@@ -90,8 +90,6 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
 
     try {
-      setLoading(true);
-
       // Fetch conversations where user is a participant
       const { data: conversationsData, error: conversationsError } = await supabase
         .from('conversations')
@@ -360,6 +358,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
           message: `${user.fullName} sent you a message`,
           link: `/conversation/${conversationId}`,
           related_id: conversationId,
+          sender_id: user.id,
         });
 
       console.log('📤 Sending push notification to recipient...');

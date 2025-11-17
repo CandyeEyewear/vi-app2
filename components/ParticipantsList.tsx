@@ -65,13 +65,37 @@ export default function ParticipantsList({
   useEffect(() => {
     loadParticipants();
     
-    // Subscribe to real-time updates
+    // Subscribe to real-time updates (narrowed events to reduce noise)
     const subscription = supabase
       .channel(`participants-${opportunityId}`)
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'INSERT',
+          schema: 'public',
+          table: 'opportunity_signups',
+          filter: `opportunity_id=eq.${opportunityId}`,
+        },
+        () => {
+          loadParticipants();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'opportunity_signups',
+          filter: `opportunity_id=eq.${opportunityId}`,
+        },
+        () => {
+          loadParticipants();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
           schema: 'public',
           table: 'opportunity_signups',
           filter: `opportunity_id=eq.${opportunityId}`,

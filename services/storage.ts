@@ -1,6 +1,7 @@
 // services/storage.ts
 import { supabase } from './supabase';
 import * as FileSystem from 'expo-file-system';
+import { decode } from 'base64-arraybuffer';
 
 export const uploadToStorage = async (
   fileUri: string, 
@@ -8,15 +9,26 @@ export const uploadToStorage = async (
   userId: string
 ): Promise<string> => {
   try {
-    // Get file info
-    const fileInfo = await FileSystem.getInfoAsync(fileUri);
-    if (!fileInfo.exists) {
-      throw new Error('File does not exist');
+    // SDK 54: Use fetch + blob to validate and get size
+    const headResponse = await fetch(fileUri);
+    if (!headResponse.ok) {
+      throw new Error('File does not exist or cannot be read');
     }
+    const headBlob = await headResponse.blob();
+    const _size = headBlob.size; // available if needed
 
-    // Read file as base64
-    const fileContent = await FileSystem.readAsStringAsync(fileUri, {
-      encoding: FileSystem.EncodingType.Base64,
+    // Read file as base64 using fetch + FileReader (SDK 54 compatible)
+    const response = headResponse;
+    const blob = headBlob;
+    const fileContent = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        const base64Data = result.split(',')[1];
+        resolve(base64Data);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
     });
 
     // Create filename
@@ -26,7 +38,7 @@ export const uploadToStorage = async (
     // Upload to Supabase Storage
     const { data, error } = await supabase.storage
       .from(bucket)
-      .upload(fileName, FileSystem.EncodingType.Base64.encode(fileContent), {
+      .upload(fileName, decode(fileContent), {
         contentType: `image/${fileExt}`,
         upsert: false
       });

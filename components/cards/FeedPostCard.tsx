@@ -341,7 +341,7 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
             {/* OLD LIKE BUTTON - Keep for backward compatibility */}
             <TouchableOpacity
               onPress={handleLike}
-              style={[styles.actionButton, isLiked && styles.actionButtonActive]}
+              style={styles.actionButton}
             >
               <Heart 
                 size={22} 

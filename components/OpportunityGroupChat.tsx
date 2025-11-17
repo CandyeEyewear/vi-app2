@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Send, User } from 'lucide-react-native';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -24,6 +25,7 @@ interface OpportunityGroupChatProps {
 
 export default function OpportunityGroupChat({ opportunityId }: OpportunityGroupChatProps) {
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<OpportunityChatMessage[]>([]);
   const [messageText, setMessageText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -31,6 +33,9 @@ export default function OpportunityGroupChat({ opportunityId }: OpportunityGroup
   const [typingUsers, setTypingUsers] = useState<TypingIndicator[]>([]);
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const userCacheRef = useRef<Map<string, { id: string; fullName: string; avatarUrl: string | null }>>(
+    new Map()
+  );
 
   // Alert state
   const [alertVisible, setAlertVisible] = useState(false);
@@ -82,12 +87,24 @@ export default function OpportunityGroupChat({ opportunityId }: OpportunityGroup
         async (payload) => {
           console.log('[CHAT] 📨 New message received via real-time:', payload.new.id);
           
-          // Fetch user details for the new message
-          const { data: userData } = await supabase
-            .from('users')
-            .select('id, full_name, avatar_url')
-            .eq('id', payload.new.user_id)
-            .single();
+          // Fetch user details for the new message (with simple in-memory cache)
+          let userData = userCacheRef.current.get(payload.new.user_id);
+          if (!userData) {
+            const { data } = await supabase
+              .from('users')
+              .select('id, full_name, avatar_url')
+              .eq('id', payload.new.user_id)
+              .single();
+
+            if (data) {
+              userData = {
+                id: data.id,
+                fullName: data.full_name,
+                avatarUrl: data.avatar_url,
+              };
+              userCacheRef.current.set(payload.new.user_id, userData);
+            }
+          }
 
           if (userData) {
             const newMessage: OpportunityChatMessage = {
@@ -97,11 +114,7 @@ export default function OpportunityGroupChat({ opportunityId }: OpportunityGroup
               message: payload.new.message,
               createdAt: payload.new.created_at,
               updatedAt: payload.new.updated_at,
-              user: {
-                id: userData.id,
-                fullName: userData.full_name,
-                avatarUrl: userData.avatar_url,
-              } as any,
+              user: userData as any,
             };
 
             console.log('[CHAT] ✅ Adding new message to state:', newMessage.id);
@@ -288,8 +301,8 @@ export default function OpportunityGroupChat({ opportunityId }: OpportunityGroup
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={100}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
       <FlatList
         ref={flatListRef}
@@ -320,7 +333,7 @@ export default function OpportunityGroupChat({ opportunityId }: OpportunityGroup
       )}
 
       {/* Input Bar */}
-      <View style={styles.inputContainer}>
+      <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 8 }]}>
         <TextInput
           style={styles.input}
           value={messageText}

@@ -6,6 +6,7 @@
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
+import { File } from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from './supabase';
 
@@ -46,8 +47,11 @@ export async function generateVideoThumbnail(videoUri: string): Promise<string |
  */
 export async function getVideoSize(uri: string): Promise<number> {
   try {
-    const info = await FileSystem.getInfoAsync(uri);
-    return info.size || 0;
+    // SDK 54: Use fetch + blob to get size
+    const response = await fetch(uri);
+    if (!response.ok) return 0;
+    const blob = await response.blob();
+    return blob.size || 0;
   } catch {
     return 0;
   }
@@ -102,8 +106,17 @@ export async function uploadVideo(
     // Upload thumbnail first (faster feedback)
     if (thumbnailUri) {
       console.log('📤 [VIDEO] Uploading thumbnail...');
-      const thumbBase64 = await FileSystem.readAsStringAsync(thumbnailUri, {
-        encoding: FileSystem.EncodingType.Base64,
+      const thumbResp = await fetch(thumbnailUri);
+      const thumbBlob = await thumbResp.blob();
+      const thumbBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          const base64Data = result.split(',')[1];
+          resolve(base64Data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(thumbBlob);
       });
       
       const thumbFileName = `${Date.now()}-thumb.jpg`;
@@ -128,8 +141,17 @@ export async function uploadVideo(
     console.log('📤 [VIDEO] Uploading video file...');
     onProgress?.(10);
 
-    const videoBase64 = await FileSystem.readAsStringAsync(videoUri, {
-      encoding: FileSystem.EncodingType.Base64,
+    const videoResp = await fetch(videoUri);
+    const videoBlob = await videoResp.blob();
+    const videoBase64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        const base64Data = result.split(',')[1];
+        resolve(base64Data);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(videoBlob);
     });
     
     onProgress?.(30);

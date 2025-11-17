@@ -17,7 +17,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "org.volunteersinc.vibe",
-      "associatedDomains": ["applinks:vibe.volunteersinc.org"],
+      "associatedDomains": [
+        "applinks:vibe.volunteersinc.org"
+      ],
       "infoPlist": {
         "NSCameraUsageDescription": "VIbe uses your camera to capture volunteer photos and upload media.",
         "NSPhotoLibraryUsageDescription": "VIbe needs access to your photo library so you can attach images to posts and opportunities.",
@@ -59,7 +61,10 @@
               "scheme": "vibe"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -69,7 +74,8 @@
     "plugins": [
       "expo-router",
       "expo-image-picker",
-      "expo-location"
+      "expo-location",
+      "expo-video"
     ],
     "extra": {
       "router": {

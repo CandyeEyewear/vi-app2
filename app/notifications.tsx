@@ -12,15 +12,17 @@ import {
   StyleSheet,
   ActivityIndicator,
   useColorScheme,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Bell, MessageCircle, Calendar, UserPlus, Megaphone, Trash2, Check, X } from 'lucide-react-native';
+import { ChevronLeft, Bell, MessageCircle, Calendar, UserPlus, Megaphone, Trash2, Check, X, User } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import CustomAlert from '../components/CustomAlert';
 import { NotificationsSkeleton } from '../components/SkeletonLayouts';
+import { cache, CacheKeys } from '../services/cache';
 
 interface Notification {
   id: string;
@@ -31,6 +33,13 @@ interface Notification {
   related_id: string | null;
   is_read: boolean;
   created_at: string;
+  sender_id?: string | null;
+}
+
+interface SenderInfo {
+  id: string;
+  avatarUrl: string | null;
+  fullName: string;
 }
 
 export default function NotificationsScreen() {
@@ -44,6 +53,8 @@ export default function NotificationsScreen() {
   const [loading, setLoading] = useState(true);
   const [selectedNotifications, setSelectedNotifications] = useState<string[]>([]);
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
+  const [senderAvatars, setSenderAvatars] = useState<Map<string, SenderInfo>>(new Map());
+  const [notificationSenderMap, setNotificationSenderMap] = useState<Map<string, string>>(new Map()); // notificationId -> senderId
 
   useEffect(() => {
     if (user) {
@@ -63,11 +74,91 @@ export default function NotificationsScreen() {
       if (error) throw error;
 
       setNotifications(data || []);
+
+      // Load sender avatars for message and circle_request notifications
+      await loadSenderAvatars(data || []);
     } catch (error) {
       console.error('Error loading notifications:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadSenderAvatars = async (notifications: Notification[]) => {
+    const avatarMap = new Map<string, SenderInfo>();
+    const senderIds = new Set<string>();
+    const notificationToSenderMap = new Map<string, string>(); // notificationId -> senderId
+
+    // Process circle_request notifications - related_id is the sender's user_id
+    notifications.forEach((notification) => {
+      if (notification.type === 'circle_request' && notification.related_id) {
+        const senderId = notification.related_id;
+        senderIds.add(senderId);
+        notificationToSenderMap.set(notification.id, senderId);
+      }
+    });
+
+    // Process message notifications - prioritize sender_id if available, otherwise lookup conversation
+    const messageNotifications = notifications.filter(n => n.type === 'message' && !notificationToSenderMap.has(n.id));
+    for (const notification of messageNotifications) {
+      // First check if sender_id is directly set (newer notifications)
+      if (notification.sender_id) {
+        senderIds.add(notification.sender_id);
+        notificationToSenderMap.set(notification.id, notification.sender_id);
+      } else if (notification.related_id) {
+        // Fallback: Get sender from conversation (for older notifications without sender_id)
+        try {
+          const { data: convData } = await supabase
+            .from('conversations')
+            .select('participants')
+            .eq('id', notification.related_id)
+            .single();
+
+          if (convData && convData.participants) {
+            const otherUserId = convData.participants.find((id: string) => id !== user?.id);
+            if (otherUserId) {
+              senderIds.add(otherUserId);
+              notificationToSenderMap.set(notification.id, otherUserId);
+            }
+          }
+        } catch (e) {
+          console.error('Error loading conversation for notification:', e);
+        }
+      }
+    }
+
+    // Also check if sender_id is directly set for any other notification types
+    notifications.forEach((notification) => {
+      if (notification.sender_id && !notificationToSenderMap.has(notification.id)) {
+        senderIds.add(notification.sender_id);
+        notificationToSenderMap.set(notification.id, notification.sender_id);
+      }
+    });
+
+    // Fetch all sender user data
+    if (senderIds.size > 0) {
+      try {
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('id, full_name, avatar_url')
+          .in('id', Array.from(senderIds));
+
+        if (usersData) {
+          usersData.forEach((userData) => {
+            avatarMap.set(userData.id, {
+              id: userData.id,
+              avatarUrl: userData.avatar_url,
+              fullName: userData.full_name,
+            });
+          });
+        }
+      } catch (e) {
+        console.error('Error loading sender avatars:', e);
+      }
+    }
+
+    setSenderAvatars(avatarMap);
+    setNotificationSenderMap(notificationToSenderMap);
   };
 
   const markAsRead = async (notificationId: string) => {
@@ -146,19 +237,43 @@ export default function NotificationsScreen() {
     }
   };
 
+  const getSenderId = (notification: Notification): string | null => {
+    if (notification.type === 'circle_request' && notification.related_id) {
+      // For circle requests, related_id is typically the sender's user_id
+      return notification.related_id;
+    }
+    if (notification.type === 'message' && notification.related_id) {
+      // For messages, we need to find the sender from the conversation
+      // This will be handled in loadSenderAvatars, but we can also check here
+      // We'll use a helper to get it from the conversation
+      return null; // Will be resolved via conversation lookup
+    }
+    return notification.sender_id || null;
+  };
+
   const getIcon = (type: string) => {
     switch (type) {
-      case 'circle_request':
-        return <UserPlus size={20} color={colors.primary} />;
       case 'announcement':
         return <Megaphone size={20} color={colors.primary} />;
       case 'opportunity':
         return <Calendar size={20} color={colors.primary} />;
-      case 'message':
-        return <MessageCircle size={20} color={colors.primary} />;
       default:
         return <Bell size={20} color={colors.primary} />;
     }
+  };
+
+  const getNotificationAvatar = (notification: Notification): SenderInfo | null => {
+    if (notification.type !== 'message' && notification.type !== 'circle_request') {
+      return null;
+    }
+
+    // Get sender ID from the mapping
+    const senderId = notificationSenderMap.get(notification.id);
+    if (!senderId) {
+      return null;
+    }
+
+    return senderAvatars.get(senderId) || null;
   };
 
   const formatTimeAgo = (dateString: string) => {
@@ -194,7 +309,31 @@ export default function NotificationsScreen() {
             <Check size={16} color="#FFFFFF" />
           </View>
         )}
-        <View style={styles.iconContainer}>{getIcon(item.type)}</View>
+        {/* Show avatar for message and circle_request, icon for others */}
+        {(item.type === 'message' || item.type === 'circle_request') ? (
+          (() => {
+            const senderInfo = getNotificationAvatar(item);
+            return (
+              <View style={styles.avatarContainer}>
+                {senderInfo?.avatarUrl ? (
+                  <Image source={{ uri: senderInfo.avatarUrl }} style={styles.avatar} />
+                ) : (
+                  <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: colors.primary + '15' }]}>
+                    {senderInfo?.fullName ? (
+                      <Text style={[styles.avatarText, { color: colors.primary }]}>
+                        {senderInfo.fullName.charAt(0).toUpperCase()}
+                      </Text>
+                    ) : (
+                      <User size={20} color={colors.primary} />
+                    )}
+                  </View>
+                )}
+              </View>
+            );
+          })()
+        ) : (
+          <View style={styles.iconContainer}>{getIcon(item.type)}</View>
+        )}
         <View style={styles.contentContainer}>
           <Text style={[styles.title, { color: colors.text }]}>{item.title}</Text>
           <Text style={[styles.message, { color: colors.textSecondary }]} numberOfLines={2}>
@@ -356,6 +495,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+  },
+  avatarContainer: {
+    marginRight: 12,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  avatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   contentContainer: {
     flex: 1,

@@ -864,6 +864,7 @@ export default function ModerationDashboardScreen() {
       {/* Content */}
       <ScrollView
         style={styles.content}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
         refreshControl={
           <RefreshControl
             refreshing={loading}

@@ -280,7 +280,12 @@ const handleDeleteAccount = async () => {
          <View style={{ width: 40 }} />
        </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: (styles.scrollContent.paddingBottom || 32) + insets.bottom + 20 }
+        ]}
+      >
         {/* Notifications */}
    <View style={styles.section}>
      <Text style={styles.sectionTitle}>Notifications</Text>

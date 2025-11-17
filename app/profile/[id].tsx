@@ -26,6 +26,7 @@ import { supabase } from '../../services/supabase';
 import CustomAlert from '../../components/CustomAlert';
 import { useAlert, showErrorAlert } from '../../hooks/useAlert';
 import { sendNotificationToUser } from '../../services/pushNotifications';
+import { cache, CacheKeys } from '../../services/cache';
 
 export default function ViewProfileScreen() {
   const router = useRouter();
@@ -65,6 +66,16 @@ useFocusEffect(
     try {
       setLoading(true);
 
+      // Check cache first
+      const cacheKey = CacheKeys.userProfile(id);
+      const cachedUser = cache.get<User>(cacheKey);
+      if (cachedUser) {
+        console.log('[PROFILE] ✅ Using cached user profile');
+        setProfileUser(cachedUser);
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -94,6 +105,10 @@ useFocusEffect(
         createdAt: data.created_at,
         updatedAt: data.updated_at,
       };
+
+      // Cache the user data (5 minutes TTL)
+      cache.set(cacheKey, userData, 5 * 60 * 1000);
+      console.log('[PROFILE] 💾 User profile cached');
 
       setProfileUser(userData);
     } catch (error) {

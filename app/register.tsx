@@ -18,8 +18,10 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../services/supabase';
 import { Colors } from '../constants/colors';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -41,6 +43,10 @@ export default function RegisterScreen() {
     dateOfBirth: '',
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [showDobPicker, setShowDobPicker] = useState(false);
+  const [dobDate, setDobDate] = useState<Date>(() => {
+    return formData.dateOfBirth ? new Date(formData.dateOfBirth) : new Date(2000, 0, 1);
+  });
 
   // Capture invite code from URL (supports both 'code' and 'invite' parameters)
   useEffect(() => {
@@ -159,12 +165,19 @@ export default function RegisterScreen() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  const insets = useSafeAreaInsets();
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: styles.scrollContent.paddingBottom + insets.bottom + 80 }
+        ]}
+      >
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -252,14 +265,39 @@ export default function RegisterScreen() {
 
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Date of Birth*</Text>
-            <TextInput
+            <TouchableOpacity
               style={styles.input}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={Colors.light.textSecondary}
-              value={formData.dateOfBirth}
-              onChangeText={(value) => updateField('dateOfBirth', value)}
-              editable={!loading}
-            />
+              onPress={() => setShowDobPicker(true)}
+              disabled={loading}
+              activeOpacity={0.7}
+            >
+              <Text style={{ color: formData.dateOfBirth ? Colors.light.text : Colors.light.textSecondary }}>
+                {formData.dateOfBirth
+                  ? new Date(formData.dateOfBirth).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })
+                  : 'Select your date of birth'}
+              </Text>
+            </TouchableOpacity>
+            {showDobPicker && (
+              <DateTimePicker
+                value={dobDate}
+                mode="date"
+                display="default"
+                onChange={(event, selectedDate) => {
+                  setShowDobPicker(false);
+                  if (selectedDate) {
+                    setDobDate(selectedDate);
+                    // Store as YYYY-MM-DD for backend consistency
+                    const iso = selectedDate.toISOString().split('T')[0];
+                    updateField('dateOfBirth', iso);
+                  }
+                }}
+                maximumDate={new Date()}
+              />
+            )}
             <Text style={styles.helperText}>You must be 18 or older to register</Text>
           </View>
 

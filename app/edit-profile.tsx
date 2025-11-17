@@ -17,15 +17,19 @@ import {
   Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
+import { File } from 'expo-file-system';
 import { supabase } from '../services/supabase';
 import CustomAlert from '../components/CustomAlert';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default function EditProfileScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { user, updateProfile } = useAuth();
   
   const [formData, setFormData] = useState({
@@ -44,6 +48,10 @@ export default function EditProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [alertVisible, setAlertVisible] = useState(false);
+  const [showDobPicker, setShowDobPicker] = useState(false);
+  const [dobDate, setDobDate] = useState<Date>(() => {
+    return formData.dateOfBirth ? new Date(formData.dateOfBirth) : new Date(2000, 0, 1);
+  });
   const [alertConfig, setAlertConfig] = useState({
     title: '',
     message: '',
@@ -94,15 +102,24 @@ export default function EditProfileScreen() {
 
   const uploadImageToStorage = async (uri: string): Promise<string | null> => {
     try {
-      // Get file info
-      const fileInfo = await FileSystem.getInfoAsync(uri);
-      if (!fileInfo.exists) {
+      // SDK 54: Validate file existence using fetch + blob
+      const headResponse = await fetch(uri);
+      if (!headResponse.ok) {
         throw new Error('File does not exist');
       }
 
-      // Read file as base64
-      const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
+      // Read file as base64 using fetch + FileReader (SDK 54 compatible)
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          const base64Data = result.split(',')[1];
+          resolve(base64Data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
       });
 
       // Create unique filename
@@ -182,9 +199,14 @@ export default function EditProfileScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: (styles.scrollContent.paddingBottom || 32) + insets.bottom + 80 }
+        ]}
+      >
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -289,14 +311,38 @@ export default function EditProfileScreen() {
 
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Date of Birth*</Text>
-              <TextInput
+              <TouchableOpacity
                 style={styles.input}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={Colors.light.textSecondary}
-                value={formData.dateOfBirth}
-                onChangeText={(value) => updateField('dateOfBirth', value)}
-                editable={!saving}
-              />
+                onPress={() => setShowDobPicker(true)}
+                disabled={saving}
+                activeOpacity={0.7}
+              >
+                <Text style={{ color: formData.dateOfBirth ? Colors.light.text : Colors.light.textSecondary }}>
+                  {formData.dateOfBirth
+                    ? new Date(formData.dateOfBirth).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })
+                    : 'Select your date of birth'}
+                </Text>
+              </TouchableOpacity>
+              {showDobPicker && (
+                <DateTimePicker
+                  value={dobDate}
+                  mode="date"
+                  display="default"
+                  onChange={(event, selectedDate) => {
+                    setShowDobPicker(false);
+                    if (selectedDate) {
+                      setDobDate(selectedDate);
+                      const iso = selectedDate.toISOString().split('T')[0];
+                      updateField('dateOfBirth', iso);
+                    }
+                  }}
+                  maximumDate={new Date()}
+                />
+              )}
               <Text style={styles.hint}>You must be 18 or older to register</Text>
             </View>
           </View>

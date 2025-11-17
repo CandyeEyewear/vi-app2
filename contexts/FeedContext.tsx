@@ -408,6 +408,9 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
           console.log('[FEED] 👍 New reaction detected:', payload.new);
           const newReaction = payload.new as any;
           
+          // If this is our own reaction and we already optimistically added one, replace it instead of duplicating
+          const isOwnReaction = user && newReaction.user_id === user.id;
+
           // Get user details for the reaction
           const { data: userData } = await supabase
             .from('users')
@@ -443,13 +446,33 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
             prev.map((p) => {
               if (p.id === newReaction.post_id) {
                 console.log('[FEED] ✅ Adding reaction to post:', p.id);
-                // Check if reaction already exists (optimistic update)
-                const reactionExists = p.reactions?.some(r => r.id === reaction.id);
+                const currentReactions = p.reactions || [];
+
+                // 1) If this is our own insert and a temp optimistic reaction exists, replace it
+                if (isOwnReaction) {
+                  const idxByUser = currentReactions.findIndex(r => r.userId === newReaction.user_id);
+                  if (idxByUser !== -1) {
+                    const replacing = currentReactions[idxByUser];
+                    if (replacing.id.startsWith('temp-') || replacing.id !== reaction.id) {
+                      const reactions = currentReactions.map((r, i) => i === idxByUser ? reaction : r);
+                      return {
+                        ...p,
+                        reactions,
+                        reactionSummary: calculateReactionSummary(reactions, user?.id),
+                      };
+                    }
+                  }
+                }
+
+                // 2) If a reaction with same id already exists, skip (already reconciled)
+                const reactionExists = currentReactions.some(r => r.id === reaction.id);
                 if (reactionExists) {
-                  console.log('[FEED] ℹ️ Reaction already exists (optimistic update)');
+                  console.log('[FEED] ℹ️ Reaction already exists (optimistic or prior event)');
                   return p;
                 }
-                const reactions = [...(p.reactions || []), reaction];
+
+                // 3) Otherwise, append normally
+                const reactions = [...currentReactions, reaction];
                 return {
                   ...p,
                   reactions,

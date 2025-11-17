@@ -31,6 +31,7 @@ import {
 import { supabase } from '../services/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
+import { File } from 'expo-file-system';
 import CustomAlert from '../components/CustomAlert';
 import { sendNotificationToUser } from '../services/pushNotifications';
 
@@ -81,13 +82,23 @@ export default function CreateAnnouncementScreen() {
   const uploadImage = async (uri: string): Promise<string | null> => {
     try {
       console.log('📸 Starting image upload...');
-      const fileInfo = await FileSystem.getInfoAsync(uri);
-      if (!fileInfo.exists) {
+      // SDK 54: Validate using fetch + blob
+      const headResponse = await fetch(uri);
+      if (!headResponse.ok) {
         throw new Error('File does not exist');
       }
 
-      const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          const base64Data = result.split(',')[1];
+          resolve(base64Data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
       });
 
       const fileName = `announcement-${Date.now()}.jpg`;
@@ -328,14 +339,27 @@ export default function CreateAnnouncementScreen() {
       let successMessage = '';
       if (notifError) {
         successMessage = isPinned 
-          ? 'Pinned announcement posted (notifications may have failed)' 
-          : 'Announcement posted (notifications may have failed)';
+          ? 'Pinned announcement posted successfully!' 
+          : 'Announcement posted successfully!';
       } else {
-        const count = notificationCount || 0;
-        const countText = count === 1 ? 'notification' : 'notifications';
-        successMessage = isPinned
-          ? `Pinned announcement posted and ${count} ${countText} sent`
-          : `Announcement posted and ${count} ${countText} sent`;
+        // Handle notificationCount - it might be an array or number
+        let count = 0;
+        if (Array.isArray(notificationCount)) {
+          count = notificationCount.length;
+        } else if (typeof notificationCount === 'number') {
+          count = notificationCount;
+        }
+        
+        if (count > 0) {
+          const countText = count === 1 ? 'notification' : 'notifications';
+          successMessage = isPinned
+            ? `Pinned announcement posted! ${count} ${countText} sent.`
+            : `Announcement posted! ${count} ${countText} sent.`;
+        } else {
+          successMessage = isPinned
+            ? 'Pinned announcement posted successfully!'
+            : 'Announcement posted successfully!';
+        }
       }
       
       showAlert('Success!', successMessage, 'success');
@@ -361,7 +385,7 @@ export default function CreateAnnouncementScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
@@ -378,7 +402,14 @@ export default function CreateAnnouncementScreen() {
       </View>
 
       {/* Form */}
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        style={styles.scrollView} 
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: styles.scrollContent.paddingBottom + insets.bottom + 100 }
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Info Banner */}
         <View style={[styles.infoBanner, { backgroundColor: colors.primary + '10', borderColor: colors.primary }]}>
           <Megaphone size={20} color={colors.primary} />
@@ -487,7 +518,12 @@ export default function CreateAnnouncementScreen() {
 
         {/* Create Button */}
         <TouchableOpacity
-          style={[styles.createButton, { backgroundColor: colors.primary }, loading && styles.createButtonDisabled]}
+          style={[
+            styles.createButton, 
+            { backgroundColor: colors.primary }, 
+            loading && styles.createButtonDisabled,
+            { marginBottom: insets.bottom + 16 }
+          ]}
           onPress={handleCreate}
           disabled={loading}
         >

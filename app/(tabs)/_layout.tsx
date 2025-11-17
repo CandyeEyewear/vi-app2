@@ -6,11 +6,13 @@ import { useColorScheme, View, Text, StyleSheet } from 'react-native';
 import { useMessaging } from '../../contexts/MessagingContext';
 import { Colors } from '../../constants/colors';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabsLayout() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const { totalUnreadCount, refreshConversations } = useMessaging();
+  const insets = useSafeAreaInsets();
 
   // Refresh when the tab bar becomes focused/visible
   useFocusEffect(
@@ -29,8 +31,8 @@ export default function TabsLayout() {
           backgroundColor: colors.card,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
+          height: 60 + insets.bottom,
+          paddingBottom: Math.max(insets.bottom, 8),
           paddingTop: 8,
         },
         tabBarLabelStyle: {

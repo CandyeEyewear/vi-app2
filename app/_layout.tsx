@@ -7,14 +7,38 @@ import { useEffect, useRef } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import * as Linking from 'expo-linking';
-import { AuthProvider } from '../contexts/AuthContext';
+import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { FeedProvider } from '../contexts/FeedContext';
 import { MessagingProvider } from '../contexts/MessagingContext';
 
+// Import splash screen with error handling
+let SplashScreen: any = null;
+try {
+  SplashScreen = require('expo-splash-screen');
+  // Keep the splash screen visible while we fetch resources
+  SplashScreen.preventAutoHideAsync();
+} catch (e) {
+  console.warn('expo-splash-screen not available, splash screen will auto-hide');
+}
+
 function AppContent() {
   const router = useRouter();
+  const { loading: authLoading } = useAuth();
   const notificationListener = useRef<any>();
   const responseListener = useRef<any>();
+
+  useEffect(() => {
+    // Hide splash screen once auth is initialized
+    if (!authLoading && SplashScreen) {
+      // Small delay to ensure smooth transition
+      const timer = setTimeout(() => {
+        SplashScreen.hideAsync().catch(() => {
+          // Ignore errors if splash screen is already hidden
+        });
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [authLoading]);
 
   useEffect(() => {
     notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
@@ -117,11 +141,11 @@ function AppContent() {
     const subscription = Linking.addEventListener('url', handleDeepLink);
 
     return () => {
-      if (notificationListener.current) {
-        Notifications.removeNotificationSubscription(notificationListener.current);
+      if (notificationListener.current?.remove) {
+        notificationListener.current.remove();
       }
-      if (responseListener.current) {
-        Notifications.removeNotificationSubscription(responseListener.current);
+      if (responseListener.current?.remove) {
+        responseListener.current.remove();
       }
       subscription.remove();
     };

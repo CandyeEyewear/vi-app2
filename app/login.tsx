@@ -17,12 +17,14 @@ import {
   Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
 import CustomAlert from '../components/CustomAlert';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { signIn, loading } = useAuth();
   
   const [email, setEmail] = useState('');
@@ -57,7 +59,10 @@ export default function LoginScreen() {
     const response = await signIn({ email, password });
     
     if (response.success) {
-      router.replace('/(tabs)/feed');
+      // Small delay to ensure Root Layout is fully mounted before navigating
+      setTimeout(() => {
+        router.replace('/(tabs)/feed');
+      }, 100);
     } else {
       // Provide user-friendly error messages
       let errorMessage = 'Please check your credentials and try again.';
@@ -87,7 +92,12 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: styles.scrollContent.paddingBottom + insets.bottom + 80 }
+        ]}
+      >
         {/* Logo Section */}
         <View style={styles.logoSection}>
           <View style={styles.logoCircle}>
@@ -141,7 +151,11 @@ export default function LoginScreen() {
           {/* Forgot Password */}
           <TouchableOpacity 
             style={styles.forgotPassword}
-            onPress={() => router.push('/forgot-password')}
+            onPress={() => {
+              setTimeout(() => {
+                router.push('/forgot-password');
+              }, 100);
+            }}
           >
             <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
           </TouchableOpacity>
@@ -163,7 +177,13 @@ export default function LoginScreen() {
           {/* Register Link */}
           <View style={styles.registerContainer}>
             <Text style={styles.registerText}>Don't have an account? </Text>
-            <TouchableOpacity onPress={() => router.push('/register')}>
+            <TouchableOpacity
+              onPress={() => {
+                setTimeout(() => {
+                  router.push('/register');
+                }, 100);
+              }}
+            >
               <Text style={styles.registerLink}>Create Account</Text>
             </TouchableOpacity>
           </View>

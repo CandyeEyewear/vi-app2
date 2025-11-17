@@ -36,6 +36,7 @@ import {
 import { supabase } from '../../services/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
+import { File } from 'expo-file-system';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import CustomAlert from '../../components/CustomAlert';
 
@@ -161,13 +162,23 @@ export default function EditOpportunityScreen() {
 
   const uploadImage = async (uri: string): Promise<string | null> => {
     try {
-      const fileInfo = await FileSystem.getInfoAsync(uri);
-      if (!fileInfo.exists) {
+      // SDK 54: Validate using fetch + blob
+      const headResponse = await fetch(uri);
+      if (!headResponse.ok) {
         throw new Error('File does not exist');
       }
 
-      const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
+      const response = headResponse;
+      const blob = await response.blob();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          const base64Data = result.split(',')[1];
+          resolve(base64Data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
       });
 
       const fileName = `opportunity-${Date.now()}.jpg`;
@@ -358,7 +369,7 @@ export default function EditOpportunityScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
@@ -381,7 +392,10 @@ export default function EditOpportunityScreen() {
       ) : (
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: (styles.scrollContent as any).paddingBottom + insets.bottom + 80 },
+        ]}
         keyboardShouldPersistTaps="handled"
       >
         {/* Title */}

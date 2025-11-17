@@ -15,6 +15,7 @@ import {
   Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 import { ShoppingBag, ExternalLink, X } from 'lucide-react-native';
 
@@ -64,6 +65,7 @@ const PRODUCTS: Product[] = [
 
 export default function VIShoppScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const handleBuyNow = (product: Product) => {
     Linking.openURL(product.checkoutUrl);
@@ -90,7 +92,11 @@ export default function VIShoppScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView} 
+        contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Store Description */}
         <View style={styles.storeHeader}>
           <Text style={styles.storeTitle}>Official VI Merchandise</Text>
