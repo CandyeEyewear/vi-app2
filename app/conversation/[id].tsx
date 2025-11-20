@@ -19,7 +19,7 @@ import {
   Image,
   Keyboard,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Send } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
@@ -49,6 +49,7 @@ export default function ConversationScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [oldestMessageId, setOldestMessageId] = useState<string | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const flatListRef = useRef<FlatList<Message>>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -61,6 +62,28 @@ export default function ConversationScreen() {
     [...a, ...b].forEach(m => map.set(m.id, m));
     return Array.from(map.values());
   };
+
+  // Keyboard event listeners for Android (iOS handled by KeyboardAvoidingView)
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      const showSubscription = Keyboard.addListener('keyboardDidShow', (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+        // Scroll to bottom when keyboard appears
+        setTimeout(() => {
+          flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+        }, 100);
+      });
+
+      const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+        setKeyboardHeight(0);
+      });
+
+      return () => {
+        showSubscription.remove();
+        hideSubscription.remove();
+      };
+    }
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -291,14 +314,18 @@ export default function ConversationScreen() {
     );
   }
 
+  // Calculate header height for keyboard offset
+  const headerHeight = insets.top + 60; // insets.top + header content height
+
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
+      >
+        {/* Header */}
+        <View style={[styles.header, { paddingTop: 12 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ChevronLeft size={28} color={Colors.light.primary} />
         </TouchableOpacity>
@@ -340,10 +367,15 @@ export default function ConversationScreen() {
             data={messages}
             keyExtractor={(item) => String(item.id)}
             renderItem={renderMessage}
-            contentContainerStyle={styles.messagesList}
+            contentContainerStyle={[
+              styles.messagesList,
+              { paddingBottom: keyboardHeight > 0 ? 8 : 16 }
+            ]}
             inverted={true}
             onEndReached={handleLoadMore}
             onEndReachedThreshold={0.5}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
             ListFooterComponent={
               loadingMore ? (
                 <View style={styles.loadingMoreContainer}>
@@ -369,30 +401,49 @@ export default function ConversationScreen() {
         </>
       )}
 
-      {/* Input */}
-      <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 8 }]}>
-        <TextInput
-          style={styles.input}
-          placeholder="Type a message..."
-          placeholderTextColor={Colors.light.textSecondary}
-          value={inputText}
-          onChangeText={handleTextChange}
-          multiline
-          maxLength={1000}
-          onSubmitEditing={handleSend}
-        />
-        <TouchableOpacity
-          style={[styles.sendButton, (!inputText.trim() || sending) && styles.sendButtonDisabled]}
-          onPress={handleSend}
-          disabled={!inputText.trim() || sending}
-          activeOpacity={0.7}
-        >
-          {sending ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Send size={20} color="#FFFFFF" />
-          )}
-        </TouchableOpacity>
+      {/* Input Container - Responsive to keyboard */}
+      <View
+        style={[
+          styles.inputContainer,
+          {
+            paddingBottom: Platform.OS === 'ios' 
+              ? insets.bottom
+              : keyboardHeight > 0 
+                ? 0 
+                : insets.bottom,
+          },
+        ]}
+      >
+        <View style={styles.inputWrapper}>
+          <TextInput
+            style={styles.input}
+            placeholder="Type a message..."
+            placeholderTextColor={Colors.light.textSecondary}
+            value={inputText}
+            onChangeText={handleTextChange}
+            multiline
+            maxLength={1000}
+            onSubmitEditing={handleSend}
+            returnKeyType="default"
+            blurOnSubmit={false}
+            textAlignVertical="center"
+          />
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              (!inputText.trim() || sending) && styles.sendButtonDisabled,
+            ]}
+            onPress={handleSend}
+            disabled={!inputText.trim() || sending}
+            activeOpacity={0.7}
+          >
+            {sending ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Send size={20} color="#FFFFFF" />
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Profile Action Sheet */}
@@ -404,11 +455,16 @@ export default function ConversationScreen() {
           userName={otherUser.fullName}
         />
       )}
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: Colors.light.card,
+  },
   container: {
     flex: 1,
     backgroundColor: Colors.light.card,
@@ -525,23 +581,28 @@ const styles = StyleSheet.create({
     color: Colors.light.textSecondary,
   },
   inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    padding: 16,
     backgroundColor: Colors.light.background,
     borderTopWidth: 1,
     borderTopColor: Colors.light.border,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
   },
   input: {
     flex: 1,
     backgroundColor: Colors.light.card,
     borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 12,
     fontSize: 16,
     color: Colors.light.text,
     maxHeight: 100,
-    marginRight: 8,
+    minHeight: 40,
+    lineHeight: 20,
   },
   sendButton: {
     width: 40,

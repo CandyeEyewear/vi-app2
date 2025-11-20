@@ -19,15 +19,23 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { supabase } from '../services/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import CustomAlert from '../components/CustomAlert';
 
 export default function RegisterScreen() {
   const router = useRouter();
   const { invite, code } = useLocalSearchParams<{ invite?: string; code?: string }>();
+  const { signUp, user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({
+    title: '',
+    message: '',
+    type: 'error' as 'success' | 'error' | 'warning',
+  });
   
   const [formData, setFormData] = useState({
     fullName: '',
@@ -56,6 +64,13 @@ export default function RegisterScreen() {
       console.log('Invite code detected:', inviteParam);
     }
   }, [invite, code]);
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.replace('/(tabs)/feed');
+    }
+  }, [user, authLoading, router]);
 
   const handleRegister = async () => {
     // Validation
@@ -113,49 +128,69 @@ export default function RegisterScreen() {
         ? formData.areasOfExpertise.split(',').map(item => item.trim()).filter(Boolean)
         : [];
 
-      // Sign up with Supabase Auth - the database trigger will create the user profile
-      const { data, error } = await supabase.auth.signUp({
+      // Use AuthContext signUp function - it handles profile creation and user state
+      const response = await signUp({
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
-        options: {
-          data: {
-            full_name: formData.fullName.trim(),
-            phone: formData.phone.trim(),
-            location: formData.location.trim(),
-            country: formData.country.trim(),
-            bio: formData.bio.trim() || null,
-            areas_of_expertise: expertiseArray.length > 0 ? expertiseArray : null,
-            education: formData.education.trim() || null,
-            date_of_birth: formData.dateOfBirth,
-            invite_code: inviteCode || null, // Include invite code if present
-          },
-        },
-      });
+        fullName: formData.fullName.trim(),
+        phone: formData.phone.trim(),
+        location: formData.location.trim(),
+        bio: formData.bio.trim() || undefined,
+        areasOfExpertise: expertiseArray.length > 0 ? expertiseArray : undefined,
+        education: formData.education.trim() || undefined,
+        // Pass additional fields via metadata (country, date_of_birth, invite_code)
+        ...(formData.country && { country: formData.country }),
+        ...(formData.dateOfBirth && { dateOfBirth: formData.dateOfBirth }),
+        ...(inviteCode && { inviteCode }),
+      } as any);
 
-      if (error) {
-        console.error('Registration error:', error);
-        Alert.alert('Registration Failed', error.message);
+      if (!response.success) {
+        setAlertConfig({
+          title: 'Registration Failed',
+          message: response.error || 'An error occurred during registration',
+          type: 'error',
+        });
+        setAlertVisible(true);
         return;
       }
 
       // Check if email confirmation is required
-      if (data.user && !data.session) {
-        Alert.alert(
-          'Check Your Email',
-          'We sent you a confirmation email. Please verify your email address to complete registration.',
-          [{ text: 'OK', onPress: () => router.replace('/login') }]
-        );
-      } else {
-        // User is automatically logged in
-        Alert.alert(
-          'Success!',
-          'Your account has been created successfully',
-          [{ text: 'OK', onPress: () => router.replace('/(tabs)/feed') }]
-        );
+      if ((response as any).requiresEmailConfirmation || !response.data) {
+        // Email confirmation required
+        setAlertConfig({
+          title: 'Check Your Email',
+          message: 'We sent you a confirmation email. Please verify your email address to complete registration.',
+          type: 'warning',
+        });
+        setAlertVisible(true);
+        
+        // Navigate to login after showing message
+        setTimeout(() => {
+          router.replace('/login');
+        }, 2000);
+      } else if (response.data) {
+        // User is automatically logged in (session exists)
+        setAlertConfig({
+          title: 'Success!',
+          message: 'Your account has been created successfully. Welcome to VIbe!',
+          type: 'success',
+        });
+        setAlertVisible(true);
+        
+        // Small delay to show success message, then navigate
+        // The AuthContext has already set the user, so app/index.tsx will handle redirect
+        setTimeout(() => {
+          router.replace('/(tabs)/feed');
+        }, 1500);
       }
     } catch (error: any) {
       console.error('Unexpected error:', error);
-      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+      setAlertConfig({
+        title: 'Error',
+        message: 'An unexpected error occurred. Please try again.',
+        type: 'error',
+      });
+      setAlertVisible(true);
     } finally {
       setLoading(false);
     }
@@ -166,6 +201,11 @@ export default function RegisterScreen() {
   };
 
   const insets = useSafeAreaInsets();
+
+  // Don't render form if already authenticated
+  if (!authLoading && user) {
+    return null; // Will redirect via useEffect
+  }
 
   return (
     <KeyboardAvoidingView
@@ -404,6 +444,15 @@ export default function RegisterScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Custom Alert */}
+      <CustomAlert
+        visible={alertVisible}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        type={alertConfig.type}
+        onClose={() => setAlertVisible(false)}
+      />
     </KeyboardAvoidingView>
   );
 }

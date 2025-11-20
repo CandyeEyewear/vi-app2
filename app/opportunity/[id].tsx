@@ -43,6 +43,7 @@ import {
   ExternalLink,
   QrCode,
   X,
+  Share2,
 } from 'lucide-react-native';
 import { Opportunity } from '../../types';
 import { supabase } from '../../services/supabase';
@@ -50,6 +51,8 @@ import CustomAlert from '../../components/CustomAlert';
 import OpportunityGroupChat from '../../components/OpportunityGroupChat';
 import ParticipantsList from '../../components/ParticipantsList';
 import QRScanner from '../../components/QRScanner';
+import ShareOpportunityModal from '../../components/ShareOpportunityModal';
+import { useFeed } from '../../contexts/FeedContext';
 
 export default function OpportunityDetailsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -57,6 +60,7 @@ export default function OpportunityDetailsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, isAdmin } = useAuth();
+  const { shareOpportunityToFeed } = useFeed();
   const params = useLocalSearchParams();
   const opportunityId = params.id as string;
 
@@ -71,11 +75,18 @@ export default function OpportunityDetailsScreen() {
   const [checkInModalVisible, setCheckInModalVisible] = useState(false);
   const [hasCheckedIn, setHasCheckedIn] = useState(false);
   const [checkInStatus, setCheckInStatus] = useState<string | null>(null);
+  
+  // Admin stats
+  const [totalSignups, setTotalSignups] = useState<number>(0);
+  const [totalCheckIns, setTotalCheckIns] = useState<number>(0);
   // QR Code state
    const [qrModalVisible, setQrModalVisible] = useState(false);
    const qrCodeRef = React.useRef<View>(null);
    const [qrScannerVisible, setQrScannerVisible] = useState(false);
   
+  // Share state
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   // Alert state
   const [alertVisible, setAlertVisible] = useState(false);
@@ -90,12 +101,30 @@ export default function OpportunityDetailsScreen() {
     setAlertVisible(true);
   };
 
+  const handleShare = async (comment?: string, visibility?: 'public' | 'circle') => {
+    if (!opportunity) return;
+    
+    setSharing(true);
+    const response = await shareOpportunityToFeed(opportunity.id, comment, visibility);
+    setSharing(false);
+    
+    if (response.success) {
+      setShowShareModal(false);
+      showAlert('Success', 'Opportunity shared to your feed!', 'success');
+    } else {
+      showAlert('Error', response.error || 'Failed to share opportunity', 'error');
+    }
+  };
+
   useEffect(() => {
     if (opportunityId) {
       loadOpportunityDetails();
       checkSignupStatus();
+      if (isAdmin) {
+        loadAdminStats();
+      }
     }
-  }, [opportunityId]);
+  }, [opportunityId, isAdmin]);
 
   // Calculate and log check-in window debug info
   useEffect(() => {
@@ -178,6 +207,11 @@ export default function OpportunityDetailsScreen() {
       };
 
       setOpportunity(opportunityData);
+      
+      // Reload admin stats if admin
+      if (isAdmin) {
+        loadAdminStats();
+      }
     } catch (error) {
       console.error('Error loading opportunity:', error);
       showAlert('Error', 'Failed to load opportunity details', 'error');
@@ -207,6 +241,41 @@ export default function OpportunityDetailsScreen() {
       }
     } catch (error) {
       console.error('Error checking signup status:', error);
+    }
+  };
+
+  // Load admin statistics (signups and check-ins)
+  const loadAdminStats = async () => {
+    if (!isAdmin) return;
+
+    try {
+      // Get total signups count
+      const { count: signupsCount, error: signupsError } = await supabase
+        .from('opportunity_signups')
+        .select('*', { count: 'exact', head: true })
+        .eq('opportunity_id', opportunityId)
+        .neq('status', 'cancelled');
+
+      if (signupsError) {
+        console.error('Error loading signups count:', signupsError);
+      } else {
+        setTotalSignups(signupsCount || 0);
+      }
+
+      // Get total check-ins count (checked_in = true OR check_in_status = 'approved')
+      const { count: checkInsCount, error: checkInsError } = await supabase
+        .from('opportunity_signups')
+        .select('*', { count: 'exact', head: true })
+        .eq('opportunity_id', opportunityId)
+        .or('checked_in.eq.true,check_in_status.eq.approved');
+
+      if (checkInsError) {
+        console.error('Error loading check-ins count:', checkInsError);
+      } else {
+        setTotalCheckIns(checkInsCount || 0);
+      }
+    } catch (error) {
+      console.error('Error loading admin stats:', error);
     }
   };
 
@@ -533,30 +602,40 @@ const handleQRScan = async (scannedCode: string) => {
           <ChevronLeft size={24} color={colors.text} />
         </TouchableOpacity>
         
-        {/* Admin Actions */}
-   {isAdmin && (
-     <View style={styles.adminActions}>
-       <TouchableOpacity
-         style={[styles.iconButton, { backgroundColor: colors.primary + '15' }]}
-         onPress={() => router.push(`/edit-opportunity/${opportunityId}`)}
-       >
-         <Edit size={20} color={colors.primary} />
-       </TouchableOpacity>
-       <TouchableOpacity
-         style={[styles.iconButton, { backgroundColor: colors.success + '15' }]}
-         onPress={() => setQrModalVisible(true)}
-       >
-         <QrCode size={20} color={colors.success} />
-       </TouchableOpacity>
-       <TouchableOpacity
-         style={[styles.iconButton, { backgroundColor: colors.error + '15' }]}
-         onPress={handleDelete}
-         disabled={submitting}
-       >
-         <Trash2 size={20} color={colors.error} />
-       </TouchableOpacity>
-     </View>
-   )}
+        <View style={styles.headerActions}>
+          {/* Share Button - Available for all users */}
+          <TouchableOpacity
+            style={[styles.iconButton, { backgroundColor: colors.primary + '15' }]}
+            onPress={() => setShowShareModal(true)}
+          >
+            <Share2 size={20} color={colors.primary} />
+          </TouchableOpacity>
+
+          {/* Admin Actions */}
+          {isAdmin && (
+            <>
+              <TouchableOpacity
+                style={[styles.iconButton, { backgroundColor: colors.primary + '15' }]}
+                onPress={() => router.push(`/edit-opportunity/${opportunityId}`)}
+              >
+                <Edit size={20} color={colors.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.iconButton, { backgroundColor: colors.success + '15' }]}
+                onPress={() => setQrModalVisible(true)}
+              >
+                <QrCode size={20} color={colors.success} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.iconButton, { backgroundColor: colors.error + '15' }]}
+                onPress={handleDelete}
+                disabled={submitting}
+              >
+                <Trash2 size={20} color={colors.error} />
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
       </View>
 
       {/* 🔥 FIXED: Conditional rendering based on active tab */}
@@ -683,6 +762,22 @@ const handleQRScan = async (scannedCode: string) => {
                 </Text>
               </View>
             </View>
+
+            {/* Admin Stats - Only visible to admins */}
+            {isAdmin && (
+              <View style={styles.adminStatsContainer}>
+                <View style={[styles.adminStatsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Users size={20} color={colors.primary} />
+                  <Text style={[styles.adminStatsLabel, { color: colors.textSecondary }]}>Total Signups</Text>
+                  <Text style={[styles.adminStatsValue, { color: colors.text }]}>{totalSignups}</Text>
+                </View>
+                <View style={[styles.adminStatsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <CheckCircle size={20} color={colors.success} />
+                  <Text style={[styles.adminStatsLabel, { color: colors.textSecondary }]}>Checked In</Text>
+                  <Text style={[styles.adminStatsValue, { color: colors.success }]}>{totalCheckIns}</Text>
+                </View>
+              </View>
+            )}
 
             {/* Tabs - Show if user is signed up OR is admin */}
             {((isSignedUp && signupStatus !== 'cancelled') || isAdmin) && (
@@ -967,7 +1062,12 @@ const handleQRScan = async (scannedCode: string) => {
           <ParticipantsList
             opportunityId={opportunityId}
             isAdmin={isAdmin || false}
-            onCheckInApproved={loadOpportunityDetails}
+            onCheckInApproved={() => {
+              loadOpportunityDetails();
+              if (isAdmin) {
+                loadAdminStats();
+              }
+            }}
           />
         </View>
       )}
@@ -1151,6 +1251,17 @@ const handleQRScan = async (scannedCode: string) => {
         onClose={() => setAlertVisible(false)}
       />
 
+      {/* Share Opportunity Modal */}
+      {opportunity && (
+        <ShareOpportunityModal
+          visible={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          onShare={handleShare}
+          opportunity={opportunity}
+          sharing={sharing}
+        />
+      )}
+
       {/* QR Scanner */}
       <QRScanner
         visible={qrScannerVisible}
@@ -1176,6 +1287,11 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 4,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
   },
   adminActions: {
     flexDirection: 'row',
@@ -1280,6 +1396,28 @@ const styles = StyleSheet.create({
   infoValue: {
     fontSize: 14,
     fontWeight: '600',
+    textAlign: 'center',
+  },
+  adminStatsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 24,
+  },
+  adminStatsCard: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    gap: 8,
+  },
+  adminStatsLabel: {
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  adminStatsValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
     textAlign: 'center',
   },
   section: {

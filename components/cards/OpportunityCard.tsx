@@ -3,20 +3,45 @@
  * Displays a volunteer opportunity in the discover feed
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, useColorScheme } from 'react-native';
-import { MapPin, Clock, Users, CheckCircle } from 'lucide-react-native';
+import { MapPin, Clock, Users, CheckCircle, Share2 } from 'lucide-react-native';
 import { Opportunity } from '../../types';
 import { Colors } from '../../constants/colors';
+import { useFeed } from '../../contexts/FeedContext';
+import ShareOpportunityModal from '../ShareOpportunityModal';
 
 interface OpportunityCardProps {
   opportunity: Opportunity;
   onPress: (opportunity: Opportunity) => void;
+  onShare?: (opportunity: Opportunity) => void;
 }
 
-export function OpportunityCard({ opportunity, onPress }: OpportunityCardProps) {
+export function OpportunityCard({ opportunity, onPress, onShare }: OpportunityCardProps) {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const { shareOpportunityToFeed } = useFeed();
+
+  const handleSharePress = (e: any) => {
+    e.stopPropagation(); // Prevent card press
+    if (onShare) {
+      onShare(opportunity);
+    } else {
+      setShowShareModal(true);
+    }
+  };
+
+  const handleShare = async (comment?: string, visibility?: 'public' | 'circle') => {
+    setSharing(true);
+    const response = await shareOpportunityToFeed(opportunity.id, comment, visibility);
+    setSharing(false);
+    
+    if (response.success) {
+      setShowShareModal(false);
+    }
+  };
 
   const getCategoryColor = (category: Opportunity['category']) => {
     const categoryColors = {
@@ -37,24 +62,34 @@ export function OpportunityCard({ opportunity, onPress }: OpportunityCardProps) 
   const isLimited = spotsLeft <= 5;
 
   return (
-    <TouchableOpacity
-      style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
-      onPress={() => onPress(opportunity)}
-      activeOpacity={0.7}
-    >
-      <Image source={{ uri: opportunity.imageUrl }} style={styles.image} />
-      
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <View style={[styles.categoryBadge, { backgroundColor: categoryColor + '15' }]}>
-            <Text style={[styles.categoryText, { color: categoryColor }]}>
-              {opportunity.category.toUpperCase()}
-            </Text>
+    <>
+      <TouchableOpacity
+        style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
+        onPress={() => onPress(opportunity)}
+        activeOpacity={0.7}
+      >
+        <Image source={{ uri: opportunity.imageUrl }} style={styles.image} />
+        
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <View style={[styles.categoryBadge, { backgroundColor: categoryColor + '15' }]}>
+              <Text style={[styles.categoryText, { color: categoryColor }]}>
+                {opportunity.category.toUpperCase()}
+              </Text>
+            </View>
+            <View style={styles.headerRight}>
+              {opportunity.organizationVerified && (
+                <CheckCircle size={16} color={colors.success} fill={colors.success} />
+              )}
+              <TouchableOpacity
+                onPress={handleSharePress}
+                style={styles.shareButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Share2 size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
           </View>
-          {opportunity.organizationVerified && (
-            <CheckCircle size={16} color={colors.success} fill={colors.success} />
-          )}
-        </View>
 
         <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>
           {opportunity.title}
@@ -145,6 +180,15 @@ export function OpportunityCard({ opportunity, onPress }: OpportunityCardProps) 
         </View>
       </View>
     </TouchableOpacity>
+
+    <ShareOpportunityModal
+      visible={showShareModal}
+      onClose={() => setShowShareModal(false)}
+      onShare={handleShare}
+      opportunity={opportunity}
+      sharing={sharing}
+    />
+    </>
   );
 }
 
@@ -174,6 +218,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 8,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  shareButton: {
+    padding: 4,
   },
   categoryBadge: {
     paddingHorizontal: 10,

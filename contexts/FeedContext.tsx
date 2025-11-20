@@ -18,6 +18,7 @@ interface FeedContextType {
   addComment: (postId: string, text: string) => Promise<ApiResponse<Comment>>;
   sharePost: (postId: string) => Promise<void>;
   shareToFeed: (postId: string, customMessage?: string) => Promise<ApiResponse<Post>>;
+  shareOpportunityToFeed: (opportunityId: string, customMessage?: string, visibility?: 'public' | 'circle') => Promise<ApiResponse<Post>>;
   deletePost: (postId: string) => Promise<ApiResponse<void>>;
   refreshFeed: () => Promise<void>;
   addReaction: (postId: string, reactionType: ReactionType) => Promise<ApiResponse<void>>;
@@ -149,9 +150,45 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
             isAnnouncement: newPostData.is_announcement || false,
             isPinned: newPostData.is_pinned || false,
             sharedPostId: newPostData.shared_post_id || null,
+            opportunityId: newPostData.opportunity_id || undefined,
             createdAt: newPostData.created_at,
             updatedAt: newPostData.updated_at,
           };
+
+          // Fetch opportunity data if post references an opportunity
+          if (newPostData.opportunity_id) {
+            console.log('[FEED] 🎯 New post with opportunity, fetching opportunity data...');
+            const { data: opportunityData } = await supabase
+              .from('opportunities')
+              .select('*')
+              .eq('id', newPostData.opportunity_id)
+              .single();
+
+            if (opportunityData) {
+              const opportunity: any = {
+                id: opportunityData.id,
+                title: opportunityData.title,
+                description: opportunityData.description,
+                organizationName: opportunityData.organization_name,
+                organizationVerified: opportunityData.organization_verified,
+                category: opportunityData.category,
+                location: opportunityData.location,
+                latitude: opportunityData.latitude,
+                longitude: opportunityData.longitude,
+                date: opportunityData.date || opportunityData.date_start,
+                dateStart: opportunityData.date_start,
+                dateEnd: opportunityData.date_end,
+                timeStart: opportunityData.time_start,
+                timeEnd: opportunityData.time_end,
+                duration: opportunityData.duration,
+                spotsAvailable: opportunityData.spots_available,
+                spotsTotal: opportunityData.spots_total,
+                imageUrl: opportunityData.image_url,
+                status: opportunityData.status,
+              };
+              newPost.opportunity = opportunity;
+            }
+          }
 
           // Check for shared posts and fetch original post
           if (newPostData.shared_post_id) {
@@ -713,9 +750,49 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
         })
       );
 
+      // Fetch opportunities for posts that reference them
+      const postsWithOpportunities = await Promise.all(
+        postsWithDetails.map(async (post) => {
+          if (post.opportunityId) {
+            console.log('[FEED] 🎯 Loading opportunity data for post:', post.id);
+            const { data: opportunityData } = await supabase
+              .from('opportunities')
+              .select('*')
+              .eq('id', post.opportunityId)
+              .single();
+
+            if (opportunityData) {
+              const opportunity: any = {
+                id: opportunityData.id,
+                title: opportunityData.title,
+                description: opportunityData.description,
+                organizationName: opportunityData.organization_name,
+                organizationVerified: opportunityData.organization_verified,
+                category: opportunityData.category,
+                location: opportunityData.location,
+                latitude: opportunityData.latitude,
+                longitude: opportunityData.longitude,
+                date: opportunityData.date || opportunityData.date_start,
+                dateStart: opportunityData.date_start,
+                dateEnd: opportunityData.date_end,
+                timeStart: opportunityData.time_start,
+                timeEnd: opportunityData.time_end,
+                duration: opportunityData.duration,
+                spotsAvailable: opportunityData.spots_available,
+                spotsTotal: opportunityData.spots_total,
+                imageUrl: opportunityData.image_url,
+                status: opportunityData.status,
+              };
+              return { ...post, opportunity };
+            }
+          }
+          return post;
+        })
+      );
+
       // Fetch original posts for shared posts
       const postsWithSharedData = await Promise.all(
-        postsWithDetails.map(async (post) => {
+        postsWithOpportunities.map(async (post) => {
           if (post.sharedPostId) {
             console.log('[FEED] 📎 Loading shared post data for:', post.id);
             // Fetch the original post
@@ -1163,6 +1240,112 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const shareOpportunityToFeed = async (
+    opportunityId: string,
+    customMessage?: string,
+    visibility: 'public' | 'circle' = 'public'
+  ): Promise<ApiResponse<Post>> => {
+    if (!user) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    try {
+      console.log('[FEED] 📤 Sharing opportunity to feed:', opportunityId);
+      console.log('[FEED] Custom message:', customMessage || '(none)');
+      console.log('[FEED] Visibility:', visibility);
+
+      // Fetch opportunity details
+      const { data: opportunityData, error: oppError } = await supabase
+        .from('opportunities')
+        .select('*')
+        .eq('id', opportunityId)
+        .single();
+
+      if (oppError || !opportunityData) {
+        return { success: false, error: 'Opportunity not found' };
+      }
+
+      console.log('[FEED] Creating post with opportunity reference...');
+
+      // Create post with opportunity reference
+      const { data, error } = await supabase
+        .from('posts')
+        .insert({
+          user_id: user.id,
+          text: customMessage || '', // User's optional message
+          opportunity_id: opportunityId, // Reference to opportunity
+          media_urls: opportunityData.image_url ? [opportunityData.image_url] : [],
+          media_types: opportunityData.image_url ? ['image'] : [],
+          visibility: visibility,
+          likes: [],
+          shares: 0,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Transform opportunity data to Opportunity type
+      const opportunity: any = {
+        id: opportunityData.id,
+        title: opportunityData.title,
+        description: opportunityData.description,
+        organizationName: opportunityData.organization_name,
+        organizationVerified: opportunityData.organization_verified,
+        category: opportunityData.category,
+        location: opportunityData.location,
+        latitude: opportunityData.latitude,
+        longitude: opportunityData.longitude,
+        date: opportunityData.date,
+        dateStart: opportunityData.date_start,
+        dateEnd: opportunityData.date_end,
+        timeStart: opportunityData.time_start,
+        timeEnd: opportunityData.time_end,
+        duration: opportunityData.duration,
+        spotsAvailable: opportunityData.spots_available,
+        spotsTotal: opportunityData.spots_total,
+        imageUrl: opportunityData.image_url,
+        status: opportunityData.status,
+      };
+
+      const newPost: Post = {
+        id: data.id,
+        userId: user.id,
+        user: user,
+        text: data.text,
+        mediaUrls: data.media_urls || [],
+        mediaTypes: data.media_types || [],
+        visibility: data.visibility || visibility,
+        likes: [],
+        comments: [],
+        shares: 0,
+        reactions: [],
+        reactionSummary: {
+          heart: 0,
+          thumbsup: 0,
+          clap: 0,
+          fire: 0,
+          star: 0,
+          total: 0,
+        },
+        isAnnouncement: false,
+        isPinned: false,
+        opportunityId: opportunityId,
+        opportunity: opportunity,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      };
+
+      console.log('[FEED] ✅ Opportunity shared to feed, adding optimistically');
+      setPosts((prev) => [newPost, ...prev]);
+
+      return { success: true, data: newPost };
+    } catch (error: any) {
+      console.error('[FEED] ❌ Error sharing opportunity to feed:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
   const deletePost = async (postId: string): Promise<ApiResponse<void>> => {
   if (!user) {
     return { success: false, error: 'Not authenticated' };
@@ -1399,6 +1582,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
         addComment,
         sharePost,
         shareToFeed,
+        shareOpportunityToFeed,
         deletePost,
         refreshFeed,
         addReaction,

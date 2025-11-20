@@ -14,6 +14,7 @@ import { NetworkProvider } from '../contexts/NetworkContext';
 import ErrorBoundary from '../components/ErrorBoundary';
 import NetworkStatusBanner from '../components/NetworkStatusBanner';
 import { logger } from '../utils/logger';
+import { setupFCMHandlers } from '../services/fcmNotifications';
 
 // Import splash screen with error handling
 let SplashScreen: any = null;
@@ -45,6 +46,11 @@ function AppContent() {
   }, [authLoading]);
 
   useEffect(() => {
+    // Set up FCM notification handlers with navigation
+    setupFCMHandlers((path: string) => {
+      router.push(path as any);
+    });
+
     notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
       logger.info('Notification received', { notification });
     });

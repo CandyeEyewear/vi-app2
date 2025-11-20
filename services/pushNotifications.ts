@@ -262,9 +262,38 @@ export async function sendPushNotification(
 }
 
 /**
+ * Send FCM notification via Supabase Edge Function
+ */
+async function sendFCMNotificationViaEdgeFunction(
+  userId: string,
+  title: string,
+  body: string,
+  data?: any
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { data: result, error } = await supabase.functions.invoke(
+      'send-fcm-notification',
+      {
+        body: { userId, title, body, data },
+      }
+    );
+
+    if (error) {
+      console.error('[FCM] Error:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('[FCM] ✅ Sent:', result);
+    return { success: true };
+  } catch (error: any) {
+    console.error('[FCM] ❌ Error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
  * Send notification to a specific user by their user ID
- * 🛠️ FIXED: Now uses users.push_token column via RPC function
- * 🔴 INCLUDES BADGE COUNT for app icon
+ * 🔥 UPDATED: Now uses FCM via Supabase Edge Function
  */
 export async function sendNotificationToUser(
   userId: string,
@@ -275,51 +304,28 @@ export async function sendNotificationToUser(
   console.log('[PUSH] Notification type:', notification.type);
   
   try {
-    // 🛠️ FIXED: Use RPC function that bypasses RLS
-    console.log('[PUSH] 🔍 Fetching user push token via RPC...');
-    const { data: token, error } = await supabase
-      .rpc('get_push_token', { p_user_id: userId });
+    // Prepare notification data
+    const notificationData = {
+      type: notification.type,
+      id: notification.id,
+      ...notification.data,
+    };
 
-    if (error) {
-      console.error('[PUSH] ❌ RPC error fetching push token:', error);
-      return false;
-    }
+    // Send via FCM Edge Function
+    const result = await sendFCMNotificationViaEdgeFunction(
+      userId,
+      notification.title,
+      notification.body,
+      notificationData
+    );
 
-    if (!token) {
-      console.log('[PUSH] ⚠️ No push token found for user:', userId);
-      return false;
-    }
-
-    console.log('[PUSH] ✅ Push token found for user');
-    console.log('[PUSH] Token (first 20 chars):', token.substring(0, 20) + '...');
-
-    // 🔴 GET UNREAD COUNT FOR BADGE
-    console.log('[PUSH] 📊 Fetching unread notification count for badge...');
-    const { count: unreadCount, error: badgeError } = await supabase
-      .from('notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .eq('is_read', false);
-
-    if (badgeError) {
-      console.error('[PUSH] ❌ Error fetching badge count:', badgeError);
-      console.error('[PUSH] ⚠️ Continuing with badge count 0');
-    }
-
-    const badgeCount = (unreadCount || 0) + 1; // +1 for the notification we're about to create
-    console.log('[PUSH] 🔴 Badge count:', badgeCount);
-
-    // Send the notification with badge
-    console.log('[PUSH] 📤 Calling sendPushNotification...');
-    const sendResult = await sendPushNotification(token, notification, badgeCount);
-    
-    if (sendResult) {
+    if (result.success) {
       console.log('[PUSH] ✅ Notification sent successfully to user:', userId.substring(0, 8) + '...');
+      return true;
     } else {
-      console.error('[PUSH] ❌ Failed to send notification to user:', userId.substring(0, 8) + '...');
+      console.error('[PUSH] ❌ Failed to send notification:', result.error);
+      return false;
     }
-    
-    return sendResult;
   } catch (error: any) {
     console.error('[PUSH] ❌ Exception sending notification to user:', userId.substring(0, 8) + '...');
     console.error('[PUSH] ❌ Error message:', error?.message);
@@ -330,6 +336,7 @@ export async function sendNotificationToUser(
 
 /**
  * Send notification to multiple users
+ * 🔥 UPDATED: Now uses FCM via Supabase Edge Function (loops through each user)
  * Useful for announcements and opportunities
  */
 export async function sendNotificationToUsers(
@@ -341,52 +348,43 @@ export async function sendNotificationToUsers(
   console.log('[PUSH] Notification type:', notification.type);
   
   try {
-    // Fetch all push tokens for these users
-    console.log('[PUSH] 🔍 Fetching push tokens for all users...');
-    const { data: users, error } = await supabase
-      .from('users')
-      .select('id, push_token')
-      .in('id', userIds);
+    // Prepare notification data
+    const notificationData = {
+      type: notification.type,
+      id: notification.id,
+      ...notification.data,
+    };
 
-    if (error) {
-      console.error('[PUSH] ❌ Database error fetching push tokens:', error);
-      console.error('[PUSH] ❌ Error code:', error.code);
-      console.error('[PUSH] ❌ Error message:', error.message);
-      console.error('[PUSH] ❌ Error details:', error.details);
-      return { sent: 0, failed: userIds.length };
+    let sent = 0;
+    let failed = 0;
+
+    // Loop through each user and send FCM notification
+    console.log('[PUSH] 📤 Sending FCM notifications to', userIds.length, 'users...');
+    
+    for (const userId of userIds) {
+      try {
+        const result = await sendFCMNotificationViaEdgeFunction(
+          userId,
+          notification.title,
+          notification.body,
+          notificationData
+        );
+
+        if (result.success) {
+          sent++;
+          console.log(`[PUSH] ✅ Sent to user ${userId.substring(0, 8)}... (${sent}/${userIds.length})`);
+        } else {
+          failed++;
+          console.error(`[PUSH] ❌ Failed for user ${userId.substring(0, 8)}...:`, result.error);
+        }
+      } catch (error: any) {
+        failed++;
+        console.error(`[PUSH] ❌ Exception for user ${userId.substring(0, 8)}...:`, error?.message);
+      }
     }
 
-    if (!users || users.length === 0) {
-      console.log('[PUSH] ⚠️ No users found in database');
-      return { sent: 0, failed: userIds.length };
-    }
-
-    // Filter out users without tokens
-    const tokensToSend = users
-      ?.filter(user => user.push_token)
-      .map(user => user.push_token) || [];
-
-    console.log('[PUSH] 📊 Found', tokensToSend.length, 'valid push tokens out of', userIds.length, 'users');
-    console.log('[PUSH] 📊 Users without tokens:', userIds.length - tokensToSend.length);
-
-    if (tokensToSend.length === 0) {
-      console.log('[PUSH] ⚠️ No users with push tokens found');
-      return { sent: 0, failed: userIds.length };
-    }
-
-    // 🔴 For bulk notifications, we send badge: 1 to all
-    // Individual users will see different counts, but we can't query each individually
-    // Badge will auto-update when they open the app
-    console.log('[PUSH] 📤 Sending bulk notification to', tokensToSend.length, 'users...');
-    const success = await sendPushNotification(tokensToSend, notification, 1);
-
-    if (success) {
-      console.log('[PUSH] ✅ Notifications sent to all users with tokens');
-      return { sent: tokensToSend.length, failed: userIds.length - tokensToSend.length };
-    } else {
-      console.error('[PUSH] ❌ Failed to send notifications');
-      return { sent: 0, failed: userIds.length };
-    }
+    console.log('[PUSH] 📊 Summary:', { sent, failed, total: userIds.length });
+    return { sent, failed };
   } catch (error: any) {
     console.error('[PUSH] ❌ Exception sending notifications to users:', error);
     console.error('[PUSH] ❌ Error message:', error?.message);

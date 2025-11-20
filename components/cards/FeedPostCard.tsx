@@ -32,6 +32,7 @@ import ReactionPicker from '../ReactionPicker';
 import ShareModal from '../ShareModal';
 import ShareCommentModal from '../ShareCommentModal';
 import SharedPostCard from '../SharedPostCard';
+import SharedOpportunityCard from '../SharedOpportunityCard';
 import ImageCollage from '../ImageCollage';
 import VideoPlayer from '../VideoPlayer';
 import LinkText from '../LinkText';
@@ -290,8 +291,13 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
         />
       )}
 
+      {/* NEW: Render Shared Opportunity if this post references an opportunity */}
+      {post.opportunity && !post.sharedPost && (
+        <SharedOpportunityCard opportunity={post.opportunity} />
+      )}
+
       {/* Media - Videos and Images */}
-      {!post.sharedPost && post.mediaUrls && post.mediaUrls.length > 0 && (
+      {!post.sharedPost && !post.opportunity && post.mediaUrls && post.mediaUrls.length > 0 && (
         <View style={styles.mediaContainer}>
           {post.mediaUrls.map((url, index) => {
             const mediaType = post.mediaTypes?.[index] || 'image';

@@ -3,7 +3,7 @@
  * Beautiful login interface with VIbe branding
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,7 @@ import {
   Linking,
   Image,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Redirect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
@@ -26,8 +26,8 @@ import CustomAlert from '../components/CustomAlert';
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { signIn, loading } = useAuth();
-  
+  const { signIn, loading, user } = useAuth();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -37,6 +37,18 @@ export default function LoginScreen() {
     message: '',
     type: 'error' as 'success' | 'error' | 'warning',
   });
+
+  // Redirect authenticated users away from login screen
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace('/(tabs)/feed');
+    }
+  }, [user, loading, router]);
+
+  // Don't render login form if user is already authenticated
+  if (!loading && user) {
+    return null; // Will redirect via useEffect
+  }
 
   const showAlert = (title: string, message: string, type: 'success' | 'error' | 'warning' = 'error') => {
     setAlertConfig({ title, message, type });

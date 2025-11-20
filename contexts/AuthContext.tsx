@@ -374,36 +374,92 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       console.log('[AUTH] 🚀 Starting signup process (SDK 54)');
       
+      // Prepare metadata object
+      const metadata = {
+        full_name: data.fullName,
+        phone: data.phone,
+        location: data.location,
+        bio: data.bio || '',
+        areas_of_expertise: data.areasOfExpertise || [],
+        education: data.education || '',
+        country: (data as any).country || 'Jamaica',
+        date_of_birth: (data as any).dateOfBirth || null,
+        invite_code: (data as any).inviteCode || null,
+      };
+
+      // 🔍 DEBUG: Log metadata being sent
+      console.log('[AUTH] 📤 Metadata being sent to Supabase:');
+      console.log('[AUTH] Metadata object:', JSON.stringify(metadata, null, 2));
+      console.log('[AUTH] Metadata keys:', Object.keys(metadata));
+      console.log('[AUTH] Full name:', metadata.full_name);
+      console.log('[AUTH] Phone:', metadata.phone);
+      console.log('[AUTH] Location:', metadata.location);
+      
       // Sign up with Supabase Auth - pass ALL data as metadata
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
-          data: {
-            full_name: data.fullName,
-            phone: data.phone,
-            location: data.location,
-            bio: data.bio || '',
-            areas_of_expertise: data.areasOfExpertise || [],
-            education: data.education || '',
-            country: (data as any).country || 'Jamaica',
-          }
+          data: metadata
         }
       });
 
+      // 🔍 DEBUG: Log response from Supabase
       if (authError) {
-        console.error('[AUTH] ❌ Signup failed:', authError);
+        console.error('[AUTH] ❌ Signup error response:');
         console.error('[AUTH] Error code:', authError.code);
         console.error('[AUTH] Error message:', authError.message);
+        console.error('[AUTH] Full error:', JSON.stringify(authError, null, 2));
         const friendlyError = getSignUpErrorMessage(authError);
         return { success: false, error: friendlyError };
+      } else if (authData) {
+        console.log('[AUTH] ✅ Signup successful response:');
+        console.log('[AUTH] User ID:', authData.user?.id);
+        console.log('[AUTH] User email:', authData.user?.email);
+        console.log('[AUTH] Session exists:', !!authData.session);
+        
+        // 🔍 DEBUG: Check if metadata was received by Supabase
+        if (authData.user) {
+          console.log('[AUTH] 🔍 Checking raw_user_meta_data in response:');
+          console.log('[AUTH] user_metadata:', JSON.stringify(authData.user.user_metadata, null, 2));
+          console.log('[AUTH] app_metadata:', JSON.stringify(authData.user.app_metadata, null, 2));
+          
+          // Check if metadata fields are present
+          const receivedMetadata = authData.user.user_metadata || {};
+          console.log('[AUTH] 📥 Received metadata fields:');
+          console.log('[AUTH] - full_name:', receivedMetadata.full_name || 'MISSING ❌');
+          console.log('[AUTH] - phone:', receivedMetadata.phone || 'MISSING ❌');
+          console.log('[AUTH] - location:', receivedMetadata.location || 'MISSING ❌');
+          console.log('[AUTH] - country:', receivedMetadata.country || 'MISSING ❌');
+          console.log('[AUTH] - date_of_birth:', receivedMetadata.date_of_birth || 'MISSING ❌');
+          console.log('[AUTH] - invite_code:', receivedMetadata.invite_code || 'MISSING ❌');
+          
+          // Warn if metadata is missing
+          if (!receivedMetadata.full_name || !receivedMetadata.phone || !receivedMetadata.location) {
+            console.warn('[AUTH] ⚠️ WARNING: Some metadata fields are missing in the response!');
+            console.warn('[AUTH] This might indicate a serialization issue with SDK 54');
+            console.warn('[AUTH] Check if SecureStore + PKCE flow is working correctly');
+          } else {
+            console.log('[AUTH] ✅ All metadata fields present in response!');
+          }
+        }
       }
 
-      if (!authData.user) {
+      if (!authData?.user) {
         return { success: false, error: 'Failed to create user account. Please try again.' };
       }
 
-      console.log('[AUTH] ✅ Auth user created, waiting for trigger to create profile...');
+      // Check if email confirmation is required (no session means email confirmation needed)
+      if (!authData.session) {
+        console.log('[AUTH] ⚠️ Email confirmation required - no session created');
+        return { 
+          success: true, 
+          data: null, // No user data yet - email confirmation required
+          requiresEmailConfirmation: true 
+        } as any;
+      }
+
+      console.log('[AUTH] ✅ Auth user created with session, waiting for trigger to create profile...');
 
       // Wait for trigger to create profile (with retries)
       let profileData = null;
@@ -473,6 +529,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (pushError) {
         // Don't fail signup if push notification registration fails
         console.warn('[AUTH] ⚠️ Push notification registration failed:', pushError);
+      }
+
+      // Create HubSpot contact (non-blocking - don't fail signup if this fails)
+      try {
+        console.log('[AUTH] 📧 Creating HubSpot contact...');
+        const hubspotResult = await createHubSpotContact({
+          email: userData.email,
+          fullName: userData.fullName,
+          phone: userData.phone,
+          location: userData.location,
+          bio: userData.bio,
+          education: userData.education,
+          areasOfExpertise: userData.areasOfExpertise,
+        });
+        
+        if (hubspotResult.success) {
+          console.log('[AUTH] ✅ HubSpot contact created successfully');
+        } else {
+          console.warn('[AUTH] ⚠️ HubSpot contact creation failed:', hubspotResult.error);
+          // Don't fail signup if HubSpot fails - just log the warning
+        }
+      } catch (hubspotError) {
+        // Don't fail signup if HubSpot contact creation fails
+        console.warn('[AUTH] ⚠️ HubSpot contact creation error:', hubspotError);
       }
 
       console.log('[AUTH] 🎉 Signup complete!');

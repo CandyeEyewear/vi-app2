@@ -3,7 +3,7 @@
  * Browse and search volunteer opportunities
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -42,9 +42,9 @@ export default function DiscoverScreen() {
   const router = useRouter();
   const { isAdmin } = useAuth();
   const categoryScrollRef = useRef<FlatList>(null);
+  const searchInputRef = useRef<TextInput>(null);
   
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
-  const [filteredOpportunities, setFilteredOpportunities] = useState<Opportunity[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<OpportunityCategory | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -60,9 +60,8 @@ export default function DiscoverScreen() {
     }, [])
   );
 
-  useEffect(() => {
-    filterOpportunities();
-  }, [opportunities, selectedCategory, searchQuery]);
+  // Note: Filtering is now handled by useMemo, so no debouncing needed
+  // The useMemo will automatically update when dependencies change
 
   const loadOpportunities = async () => {
     try {
@@ -139,7 +138,8 @@ export default function DiscoverScreen() {
     }
   };
 
-  const filterOpportunities = () => {
+  // Memoize filtered opportunities to prevent unnecessary re-renders
+  const filteredOpportunities = useMemo(() => {
     let filtered = [...opportunities];
 
     // Filter by category
@@ -159,27 +159,44 @@ export default function DiscoverScreen() {
       );
     }
 
-    setFilteredOpportunities(filtered);
-  };
+    return filtered;
+  }, [opportunities, selectedCategory, searchQuery]);
 
-  const handleOpportunityPress = (opportunity: Opportunity) => {
+  const handleOpportunityPress = useCallback((opportunity: Opportunity) => {
     router.push(`/opportunity/${opportunity.id}`);
-  };
+  }, [router]);
 
-  const renderHeader = () => (
+  const handleSearchChange = useCallback((text: string) => {
+    setSearchQuery(text);
+  }, []);
+
+  const handleClearSearch = useCallback(() => {
+    setSearchQuery('');
+    // Small delay to ensure state updates before refocusing
+    setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 50);
+  }, []);
+
+  const renderHeader = useCallback(() => (
     <View style={styles.headerContainer}>
       {/* Search Bar */}
       <View style={[styles.searchContainer, { backgroundColor: colors.background, borderColor: colors.border }]}>
         <Search size={20} color={colors.textSecondary} style={styles.searchIcon} />
         <TextInput
+          ref={searchInputRef}
           style={[styles.searchInput, { color: colors.text }]}
           placeholder="Search opportunities..."
           placeholderTextColor={colors.textSecondary}
           value={searchQuery}
-          onChangeText={setSearchQuery}
+          onChangeText={handleSearchChange}
+          autoCorrect={false}
+          autoCapitalize="none"
         />
         {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')}>
+          <TouchableOpacity 
+            onPress={handleClearSearch}
+          >
             <X size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         )}
@@ -218,7 +235,7 @@ export default function DiscoverScreen() {
         showsHorizontalScrollIndicator={false}
       />
     </View>
-  );
+  ), [colors, searchQuery, selectedCategory, handleSearchChange, handleClearSearch]);
 
   return (
     <>

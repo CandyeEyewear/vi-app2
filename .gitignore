@@ -23,6 +23,7 @@ web-build/
 *.p12
 *.keystore
 google-service-account.json
+firebase-service-account.json
 
 # ===================================
 # ⚙️ EAS & Expo Build Outputs

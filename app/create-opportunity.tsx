@@ -70,6 +70,23 @@ export default function CreateOpportunityScreen() {
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('17:00');
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
+  
+  // Helper function to convert HH:MM string to Date object
+  const timeStringToDate = (timeString: string): Date => {
+    const [hours, minutes] = timeString.split(':').map(Number);
+    const date = new Date();
+    date.setHours(hours || 9, minutes || 0, 0, 0);
+    return date;
+  };
+  
+  // Helper function to convert Date object to HH:MM string
+  const dateToTimeString = (date: Date): string => {
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
   const [spotsTotal, setSpotsTotal] = useState('');
   const [impactStatement, setImpactStatement] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -769,37 +786,84 @@ export default function CreateOpportunityScreen() {
           <View style={styles.timeRangeRow}>
             <View style={styles.timeRangeItem}>
               <Text style={[styles.timeRangeLabel, { color: colors.textSecondary }]}>Start Time</Text>
-              <View style={styles.iconInput}>
-                <Clock size={18} color={colors.textSecondary} />
-                <TextInput
-                  style={[styles.inputWithIcon, { color: colors.text }]}
-                  value={startTime}
-                  onChangeText={setStartTime}
-                  placeholder="09:00"
-                  placeholderTextColor={colors.textSecondary}
-                  keyboardType="numeric"
+              <TouchableOpacity
+                style={[styles.input, styles.selectButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+                onPress={() => setShowStartTimePicker(true)}
+              >
+                <Clock size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
+                <Text style={[styles.selectButtonText, { color: colors.text }]}>
+                  {startTime}
+                </Text>
+              </TouchableOpacity>
+              {showStartTimePicker && (
+                <DateTimePicker
+                  value={timeStringToDate(startTime)}
+                  mode="time"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(event, selectedTime) => {
+                    if (Platform.OS === 'android') {
+                      setShowStartTimePicker(false);
+                    }
+                    if (selectedTime) {
+                      setStartTime(dateToTimeString(selectedTime));
+                    }
+                    if (Platform.OS === 'ios' && event.type === 'dismissed') {
+                      setShowStartTimePicker(false);
+                    }
+                  }}
+                  is24Hour={true}
                 />
-              </View>
+              )}
+              {Platform.OS === 'ios' && showStartTimePicker && (
+                <TouchableOpacity
+                  style={[styles.pickerButton, { backgroundColor: colors.primary }]}
+                  onPress={() => setShowStartTimePicker(false)}
+                >
+                  <Text style={[styles.pickerButtonText, { color: '#FFFFFF' }]}>Done</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             <View style={styles.timeRangeItem}>
               <Text style={[styles.timeRangeLabel, { color: colors.textSecondary }]}>End Time</Text>
-              <View style={styles.iconInput}>
-                <Clock size={18} color={colors.textSecondary} />
-                <TextInput
-                  style={[styles.inputWithIcon, { color: colors.text }]}
-                  value={endTime}
-                  onChangeText={setEndTime}
-                  placeholder="17:00"
-                  placeholderTextColor={colors.textSecondary}
-                  keyboardType="numeric"
+              <TouchableOpacity
+                style={[styles.input, styles.selectButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+                onPress={() => setShowEndTimePicker(true)}
+              >
+                <Clock size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
+                <Text style={[styles.selectButtonText, { color: colors.text }]}>
+                  {endTime}
+                </Text>
+              </TouchableOpacity>
+              {showEndTimePicker && (
+                <DateTimePicker
+                  value={timeStringToDate(endTime)}
+                  mode="time"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(event, selectedTime) => {
+                    if (Platform.OS === 'android') {
+                      setShowEndTimePicker(false);
+                    }
+                    if (selectedTime) {
+                      setEndTime(dateToTimeString(selectedTime));
+                    }
+                    if (Platform.OS === 'ios' && event.type === 'dismissed') {
+                      setShowEndTimePicker(false);
+                    }
+                  }}
+                  is24Hour={true}
                 />
-              </View>
+              )}
+              {Platform.OS === 'ios' && showEndTimePicker && (
+                <TouchableOpacity
+                  style={[styles.pickerButton, { backgroundColor: colors.primary }]}
+                  onPress={() => setShowEndTimePicker(false)}
+                >
+                  <Text style={[styles.pickerButtonText, { color: '#FFFFFF' }]}>Done</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
-          <Text style={[styles.helperText, { color: colors.textSecondary }]}>
-            Format: HH:MM (24-hour format, e.g., 09:00, 17:30)
-          </Text>
         </View>
 
         {/* Total Spots */}
@@ -1122,6 +1186,17 @@ const styles = StyleSheet.create({
   },
   selectButtonText: {
     fontSize: 16,
+  },
+  pickerButton: {
+    marginTop: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  pickerButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   pickerContainer: {
     marginTop: 8,
