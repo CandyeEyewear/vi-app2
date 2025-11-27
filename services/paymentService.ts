@@ -9,7 +9,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { supabase } from './supabase';
 
 // API Base URL - Update this to your Vercel deployment URL
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://your-app.vercel.app';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://vibe.volunteersinc.org';
 
 // Types
 export type OrderType = 'donation' | 'event_registration' | 'membership' | 'other';
@@ -85,6 +85,98 @@ export interface SubscriptionResponse {
 }
 
 // ============================================
+// VALIDATION HELPERS
+// ============================================
+
+/**
+ * Validate payment parameters before making API call
+ */
+function validatePaymentParams(params: CreatePaymentParams): { valid: boolean; error?: string } {
+  if (!params.amount || params.amount <= 0) {
+    return { valid: false, error: 'Invalid payment amount. Amount must be greater than 0.' };
+  }
+
+  if (!params.orderId?.trim()) {
+    return { valid: false, error: 'Order ID is required' };
+  }
+
+  if (!params.customerEmail?.trim()) {
+    return { valid: false, error: 'Customer email is required' };
+  }
+
+  // Basic email validation
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(params.customerEmail.trim())) {
+    return { valid: false, error: 'Invalid email format' };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Validate subscription parameters before making API call
+ */
+function validateSubscriptionParams(params: CreateSubscriptionParams): { valid: boolean; error?: string } {
+  if (!params.amount || params.amount <= 0) {
+    return { valid: false, error: 'Invalid subscription amount. Amount must be greater than 0.' };
+  }
+
+  if (!params.userId?.trim()) {
+    return { valid: false, error: 'User ID is required' };
+  }
+
+  if (!params.customerEmail?.trim()) {
+    return { valid: false, error: 'Customer email is required' };
+  }
+
+  // Basic email validation
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(params.customerEmail.trim())) {
+    return { valid: false, error: 'Invalid email format' };
+  }
+
+  // Validate frequency
+  const validFrequencies: Frequency[] = ['weekly', 'monthly', 'quarterly', 'annually'];
+  if (!validFrequencies.includes(params.frequency)) {
+    return { valid: false, error: 'Invalid subscription frequency. Must be one of: weekly, monthly, quarterly, annually' };
+  }
+
+  return { valid: true };
+}
+
+// ============================================
+// NETWORK HELPERS
+// ============================================
+
+/**
+ * Fetch with timeout wrapper
+ * Prevents requests from hanging indefinitely
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number = 30000
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error('Payment request timed out. Please check your connection and try again.');
+    }
+    throw error;
+  }
+}
+
+// ============================================
 // ONE-TIME PAYMENTS
 // ============================================
 
@@ -93,20 +185,24 @@ export interface SubscriptionResponse {
  */
 export async function createPayment(params: CreatePaymentParams): Promise<PaymentResponse> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/ezee/create-token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    const response = await fetchWithTimeout(
+      `${API_BASE_URL}/api/ezee/create-token`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
       },
-      body: JSON.stringify(params),
-    });
+      30000 // 30 second timeout
+    );
 
     const data = await response.json();
 
     if (!response.ok) {
       return {
         success: false,
-        error: data.error || data.message || 'Failed to create payment',
+        error: data.error || data.message || `Failed to create payment (status: ${response.status})`,
       };
     }
 
@@ -121,7 +217,7 @@ export async function createPayment(params: CreatePaymentParams): Promise<Paymen
     console.error('Create payment error:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Network error',
+      error: error instanceof Error ? error.message : 'Network error. Please check your connection and try again.',
     };
   }
 }
@@ -164,24 +260,41 @@ export async function processPayment(params: CreatePaymentParams): Promise<{
   transactionId?: string;
   error?: string;
 }> {
-  // Create payment token
-  const paymentResult = await createPayment(params);
-
-  if (!paymentResult.success || !paymentResult.paymentUrl || !paymentResult.paymentData) {
+  // Validate inputs first
+  const validation = validatePaymentParams(params);
+  if (!validation.valid) {
     return {
       success: false,
-      error: paymentResult.error || 'Failed to create payment',
+      error: validation.error,
     };
   }
 
-  // Open payment page
-  const browserResult = await openPaymentPage(paymentResult.paymentUrl, paymentResult.paymentData);
+  try {
+    // Create payment token
+    const paymentResult = await createPayment(params);
 
-  return {
-    success: browserResult.success,
-    transactionId: paymentResult.transactionId,
-    error: browserResult.error,
-  };
+    if (!paymentResult.success || !paymentResult.paymentUrl || !paymentResult.paymentData) {
+      return {
+        success: false,
+        error: paymentResult.error || 'Failed to create payment',
+      };
+    }
+
+    // Open payment page
+    const browserResult = await openPaymentPage(paymentResult.paymentUrl, paymentResult.paymentData);
+
+    return {
+      success: browserResult.success,
+      transactionId: paymentResult.transactionId,
+      error: browserResult.error,
+    };
+  } catch (error) {
+    console.error('Process payment error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to process payment. Please try again.',
+    };
+  }
 }
 
 // ============================================
@@ -193,20 +306,24 @@ export async function processPayment(params: CreatePaymentParams): Promise<{
  */
 export async function createSubscription(params: CreateSubscriptionParams): Promise<SubscriptionResponse> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/ezee/create-subscription`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    const response = await fetchWithTimeout(
+      `${API_BASE_URL}/api/ezee/create-subscription`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
       },
-      body: JSON.stringify(params),
-    });
+      30000 // 30 second timeout
+    );
 
     const data = await response.json();
 
     if (!response.ok) {
       return {
         success: false,
-        error: data.error || data.message || 'Failed to create subscription',
+        error: data.error || data.message || `Failed to create subscription (status: ${response.status})`,
       };
     }
 
@@ -222,7 +339,7 @@ export async function createSubscription(params: CreateSubscriptionParams): Prom
     console.error('Create subscription error:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Network error',
+      error: error instanceof Error ? error.message : 'Network error. Please check your connection and try again.',
     };
   }
 }
@@ -235,24 +352,41 @@ export async function processSubscription(params: CreateSubscriptionParams): Pro
   subscriptionId?: string;
   error?: string;
 }> {
-  // Create subscription
-  const subscriptionResult = await createSubscription(params);
-
-  if (!subscriptionResult.success || !subscriptionResult.paymentUrl || !subscriptionResult.paymentData) {
+  // Validate inputs first
+  const validation = validateSubscriptionParams(params);
+  if (!validation.valid) {
     return {
       success: false,
-      error: subscriptionResult.error || 'Failed to create subscription',
+      error: validation.error,
     };
   }
 
-  // Open payment page for first payment
-  const browserResult = await openPaymentPage(subscriptionResult.paymentUrl, subscriptionResult.paymentData);
+  try {
+    // Create subscription
+    const subscriptionResult = await createSubscription(params);
 
-  return {
-    success: browserResult.success,
-    subscriptionId: subscriptionResult.subscriptionId,
-    error: browserResult.error,
-  };
+    if (!subscriptionResult.success || !subscriptionResult.paymentUrl || !subscriptionResult.paymentData) {
+      return {
+        success: false,
+        error: subscriptionResult.error || 'Failed to create subscription',
+      };
+    }
+
+    // Open payment page for first payment
+    const browserResult = await openPaymentPage(subscriptionResult.paymentUrl, subscriptionResult.paymentData);
+
+    return {
+      success: browserResult.success,
+      subscriptionId: subscriptionResult.subscriptionId,
+      error: browserResult.error,
+    };
+  } catch (error) {
+    console.error('Process subscription error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to process subscription. Please try again.',
+    };
+  }
 }
 
 /**
@@ -263,15 +397,23 @@ export async function getSubscriptionStatus(subscriptionId: string): Promise<{
   subscription?: PaymentSubscription;
   error?: string;
 }> {
+  if (!subscriptionId?.trim()) {
+    return {
+      success: false,
+      error: 'Subscription ID is required',
+    };
+  }
+
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${API_BASE_URL}/api/ezee/subscription?action=status&subscriptionId=${subscriptionId}`,
       {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
-      }
+      },
+      30000 // 30 second timeout
     );
 
     const data = await response.json();
@@ -279,7 +421,7 @@ export async function getSubscriptionStatus(subscriptionId: string): Promise<{
     if (!response.ok) {
       return {
         success: false,
-        error: data.error || 'Failed to get subscription status',
+        error: data.error || `Failed to get subscription status (status: ${response.status})`,
       };
     }
 
@@ -291,7 +433,7 @@ export async function getSubscriptionStatus(subscriptionId: string): Promise<{
     console.error('Get subscription status error:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Network error',
+      error: error instanceof Error ? error.message : 'Network error. Please check your connection and try again.',
     };
   }
 }
@@ -303,21 +445,39 @@ export async function cancelSubscription(
   subscriptionId: string,
   userId: string
 ): Promise<{ success: boolean; error?: string }> {
+  if (!subscriptionId?.trim()) {
+    return {
+      success: false,
+      error: 'Subscription ID is required',
+    };
+  }
+
+  if (!userId?.trim()) {
+    return {
+      success: false,
+      error: 'User ID is required',
+    };
+  }
+
   try {
-    const response = await fetch(`${API_BASE_URL}/api/ezee/subscription?action=cancel`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    const response = await fetchWithTimeout(
+      `${API_BASE_URL}/api/ezee/subscription?action=cancel`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ subscriptionId, userId }),
       },
-      body: JSON.stringify({ subscriptionId, userId }),
-    });
+      30000 // 30 second timeout
+    );
 
     const data = await response.json();
 
     if (!response.ok) {
       return {
         success: false,
-        error: data.error || 'Failed to cancel subscription',
+        error: data.error || `Failed to cancel subscription (status: ${response.status})`,
       };
     }
 
@@ -326,7 +486,7 @@ export async function cancelSubscription(
     console.error('Cancel subscription error:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Network error',
+      error: error instanceof Error ? error.message : 'Network error. Please check your connection and try again.',
     };
   }
 }

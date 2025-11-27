@@ -48,8 +48,17 @@ export default function ProfileScreen() {
           text: 'Logout',
           style: 'destructive',
           onPress: async () => {
-            await signOut();
-            router.replace('/login');
+            try {
+              await signOut();
+              router.replace('/login');
+            } catch (error) {
+              console.error('Logout error:', error);
+              Alert.alert(
+                'Logout Error',
+                'Failed to logout. Please try again.',
+                [{ text: 'OK' }]
+              );
+            }
           },
         },
       ]
