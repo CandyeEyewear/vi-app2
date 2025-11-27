@@ -488,10 +488,10 @@ const renderTabs = () => (
           styles.floatingButton, 
           { 
             backgroundColor: colors.primary,
-            // Desktop: 24px from bottom (no tab bar)
-            // Mobile web: 70px from bottom (smaller tab bar)
-            // Native mobile: 100px from bottom (larger tab bar)
-            bottom: isDesktop ? 24 : isMobileWeb ? 70 : 100,
+            // Desktop: 24px (no tab bar)
+            // Mobile web: 65px (smaller icons-only tab bar)
+            // Native mobile: 100px (full tab bar with labels)
+            bottom: isDesktop ? 24 : isMobileWeb ? 65 : 100,
             zIndex: 1001,
           }
         ]}

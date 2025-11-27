@@ -54,15 +54,16 @@ export default function TabsLayout() {
         tabBarActiveTintColor: colors.tint,
         tabBarInactiveTintColor: colors.tabIconDefault,
         headerShown: false,
+        tabBarShowLabel: !isMobileWeb, // Hide labels on mobile web, show on native
         tabBarStyle: {
           backgroundColor: colors.card,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          // Different heights for each platform
-          height: isDesktop ? 0 : isMobileWeb ? 56 : 70,
-          // Different padding for each platform
-          paddingBottom: isDesktop ? 0 : isMobileWeb ? 6 : 12,
-          paddingTop: isDesktop ? 0 : 6,
+          // Smaller height on mobile web (icons only)
+          height: isDesktop ? 0 : isMobileWeb ? 50 : 70,
+          // Less padding needed without text
+          paddingBottom: isDesktop ? 0 : isMobileWeb ? 8 : 12,
+          paddingTop: isDesktop ? 0 : isMobileWeb ? 8 : 6,
           // Hide tab bar on desktop (>= 992px)
           ...(isDesktop && {
             display: 'none',
@@ -85,6 +86,9 @@ export default function TabsLayout() {
         },
         tabBarIconStyle: {
           marginBottom: -4,
+          ...(isMobileWeb && {
+            marginTop: 4,
+          }),
         },
         // Add header for desktop with WebNavigation
         header: () => (isDesktop ? <WebNavigation /> : null),
@@ -95,7 +99,7 @@ export default function TabsLayout() {
         name="feed"
         options={{
           title: 'Feed',
-          tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => <Home color={color} size={isMobileWeb ? 26 : size} />,
         }}
       />
       <Tabs.Screen
@@ -104,7 +108,7 @@ export default function TabsLayout() {
           title: 'Messages',
           tabBarIcon: ({ color, size }) => (
             <View>
-              <MessageCircle color={color} size={size} />
+              <MessageCircle color={color} size={isMobileWeb ? 26 : size} />
               {totalUnreadCount > 0 && (
                 <View style={[styles.badge, { backgroundColor: colors.error }]}>
                   <Text style={styles.badgeText}>
@@ -120,14 +124,14 @@ export default function TabsLayout() {
         name="discover"
         options={{
           title: 'Discover',
-          tabBarIcon: ({ color, size }) => <Compass color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => <Compass color={color} size={isMobileWeb ? 26 : size} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color, size }) => <User color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => <User color={color} size={isMobileWeb ? 26 : size} />,
         }}
       />
     </Tabs>
