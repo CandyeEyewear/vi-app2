@@ -241,8 +241,8 @@ export function OpportunityCard({ opportunity, onPress, onShare }: OpportunityCa
 const styles = StyleSheet.create({
   card: {
     borderRadius: 16,
-    marginHorizontal: 16,
-    marginBottom: 16,
+    marginHorizontal: 8,
+    marginBottom: 12,
     overflow: 'hidden',
     borderWidth: 1,
     shadowColor: '#000',
@@ -250,14 +250,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
+    flex: 1,
   },
   image: {
     width: '100%',
-    height: 200,
+    height: 140,
     resizeMode: 'cover',
   },
   content: {
-    padding: 16,
+    padding: 12,
   },
   header: {
     flexDirection: 'row',
@@ -279,28 +280,28 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   categoryText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   title: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: '700',
-    marginBottom: 8,
-    lineHeight: 26,
+    marginBottom: 6,
+    lineHeight: 22,
   },
   orgContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   orgName: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
   },
   details: {
     flexDirection: 'row',
-    marginBottom: 12,
+    marginBottom: 8,
     gap: 16,
   },
   detailRow: {
@@ -310,19 +311,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   detailText: {
-    fontSize: 13,
+    fontSize: 12,
     flex: 1,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 12,
+    paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,0,0,0.05)',
   },
   date: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '600',
   },
   distanceBadge: {

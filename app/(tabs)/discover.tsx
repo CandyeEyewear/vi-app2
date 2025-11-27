@@ -57,7 +57,7 @@ const isLargeScreen = screenWidth > 420;
 
 const CATEGORIES: { value: OpportunityCategory | 'all' | 'nearMe'; label: string; icon?: React.ReactNode }[] = [
   { value: 'all', label: 'All' },
-  { value: 'nearMe', label: '📍 Near Me' },
+  { value: 'nearMe', label: 'Near Me' },
   { value: 'environment', label: 'Environment' },
   { value: 'education', label: 'Education' },
   { value: 'healthcare', label: 'Healthcare' },
@@ -1418,51 +1418,114 @@ export default function DiscoverScreen() {
         onSortByChange={setSortBy}
       />
 
-      {/* Phase 4: Quick Filters */}
-      <QuickFilters
-        onSelectFilter={handleSelectQuickFilter}
-        selectedFilter={selectedQuickFilter}
-        colors={colors}
-        trendingCount={opportunities.length > 0 ? Math.min(opportunities.length, 12) : 0}
-        fillingCount={opportunities.filter(o => {
-          const spots = o.spotsAvailable;
-          return spots > 0 && spots <= 5;
-        }).length}
-        savedCount={savedOpportunityIds.length}
-      />
-
-      {/* Category Filter */}
-      <FlatList
-        ref={categoryScrollRef}
+      {/* Consolidated Filters - Status + Categories */}
+      <ScrollView
         horizontal
-        data={CATEGORIES}
-        keyExtractor={(item) => item.value}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[
-              styles.categoryChip,
-              { backgroundColor: colors.background, borderColor: colors.border },
-              selectedCategory === item.value && {
-                backgroundColor: colors.tint,
-                borderColor: colors.tint,
-              },
-            ]}
-            onPress={() => handleSelectCategory(item.value)}
-          >
-            <Text
-              style={[
-                styles.categoryChipText,
-                { color: colors.textSecondary },
-                selectedCategory === item.value && styles.categoryChipTextActive,
-              ]}
-            >
-              {item.label}
-            </Text>
-          </TouchableOpacity>
-        )}
-        contentContainerStyle={styles.categoriesContainer}
         showsHorizontalScrollIndicator={false}
-      />
+        contentContainerStyle={styles.consolidatedFiltersContainer}
+      >
+        {/* All Categories */}
+        {CATEGORIES.map((item) => {
+          const isSelected = selectedCategory === item.value;
+          return (
+            <TouchableOpacity
+              key={item.value}
+              style={[
+                styles.unifiedFilterChip,
+                {
+                  backgroundColor: isSelected ? colors.primary : colors.card,
+                  borderColor: isSelected ? colors.primary : colors.border,
+                },
+              ]}
+              onPress={() => {
+                handleSelectCategory(item.value);
+                setSelectedQuickFilter(null);
+              }}
+            >
+              {item.value === 'nearMe' && (
+                <MapPin 
+                  size={14} 
+                  color={isSelected ? '#FFFFFF' : colors.text} 
+                  style={{ marginRight: 4 }}
+                />
+              )}
+              <Text
+                style={[
+                  styles.unifiedFilterChipText,
+                  { color: isSelected ? '#FFFFFF' : colors.text },
+                ]}
+              >
+                {item.value === 'nearMe' ? 'Near Me' : item.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+
+        {/* Status Filters */}
+        {QUICK_FILTERS.map((filter) => {
+          const Icon = filter.icon;
+          const isSelected = selectedQuickFilter === filter.id;
+          const counts = {
+            trending: opportunities.length > 0 ? Math.min(opportunities.length, 12) : 0,
+            filling: opportunities.filter(o => {
+              const spots = o.spotsAvailable;
+              return spots > 0 && spots <= 5;
+            }).length,
+            saved: savedOpportunityIds.length,
+          };
+          const count = counts[filter.id as keyof typeof counts];
+
+          return (
+            <TouchableOpacity
+              key={filter.id}
+              style={[
+                styles.unifiedFilterChip,
+                {
+                  backgroundColor: isSelected ? colors.primary : colors.card,
+                  borderColor: isSelected ? colors.primary : colors.border,
+                },
+              ]}
+              onPress={() => {
+                handleSelectQuickFilter(filter.id);
+                setSelectedCategory('all');
+              }}
+            >
+              <Icon
+                size={14}
+                color={isSelected ? '#FFFFFF' : colors.text}
+                style={{ marginRight: 4 }}
+              />
+              <Text
+                style={[
+                  styles.unifiedFilterChipText,
+                  { color: isSelected ? '#FFFFFF' : colors.text },
+                ]}
+              >
+                {filter.label}
+              </Text>
+              {count > 0 && (
+                <View
+                  style={[
+                    styles.unifiedFilterBadge,
+                    {
+                      backgroundColor: isSelected ? 'rgba(255,255,255,0.3)' : colors.primary,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.unifiedFilterBadgeText,
+                      { color: '#FFFFFF' },
+                    ]}
+                  >
+                    {count}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
     </View>
   ), [
     colors,
@@ -1488,6 +1551,7 @@ export default function DiscoverScreen() {
     handleSelectCategory,
     handleApplyFiltersOptimistic,
     opportunities,
+    savedOpportunityIds,
   ]);
 
   const renderEmptyComponent = useCallback(() => {
@@ -1625,15 +1689,17 @@ export default function DiscoverScreen() {
         {!isDesktop && (
           <View style={[
             styles.header,
-            { paddingTop: insets.top + 16, backgroundColor: colors.background, borderBottomColor: colors.border }
+            { paddingTop: insets.top + 12, backgroundColor: colors.background, borderBottomColor: colors.border }
           ]}>
             <View style={styles.headerContent}>
-              <View style={styles.headerTextContainer}>
-                <Text style={[styles.headerTitle, { color: colors.text }]}>Discover</Text>
-                <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-                  Find volunteer opportunities
-                </Text>
-              </View>
+              <Text style={[styles.headerTitle, { color: colors.text }]}>Discover</Text>
+              <TouchableOpacity 
+                onPress={() => setIsSearchExpanded(true)}
+                style={[styles.searchIconButton, { borderColor: colors.border }]}
+                accessibilityLabel="Search opportunities"
+              >
+                <Search size={24} color={colors.text} />
+              </TouchableOpacity>
             </View>
           </View>
         )}
@@ -1699,6 +1765,8 @@ export default function DiscoverScreen() {
             ref={listRef}
             data={filteredOpportunities}
             keyExtractor={(item) => item.id}
+            numColumns={width >= 600 ? 2 : 1}
+            key={width >= 600 ? '2-col' : '1-col'}
             renderItem={({ item }) => (
               <Swipeable
                 ref={(ref) => {
@@ -1715,7 +1783,11 @@ export default function DiscoverScreen() {
                 <OpportunityCard opportunity={item} onPress={handleOpportunityPress} />
               </Swipeable>
             )}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[
+              styles.listContent,
+              width >= 600 && styles.listContentGrid,
+            ]}
+            columnWrapperStyle={width >= 600 ? styles.columnWrapper : undefined}
             refreshControl={
               <RefreshControl
                 refreshing={loading && !loadingMore}
@@ -1768,29 +1840,24 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 8,
     borderBottomWidth: 1,
   },
   headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  headerTextContainer: {
-    flex: 1,
+    gap: 12,
   },
   headerTitle: {
     fontSize: isSmallScreen ? 20 : isLargeScreen ? 26 : 24,
     fontWeight: 'bold',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    marginTop: 4,
+    flex: 1,
   },
   searchIconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
@@ -1947,27 +2014,47 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  categoriesContainer: {
-    paddingRight: isSmallScreen ? 12 : 16,
-    paddingLeft: isSmallScreen ? 12 : 16,
+  consolidatedFiltersContainer: {
+    paddingHorizontal: isSmallScreen ? 12 : 16,
+    paddingVertical: 8,
+    gap: 8,
   },
-  categoryChip: {
-    paddingHorizontal: isSmallScreen ? 10 : 12,
-    paddingVertical: isSmallScreen ? 3 : 4,
+  unifiedFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 20,
-    marginRight: 8,
     borderWidth: 1,
+    marginRight: 8,
   },
-  categoryChipText: {
-    fontSize: isSmallScreen ? 12 : 14,
-    fontWeight: '600',
+  unifiedFilterChipText: {
+    fontSize: 13,
+    fontWeight: '500',
   },
-  categoryChipTextActive: {
-    color: '#FFFFFF',
+  unifiedFilterBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 4,
+    paddingHorizontal: 4,
+  },
+  unifiedFilterBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
   listContent: {
-    padding: 16,
+    padding: 8,
     flexGrow: 1,
+  },
+  listContentGrid: {
+    padding: 8,
+    flexGrow: 1,
+  },
+  columnWrapper: {
+    gap: 0,
   },
   emptyContainer: {
     flex: 1,
@@ -2041,35 +2128,6 @@ const styles = StyleSheet.create({
   },
   loadingMoreText: {
     fontSize: 13,
-  },
-  quickFiltersContainer: {
-    height: 44,
-    marginBottom: 12,
-  },
-  quickFiltersContent: {
-    gap: 8,
-  },
-  quickFilterPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 20,
-    borderWidth: 1,
-    minHeight: 44,
-  },
-  quickFilterPillText: {
-    fontWeight: '600',
-  },
-  countBadge: {
-    marginLeft: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-    minWidth: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  countBadgeText: {
-    fontWeight: 'bold',
   },
   tabBar: {
     borderBottomWidth: 1,
