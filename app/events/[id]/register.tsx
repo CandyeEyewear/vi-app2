@@ -32,7 +32,6 @@ import {
   Users,
   Info,
 } from 'lucide-react-native';
-import { Linking } from 'react-native';
 import { Colors } from '../../../constants/colors';
 import { Event } from '../../../types';
 import {
@@ -43,6 +42,8 @@ import {
   formatCurrency,
 } from '../../../services/eventsService';
 import { useAuth } from '../../../contexts/AuthContext';
+import WebContainer from '../../../components/WebContainer';
+import { processPayment } from '../../../services/paymentService';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
@@ -119,48 +120,63 @@ export default function EventRegisterScreen() {
         } else {
           Alert.alert('Error', response.error || 'Failed to register');
         }
-      } else {
-        // For paid events, open the payment link
-        if (event.paymentLink) {
-          // First, create a pending registration
-          const registrationResponse = await registerForEvent({
-            eventId: id,
-            userId: user.id,
-            ticketCount,
-          });
-
-          if (registrationResponse.success) {
-            // Open payment link
-            const canOpen = await Linking.canOpenURL(event.paymentLink);
-            if (canOpen) {
-              await Linking.openURL(event.paymentLink);
-              // Show success message
-              Alert.alert(
-                'Redirecting to Payment',
-                `You'll be redirected to complete payment for 1 ticket. Total: ${formatCurrency(totalAmount)}`,
-                [{ text: 'OK', onPress: () => router.back() }]
-              );
-            } else {
-              Alert.alert('Error', 'Invalid payment link. Please contact the event organizer.');
-            }
-          } else {
-            Alert.alert('Error', registrationResponse.error || 'Failed to register for event');
-          }
-        } else {
-          Alert.alert(
-            'Payment Link Missing',
-            'This event does not have a payment link configured. Please contact the event organizer.',
-            [{ text: 'OK' }]
-          );
-        }
+        setSubmitting(false);
+        return;
       }
+
+      // For paid events, process payment through eZeePayments
+      // First, create a pending registration
+      const registrationResponse = await registerForEvent({
+        eventId: id,
+        userId: user.id,
+        ticketCount,
+      });
+
+      if (!registrationResponse.success || !registrationResponse.data) {
+        Alert.alert('Error', registrationResponse.error || 'Failed to register for event');
+        setSubmitting(false);
+        return;
+      }
+
+      const registration = registrationResponse.data;
+
+      // Generate order ID for payment
+      const orderId = `EVT_${registration.id}_${Date.now()}`;
+
+      // Process payment
+      const paymentResult = await processPayment({
+        amount: totalAmount,
+        orderId,
+        orderType: 'event_registration',
+        referenceId: registration.id,
+        userId: user.id,
+        customerEmail: user.email || '',
+        customerName: user.fullName,
+        description: `Event registration: ${event.title} - ${ticketCount} ticket(s)`,
+      });
+
+      if (!paymentResult.success) {
+        Alert.alert(
+          'Payment Error',
+          paymentResult.error || 'Failed to process payment. Please try again.',
+          [{ text: 'OK' }]
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      Alert.alert(
+        'Payment Processing! 🎉',
+        `Your registration for "${event.title}" is being processed. You will receive a confirmation once payment is complete.`,
+        [{ text: 'Done', onPress: () => router.back() }]
+      );
     } catch (error) {
       console.error('Purchase error:', error);
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+      Alert.alert('Error', error instanceof Error ? error.message : 'Something went wrong. Please try again.');
     } finally {
       setSubmitting(false);
     }
-  }, [event, id, user, router]);
+  }, [event, id, user, router, totalAmount, ticketCount]);
 
   // Loading state
   if (loading || !event) {
@@ -200,11 +216,12 @@ export default function EventRegisterScreen() {
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
+        <WebContainer>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
+            showsVerticalScrollIndicator={false}
+          >
           {/* Event Info Card */}
           <View style={[styles.eventCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.eventTitle, { color: colors.text }]} numberOfLines={2}>
@@ -345,9 +362,8 @@ export default function EventRegisterScreen() {
             </View>
           )}
 
-          {/* Spacer */}
-          <View style={{ height: 100 }} />
-        </ScrollView>
+          </ScrollView>
+        </WebContainer>
       </KeyboardAvoidingView>
 
       {/* Bottom Button */}

@@ -48,6 +48,7 @@ import { CauseCategory } from '../../../types';
 import { createCause } from '../../../services/causesService';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../services/supabase';
+import WebContainer from '../../../components/WebContainer';
 import { decode } from 'base64-arraybuffer';
 import { sendNotificationToUser } from '../../../services/pushNotifications';
 
@@ -437,12 +438,13 @@ export default function CreateCauseScreen() {
       </View>
 
       <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
+        <WebContainer>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
           {/* Title */}
           <View style={styles.section}>
             <Text style={[styles.label, { color: colors.text }]}>
@@ -739,9 +741,8 @@ export default function CreateCauseScreen() {
             </View>
           </View>
 
-          {/* Spacer for bottom button */}
-          <View style={{ height: 100 }} />
-        </ScrollView>
+          </ScrollView>
+        </WebContainer>
       </KeyboardAvoidingView>
 
       {/* Submit Button */}

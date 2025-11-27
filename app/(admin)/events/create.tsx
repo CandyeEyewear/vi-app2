@@ -50,6 +50,7 @@ import { EventCategory } from '../../../types';
 import { createEvent } from '../../../services/eventsService';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../services/supabase';
+import WebContainer from '../../../components/WebContainer';
 import { decode } from 'base64-arraybuffer';
 import { sendNotificationToUser } from '../../../services/pushNotifications';
 
@@ -471,12 +472,13 @@ export default function CreateEventScreen() {
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
+        <WebContainer>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
           {/* Basic Info Section */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Basic Information</Text>
@@ -1019,9 +1021,8 @@ export default function CreateEventScreen() {
             </View>
           </View>
 
-          {/* Spacer */}
-          <View style={{ height: 100 }} />
-        </ScrollView>
+          </ScrollView>
+        </WebContainer>
       </KeyboardAvoidingView>
 
       {/* Submit Button */}

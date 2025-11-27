@@ -52,6 +52,7 @@ import { Colors } from '../../../../constants/colors';
 import { Event, EventCategory, EventStatus } from '../../../../types';
 import { getEventById, updateEvent, deleteEvent } from '../../../../services/eventsService';
 import { useAuth } from '../../../../contexts/AuthContext';
+import WebContainer from '../../../../components/WebContainer';
 import { supabase } from '../../../../services/supabase';
 import { decode } from 'base64-arraybuffer';
 
@@ -493,12 +494,13 @@ export default function EditEventScreen() {
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
+        <WebContainer>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
           {/* Status & Featured Section */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Status</Text>
@@ -1091,9 +1093,8 @@ export default function EditEventScreen() {
             </View>
           </View>
 
-          {/* Spacer */}
-          <View style={{ height: 100 }} />
-        </ScrollView>
+          </ScrollView>
+        </WebContainer>
       </KeyboardAvoidingView>
 
       {/* Save Button */}

@@ -26,6 +26,7 @@ import { File } from 'expo-file-system';
 import { supabase } from '../services/supabase';
 import CustomAlert from '../components/CustomAlert';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import WebContainer from '../components/WebContainer';
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -200,12 +201,13 @@ export default function EditProfileScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView 
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: (styles.scrollContent.paddingBottom || 32) + insets.bottom + 80 }
-        ]}
-      >
+      <WebContainer>
+        <ScrollView 
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: (styles.scrollContent.paddingBottom || 32) + insets.bottom + 80 }
+          ]}
+        >
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -412,7 +414,8 @@ export default function EditProfileScreen() {
             <Text style={styles.cancelButtonText}>Cancel</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+        </ScrollView>
+      </WebContainer>
 
       {/* Custom Alert */}
       <CustomAlert

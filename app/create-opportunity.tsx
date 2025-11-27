@@ -41,6 +41,7 @@ import { File } from 'expo-file-system';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import CustomAlert from '../components/CustomAlert';
 import { sendNotificationToUser } from '../services/pushNotifications';
+import WebContainer from '../components/WebContainer';
 
 const CATEGORIES = [
   { value: 'environment', label: 'Environment' },
@@ -696,14 +697,15 @@ export default function CreateOpportunityScreen() {
         </View>
       )}
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: styles.scrollContent.paddingBottom + insets.bottom + 80 },
-        ]}
-        keyboardShouldPersistTaps="handled"
-      >
+      <WebContainer>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: styles.scrollContent.paddingBottom + insets.bottom + 80 },
+          ]}
+          keyboardShouldPersistTaps="handled"
+        >
         {/* Title */}
         <View style={styles.field}>
           <Text style={[styles.label, { color: colors.text }]}>
@@ -1309,7 +1311,8 @@ export default function CreateOpportunityScreen() {
             </Text>
           )}
         </TouchableOpacity>
-      </ScrollView>
+        </ScrollView>
+      </WebContainer>
 
       {/* Custom Alert */}
       <CustomAlert

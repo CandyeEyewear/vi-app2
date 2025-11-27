@@ -44,6 +44,11 @@ import {
 } from '../../../services/causesService';
 import { useAuth } from '../../../contexts/AuthContext';
 import WebContainer from '../../../components/WebContainer';
+import {
+  processPayment,
+  processSubscription,
+  type Frequency as PaymentFrequency,
+} from '../../../services/paymentService';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
@@ -178,6 +183,17 @@ export default function DonateScreen() {
     return true;
   }, [finalAmount, cause, isAnonymous, donorName, donorEmail, isRecurring, user, router]);
 
+  // Map RecurringFrequency to PaymentFrequency
+  const mapFrequency = (freq: RecurringFrequency): PaymentFrequency => {
+    switch (freq) {
+      case 'weekly': return 'weekly';
+      case 'monthly': return 'monthly';
+      case 'quarterly': return 'quarterly';
+      case 'annually': return 'annually';
+      default: return 'monthly';
+    }
+  };
+
   // Handle donation submission
   const handleSubmit = useCallback(async () => {
     if (!validateForm() || !cause || !id) return;
@@ -185,53 +201,108 @@ export default function DonateScreen() {
     setSubmitting(true);
 
     try {
+      const donorEmailValue = isAnonymous ? undefined : donorEmail.trim();
+      const donorNameValue = isAnonymous ? undefined : donorName.trim();
+
       if (isRecurring && user) {
-        console.log('Creating recurring donation:', {
+        // Create recurring donation subscription
+        const donationResponse = await createDonation({
           causeId: id,
-          userId: user.id,
           amount: finalAmount,
-          frequency,
+          userId: user.id,
+          donorName: donorNameValue,
+          donorEmail: donorEmailValue,
           isAnonymous,
+          message: message.trim() || undefined,
         });
 
-        // TODO: Integrate eZeePayments subscription API
+        if (!donationResponse.success || !donationResponse.data) {
+          throw new Error('Failed to create donation record');
+        }
+
+        const donation = donationResponse.data;
+
+        // Process subscription payment
+        const subscriptionResult = await processSubscription({
+          amount: finalAmount,
+          frequency: mapFrequency(frequency),
+          subscriptionType: 'recurring_donation',
+          referenceId: donation.id,
+          userId: user.id,
+          customerEmail: donorEmailValue || user.email || '',
+          customerName: donorNameValue || user.fullName,
+          description: `Recurring donation to ${cause.title}`,
+        });
+
+        if (!subscriptionResult.success) {
+          Alert.alert(
+            'Payment Error',
+            subscriptionResult.error || 'Failed to process subscription. Please try again.',
+            [{ text: 'OK' }]
+          );
+          setSubmitting(false);
+          return;
+        }
+
         Alert.alert(
-          'Coming Soon',
-          'Recurring donations will be available soon. Please make a one-time donation for now.',
+          'Subscription Created! 💝',
+          `Your recurring donation of ${formatCurrency(finalAmount)} to "${cause.title}" has been set up successfully.`,
+          [{ text: 'Done', onPress: () => router.back() }]
+        );
+        return;
+      }
+
+      // One-time donation
+      // Create donation record first
+      const donationResponse = await createDonation({
+        causeId: id,
+        amount: finalAmount,
+        userId: user?.id,
+        donorName: donorNameValue,
+        donorEmail: donorEmailValue,
+        isAnonymous,
+        message: message.trim() || undefined,
+      });
+
+      if (!donationResponse.success || !donationResponse.data) {
+        throw new Error('Failed to create donation record');
+      }
+
+      const donation = donationResponse.data;
+
+      // Generate order ID for payment
+      const orderId = `DON_${donation.id}_${Date.now()}`;
+
+      // Process payment
+      const paymentResult = await processPayment({
+        amount: finalAmount,
+        orderId,
+        orderType: 'donation',
+        referenceId: donation.id,
+        userId: user?.id,
+        customerEmail: donorEmailValue || user?.email || '',
+        customerName: donorNameValue || user?.fullName,
+        description: `Donation to ${cause.title}`,
+      });
+
+      if (!paymentResult.success) {
+        Alert.alert(
+          'Payment Error',
+          paymentResult.error || 'Failed to process payment. Please try again.',
           [{ text: 'OK' }]
         );
         setSubmitting(false);
         return;
       }
 
-      // Create one-time donation record
-      const donationResponse = await createDonation({
-        causeId: id,
-        amount: finalAmount,
-        userId: user?.id,
-        donorName: isAnonymous ? undefined : donorName.trim(),
-        donorEmail: isAnonymous ? undefined : donorEmail.trim(),
-        isAnonymous,
-        message: message.trim() || undefined,
-      });
-
-      if (!donationResponse.success || !donationResponse.data) {
-        throw new Error('Failed to create donation');
-      }
-
-      const donation = donationResponse.data;
-
-      // TODO: Integrate eZeePayments
-      console.log('Donation created:', donation);
-
       Alert.alert(
         'Thank You! 💝',
-        `Your donation of ${formatCurrency(finalAmount)} to "${cause.title}" is being processed.\n\nPayment integration coming soon!`,
+        `Your donation of ${formatCurrency(finalAmount)} to "${cause.title}" is being processed.`,
         [{ text: 'Done', onPress: () => router.back() }]
       );
     } catch (error) {
       console.error('Donation error:', error);
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+      Alert.alert('Error', error instanceof Error ? error.message : 'Something went wrong. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -273,14 +344,14 @@ export default function DonateScreen() {
 
       <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <WebContainer>
-          <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            {/* Cause Info */}
-            <View style={[styles.causeCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <ScrollView
+          style={styles.scrollView}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Cause Info */}
+          <View style={[styles.causeCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Heart size={24} color="#38B6FF" />
             <View style={styles.causeInfo}>
               <Text style={[styles.causeName, { color: colors.text }]} numberOfLines={2}>
@@ -510,8 +581,7 @@ export default function DonateScreen() {
             </Text>
           </View>
 
-          <View style={{ height: 100 }} />
-          </ScrollView>
+        </ScrollView>
         </WebContainer>
       </KeyboardAvoidingView>
 

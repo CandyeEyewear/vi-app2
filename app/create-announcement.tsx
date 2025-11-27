@@ -34,6 +34,7 @@ import * as FileSystem from 'expo-file-system';
 import { File } from 'expo-file-system';
 import CustomAlert from '../components/CustomAlert';
 import { sendNotificationToUser } from '../services/pushNotifications';
+import WebContainer from '../components/WebContainer';
 
 export default function CreateAnnouncementScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -401,14 +402,15 @@ export default function CreateAnnouncementScreen() {
       </View>
 
       {/* Form */}
-      <ScrollView 
-        style={styles.scrollView} 
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: styles.scrollContent.paddingBottom + insets.bottom + 100 }
-        ]}
-        keyboardShouldPersistTaps="handled"
-      >
+      <WebContainer>
+        <ScrollView 
+          style={styles.scrollView} 
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: styles.scrollContent.paddingBottom + insets.bottom + 100 }
+          ]}
+          keyboardShouldPersistTaps="handled"
+        >
         {/* Info Banner */}
         <View style={[styles.infoBanner, { backgroundColor: colors.primary + '10', borderColor: colors.primary }]}>
           <Megaphone size={20} color={colors.primary} />
@@ -531,7 +533,8 @@ export default function CreateAnnouncementScreen() {
             {loading ? 'Posting...' : 'Post Announcement'}
           </Text>
         </TouchableOpacity>
-      </ScrollView>
+        </ScrollView>
+      </WebContainer>
 
       {/* Custom Alert */}
       <CustomAlert

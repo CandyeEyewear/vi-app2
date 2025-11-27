@@ -39,11 +39,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import {
   MEMBERSHIP_PLANS,
   formatCurrency,
-  createMembershipSubscription,
-  isConfigured,
-  generateOrderId,
 } from '../../services/ezeepayService';
 import { supabase } from '../../services/supabase';
+import { processSubscription, type Frequency } from '../../services/paymentService';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
@@ -93,111 +91,59 @@ export default function SubscribeScreen() {
     setProcessing(true);
 
     try {
-      // Check if payment system is configured
-      if (!isConfigured()) {
-        // Demo mode - simulate subscription
+      // Map plan to frequency
+      const frequency: Frequency = selectedPlan === 'monthly' ? 'monthly' : 'annually';
+
+      // Calculate expiration date
+      const expiresAt = new Date();
+      if (selectedPlan === 'monthly') {
+        expiresAt.setMonth(expiresAt.getMonth() + 1);
+      } else {
+        expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+      }
+
+      // Process subscription payment through eZeePayments
+      const subscriptionResult = await processSubscription({
+        amount: plan.price,
+        frequency,
+        subscriptionType: 'membership',
+        userId: user.id,
+        customerEmail: user.email || '',
+        customerName: user.fullName || 'VIbe Member',
+        description: `Premium Membership - ${selectedPlan === 'monthly' ? 'Monthly' : 'Yearly'} Plan`,
+        endDate: expiresAt.toISOString(),
+      });
+
+      if (!subscriptionResult.success) {
         Alert.alert(
-          'Demo Mode',
-          'Payment system is not configured yet. In production, you would be redirected to eZeePayments.\n\nWould you like to simulate a successful subscription for testing?',
-          [
-            { text: 'Cancel', style: 'cancel', onPress: () => setProcessing(false) },
-            {
-              text: 'Simulate Success',
-              onPress: async () => {
-                // Update user membership in database
-                const expiresAt = new Date();
-                if (selectedPlan === 'monthly') {
-                  expiresAt.setMonth(expiresAt.getMonth() + 1);
-                } else {
-                  expiresAt.setFullYear(expiresAt.getFullYear() + 1);
-                }
-
-                const { error } = await supabase
-                  .from('users')
-                  .update({
-                    membership_tier: 'premium',
-                    membership_status: 'active',
-                    subscription_start_date: new Date().toISOString(),
-                    membership_expires_at: expiresAt.toISOString(),
-                    revenuecat_user_id: `demo_${generateOrderId('SUB')}`, // Store as subscription ID
-                  })
-                  .eq('id', user.id);
-
-                if (error) {
-                  console.error('Error updating membership:', error);
-                  throw error;
-                }
-
-                console.log('✅ Database updated with premium membership');
-
-                // Refresh user data to update context
-                if (refreshUser) {
-                  console.log('🔄 Refreshing user context...');
-                  await refreshUser();
-                  console.log('✅ User context refreshed');
-                } else {
-                  console.warn('⚠️ refreshUser function not available');
-                }
-
-                // Small delay to ensure state updates propagate
-                await new Promise(resolve => setTimeout(resolve, 100));
-
-                Alert.alert(
-                  'Welcome to Premium! 🎉',
-                  'Your membership has been activated. Enjoy your premium benefits!',
-                  [{ text: 'OK', onPress: () => router.replace('/membership') }]
-                );
-              },
-            },
-          ]
+          'Payment Error',
+          subscriptionResult.error || 'Failed to process subscription. Please try again.',
+          [{ text: 'OK' }]
         );
+        setProcessing(false);
         return;
       }
 
-      // Create subscription with eZeePayments
-      const response = await createMembershipSubscription({
-        userId: user.id,
-        plan: selectedPlan,
-        customerName: user.fullName || 'VIbe Member',
-        customerEmail: user.email,
-      });
-
-      if (!response.success || !response.subscriptionId) {
-        throw new Error(response.error || 'Failed to create subscription');
+      // Store subscription ID and update membership status
+      // The status will be updated by webhook when payment is confirmed
+      if (subscriptionResult.subscriptionId) {
+        await supabase
+          .from('users')
+          .update({
+            revenuecat_user_id: subscriptionResult.subscriptionId,
+            membership_status: 'pending', // Will be updated by webhook when payment completes
+          })
+          .eq('id', user.id);
       }
 
-      // Store subscription ID pending payment
-      await supabase
-        .from('users')
-        .update({
-          revenuecat_user_id: response.subscriptionId,
-          membership_status: 'pending', // Will be updated by webhook
-        })
-        .eq('id', user.id);
-
-      // In a real implementation, you would:
-      // 1. Get a payment URL from eZeePayments
-      // 2. Open WebView or redirect to payment page
-      // 3. Handle callback/webhook to update status
-      
-      // For now, show info message
       Alert.alert(
-        'Payment Required',
-        `Your subscription has been created. You will be redirected to complete payment of ${formatCurrency(plan.price)}.`,
-        [
-          {
-            text: 'Continue to Payment',
-            onPress: () => {
-              // Would open payment URL here
-              // Linking.openURL(response.paymentUrl);
-              Alert.alert('Note', 'Payment page integration pending credentials.');
-            },
-          },
-        ]
+        'Subscription Processing! 🎉',
+        `Your premium membership subscription is being processed. You will receive a confirmation once payment is complete.`,
+        [{ text: 'Done', onPress: () => router.replace('/membership') }]
       );
     } catch (error) {
       console.error('Subscription error:', error);
-      Alert.alert('Error', 'Failed to process subscription. Please try again.');
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to process subscription. Please try again.');
     } finally {
       setProcessing(false);
     }

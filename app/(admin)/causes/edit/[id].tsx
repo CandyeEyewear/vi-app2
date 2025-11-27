@@ -48,6 +48,7 @@ import { CauseCategory, CauseStatus, Cause } from '../../../../types';
 import { supabase } from '../../../../services/supabase';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { decode } from 'base64-arraybuffer';
+import WebContainer from '../../../../components/WebContainer';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -389,12 +390,13 @@ export default function EditCauseScreen() {
       </View>
 
       <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
+        <WebContainer>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
           {/* Status */}
           <View style={styles.section}>
             <Text style={[styles.label, { color: colors.text }]}>Status</Text>
@@ -712,8 +714,8 @@ export default function EditCauseScreen() {
             </View>
           </View>
 
-          <View style={{ height: 100 }} />
-        </ScrollView>
+          </ScrollView>
+        </WebContainer>
       </KeyboardAvoidingView>
 
       {/* Submit Button */}
