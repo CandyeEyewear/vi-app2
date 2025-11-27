@@ -45,7 +45,20 @@ export default function FeedScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const isDesktop = Platform.OS === 'web' && width >= 992;
+  // More reliable desktop detection for web
+  const [isDesktop, setIsDesktop] = React.useState(Platform.OS === 'web' && width >= 992);
+  
+  React.useEffect(() => {
+    if (Platform.OS === 'web') {
+      const checkDesktop = () => {
+        const windowWidth = typeof window !== 'undefined' ? window.innerWidth : width;
+        setIsDesktop(windowWidth >= 992);
+      };
+      checkDesktop();
+      window.addEventListener('resize', checkDesktop);
+      return () => window.removeEventListener('resize', checkDesktop);
+    }
+  }, [width]);
   const { user } = useAuth();
   const { posts, loading, createPost, refreshFeed } = useFeed();
   
@@ -461,15 +474,14 @@ const renderTabs = () => (
           )
         }
       />
-</WebContainer>
-
+      
       {/* Floating Add Button */}
       <TouchableOpacity
         style={[
           styles.floatingButton, 
           { 
             backgroundColor: colors.primary,
-            right: isDesktop ? (width - 680) / 2 + 24 : 24,
+            bottom: isDesktop ? 24 : 100,
           }
         ]}
         onPress={() => setShowCreateModal(true)}
@@ -477,6 +489,7 @@ const renderTabs = () => (
       >
         <Plus size={28} color="#FFFFFF" strokeWidth={2.5} />
       </TouchableOpacity>
+</WebContainer>
 
       {/* Create Post Modal */}
       <Modal
@@ -650,7 +663,6 @@ headerRight: {
   },
   floatingButton: {
     position: 'absolute',
-    bottom: 24,
     right: 24,
     width: 56,
     height: 56,

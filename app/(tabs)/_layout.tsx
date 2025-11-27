@@ -26,7 +26,26 @@ export default function TabsLayout() {
 
   // Show bottom tabs only on mobile/tablet (< 992px)
   // Show WebNavigation on desktop (>= 992px)
-  const isDesktop = isWebPlatform && width >= 992;
+  // Use window dimensions directly for more reliable detection
+  const [windowWidth, setWindowWidth] = React.useState(width);
+  
+  React.useEffect(() => {
+    const updateWidth = () => {
+      if (isWebPlatform) {
+        setWindowWidth(window.innerWidth || width);
+      } else {
+        setWindowWidth(width);
+      }
+    };
+    
+    if (isWebPlatform) {
+      updateWidth();
+      window.addEventListener('resize', updateWidth);
+      return () => window.removeEventListener('resize', updateWidth);
+    }
+  }, [width, isWebPlatform]);
+  
+  const isDesktop = isWebPlatform && windowWidth >= 992;
 
   return (
     <Tabs
@@ -38,8 +57,8 @@ export default function TabsLayout() {
           backgroundColor: colors.card,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          height: 60 + (isWebPlatform ? 0 : insets.bottom),
-          paddingBottom: isWebPlatform ? 8 : Math.max(insets.bottom, 8),
+          height: isWebPlatform ? 80 : 85,
+          paddingBottom: isWebPlatform ? 16 : 20,
           paddingTop: 8,
           // Hide tab bar on desktop (>= 992px)
           ...(isDesktop && {
@@ -63,7 +82,7 @@ export default function TabsLayout() {
         // Add header for desktop with WebNavigation
         header: () => (isDesktop ? <WebNavigation /> : null),
       }}
-      sceneContainerStyle={isDesktop ? { paddingTop: 64 } : undefined}
+      sceneContainerStyle={isDesktop ? { paddingTop: 64 } : undefined} as any
     >
       <Tabs.Screen
         name="feed"
