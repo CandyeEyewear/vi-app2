@@ -1,6 +1,7 @@
 /**
  * Donate Screen
  * File: app/causes/[id]/donate.tsx
+ * FIXED: Web-compatible alerts
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -64,6 +65,33 @@ const FREQUENCY_OPTIONS: { value: RecurringFrequency; label: string; description
   { value: 'annually', label: 'Annually', description: 'Every year' },
 ];
 
+// ============================================
+// WEB-COMPATIBLE ALERT HELPERS
+// ============================================
+const showAlert = (title: string, message: string, onOk?: () => void) => {
+  if (Platform.OS === 'web') {
+    window.alert(`${title}\n\n${message}`);
+    if (onOk) onOk();
+  } else {
+    Alert.alert(title, message, [{ text: 'OK', onPress: onOk }]);
+  }
+};
+
+const showConfirm = (title: string, message: string, onConfirm: () => void, onCancel?: () => void) => {
+  if (Platform.OS === 'web') {
+    if (window.confirm(`${title}\n\n${message}`)) {
+      onConfirm();
+    } else if (onCancel) {
+      onCancel();
+    }
+  } else {
+    Alert.alert(title, message, [
+      { text: 'Cancel', style: 'cancel', onPress: onCancel },
+      { text: 'OK', onPress: onConfirm },
+    ]);
+  }
+};
+
 export default function DonateScreen() {
   const { id, recurring: recurringParam } = useLocalSearchParams<{ id: string; recurring?: string }>();
   const router = useRouter();
@@ -108,7 +136,7 @@ export default function DonateScreen() {
             setDonorEmail(user.email || '');
           }
         } else {
-          Alert.alert('Error', 'Failed to load cause');
+          showAlert('Error', 'Failed to load cause');
           router.back();
         }
       } catch (error) {
@@ -140,12 +168,12 @@ export default function DonateScreen() {
   // Validate form
   const validateForm = useCallback((): boolean => {
     if (finalAmount <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a donation amount');
+      showAlert('Invalid Amount', 'Please enter a donation amount');
       return false;
     }
 
     if (cause?.minimumDonation && finalAmount < cause.minimumDonation) {
-      Alert.alert(
+      showAlert(
         'Minimum Donation',
         `The minimum donation for this cause is ${formatCurrency(cause.minimumDonation)}`
       );
@@ -154,28 +182,25 @@ export default function DonateScreen() {
 
     if (!isAnonymous) {
       if (!donorName.trim()) {
-        Alert.alert('Name Required', 'Please enter your name or donate anonymously');
+        showAlert('Name Required', 'Please enter your name or donate anonymously');
         return false;
       }
       if (!donorEmail.trim()) {
-        Alert.alert('Email Required', 'Please enter your email for the receipt');
+        showAlert('Email Required', 'Please enter your email for the receipt');
         return false;
       }
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(donorEmail.trim())) {
-        Alert.alert('Invalid Email', 'Please enter a valid email address');
+        showAlert('Invalid Email', 'Please enter a valid email address');
         return false;
       }
     }
 
     if (isRecurring && !user) {
-      Alert.alert(
+      showConfirm(
         'Sign In Required',
         'You need to be signed in to set up recurring donations',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Sign In', onPress: () => router.push('/login') },
-        ]
+        () => router.push('/login')
       );
       return false;
     }
@@ -196,6 +221,12 @@ export default function DonateScreen() {
 
   // Handle donation submission
   const handleSubmit = useCallback(async () => {
+    console.log('=== DONATE BUTTON CLICKED ===');
+    console.log('Cause:', cause?.title);
+    console.log('User:', user?.email);
+    console.log('Amount:', finalAmount);
+    console.log('Is Recurring:', isRecurring);
+
     if (!validateForm() || !cause || !id) return;
 
     setSubmitting(true);
@@ -205,6 +236,7 @@ export default function DonateScreen() {
       const donorNameValue = isAnonymous ? undefined : donorName.trim();
 
       if (isRecurring && user) {
+        console.log('Processing recurring donation...');
         // Create recurring donation subscription
         const donationResponse = await createDonation({
           causeId: id,
@@ -221,8 +253,10 @@ export default function DonateScreen() {
         }
 
         const donation = donationResponse.data;
+        console.log('Donation record created:', donation.id);
 
         // Process subscription payment
+        console.log('Calling processSubscription...');
         const subscriptionResult = await processSubscription({
           amount: finalAmount,
           frequency: mapFrequency(frequency),
@@ -234,25 +268,27 @@ export default function DonateScreen() {
           description: `Recurring donation to ${cause.title}`,
         });
 
+        console.log('Subscription result:', subscriptionResult);
+
         if (!subscriptionResult.success) {
-          Alert.alert(
+          showAlert(
             'Payment Error',
-            subscriptionResult.error || 'Failed to process subscription. Please try again.',
-            [{ text: 'OK' }]
+            subscriptionResult.error || 'Failed to process subscription. Please try again.'
           );
           setSubmitting(false);
           return;
         }
 
-        Alert.alert(
+        showAlert(
           'Subscription Created! 💝',
           `Your recurring donation of ${formatCurrency(finalAmount)} to "${cause.title}" has been set up successfully.`,
-          [{ text: 'Done', onPress: () => router.back() }]
+          () => router.back()
         );
         return;
       }
 
       // One-time donation
+      console.log('Processing one-time donation...');
       // Create donation record first
       const donationResponse = await createDonation({
         causeId: id,
@@ -269,11 +305,13 @@ export default function DonateScreen() {
       }
 
       const donation = donationResponse.data;
+      console.log('Donation record created:', donation.id);
 
       // Generate order ID for payment
       const orderId = `DON_${donation.id}_${Date.now()}`;
 
       // Process payment
+      console.log('Calling processPayment...');
       const paymentResult = await processPayment({
         amount: finalAmount,
         orderId,
@@ -285,24 +323,25 @@ export default function DonateScreen() {
         description: `Donation to ${cause.title}`,
       });
 
+      console.log('Payment result:', paymentResult);
+
       if (!paymentResult.success) {
-        Alert.alert(
+        showAlert(
           'Payment Error',
-          paymentResult.error || 'Failed to process payment. Please try again.',
-          [{ text: 'OK' }]
+          paymentResult.error || 'Failed to process payment. Please try again.'
         );
         setSubmitting(false);
         return;
       }
 
-      Alert.alert(
+      showAlert(
         'Thank You! 💝',
         `Your donation of ${formatCurrency(finalAmount)} to "${cause.title}" is being processed.`,
-        [{ text: 'Done', onPress: () => router.back() }]
+        () => router.back()
       );
     } catch (error) {
       console.error('Donation error:', error);
-      Alert.alert('Error', error instanceof Error ? error.message : 'Something went wrong. Please try again.');
+      showAlert('Error', error instanceof Error ? error.message : 'Something went wrong. Please try again.');
     } finally {
       setSubmitting(false);
     }

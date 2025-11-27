@@ -2,6 +2,7 @@
  * Event Registration Screen
  * For paid event ticket purchase
  * File: app/events/[id]/register.tsx
+ * FIXED: Web-compatible alerts
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -48,6 +49,33 @@ import { processPayment } from '../../../services/paymentService';
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
 
+// ============================================
+// WEB-COMPATIBLE ALERT HELPERS
+// ============================================
+const showAlert = (title: string, message: string, onOk?: () => void) => {
+  if (Platform.OS === 'web') {
+    window.alert(`${title}\n\n${message}`);
+    if (onOk) onOk();
+  } else {
+    Alert.alert(title, message, [{ text: 'OK', onPress: onOk }]);
+  }
+};
+
+const showConfirm = (title: string, message: string, onConfirm: () => void, onCancel?: () => void) => {
+  if (Platform.OS === 'web') {
+    if (window.confirm(`${title}\n\n${message}`)) {
+      onConfirm();
+    } else if (onCancel) {
+      onCancel();
+    }
+  } else {
+    Alert.alert(title, message, [
+      { text: 'Cancel', style: 'cancel', onPress: onCancel },
+      { text: 'OK', onPress: onConfirm },
+    ]);
+  }
+};
+
 export default function EventRegisterScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -78,7 +106,7 @@ export default function EventRegisterScreen() {
         if (response.success && response.data) {
           setEvent(response.data);
         } else {
-          Alert.alert('Error', 'Failed to load event');
+          showAlert('Error', 'Failed to load event');
           router.back();
         }
       } catch (error) {
@@ -95,16 +123,34 @@ export default function EventRegisterScreen() {
 
   // Handle purchase
   const handlePurchase = useCallback(async () => {
-    if (!event || !id || !user) {
-      Alert.alert('Error', 'Please sign in to purchase tickets');
+    console.log('=== PAY BUTTON CLICKED ===');
+    console.log('Event:', event?.title);
+    console.log('User:', user?.email);
+    console.log('Event ID:', id);
+
+    if (!event || !id) {
+      console.log('ERROR: No event or id');
+      showAlert('Error', 'Event not loaded properly');
       return;
     }
 
+    if (!user) {
+      console.log('ERROR: No user - not logged in');
+      showConfirm(
+        'Sign In Required',
+        'Please sign in to purchase tickets',
+        () => router.push('/login')
+      );
+      return;
+    }
+
+    console.log('Starting payment process...');
     setSubmitting(true);
 
     try {
       // For free events, register directly
       if (event.isFree) {
+        console.log('Free event - registering directly');
         const response = await registerForEvent({
           eventId: id,
           userId: user.id,
@@ -112,13 +158,9 @@ export default function EventRegisterScreen() {
         });
 
         if (response.success) {
-          Alert.alert(
-            'Registered! 🎉',
-            `You're now registered for ${event.title}`,
-            [{ text: 'Done', onPress: () => router.back() }]
-          );
+          showAlert('Registered! 🎉', `You're now registered for ${event.title}`, () => router.back());
         } else {
-          Alert.alert('Error', response.error || 'Failed to register');
+          showAlert('Error', response.error || 'Failed to register');
         }
         setSubmitting(false);
         return;
@@ -126,24 +168,29 @@ export default function EventRegisterScreen() {
 
       // For paid events, process payment through eZeePayments
       // First, create a pending registration
+      console.log('Paid event - creating registration...');
       const registrationResponse = await registerForEvent({
         eventId: id,
         userId: user.id,
         ticketCount,
       });
 
+      console.log('Registration response:', registrationResponse);
+
       if (!registrationResponse.success || !registrationResponse.data) {
-        Alert.alert('Error', registrationResponse.error || 'Failed to register for event');
+        showAlert('Error', registrationResponse.error || 'Failed to register for event');
         setSubmitting(false);
         return;
       }
 
       const registration = registrationResponse.data;
+      console.log('Registration created:', registration.id);
 
       // Generate order ID for payment
       const orderId = `EVT_${registration.id}_${Date.now()}`;
 
       // Process payment
+      console.log('Calling processPayment...');
       const paymentResult = await processPayment({
         amount: totalAmount,
         orderId,
@@ -155,24 +202,22 @@ export default function EventRegisterScreen() {
         description: `Event registration: ${event.title} - ${ticketCount} ticket(s)`,
       });
 
+      console.log('Payment result:', paymentResult);
+
       if (!paymentResult.success) {
-        Alert.alert(
-          'Payment Error',
-          paymentResult.error || 'Failed to process payment. Please try again.',
-          [{ text: 'OK' }]
-        );
+        showAlert('Payment Error', paymentResult.error || 'Failed to process payment. Please try again.');
         setSubmitting(false);
         return;
       }
 
-      Alert.alert(
+      showAlert(
         'Payment Processing! 🎉',
         `Your registration for "${event.title}" is being processed. You will receive a confirmation once payment is complete.`,
-        [{ text: 'Done', onPress: () => router.back() }]
+        () => router.back()
       );
     } catch (error) {
       console.error('Purchase error:', error);
-      Alert.alert('Error', error instanceof Error ? error.message : 'Something went wrong. Please try again.');
+      showAlert('Error', error instanceof Error ? error.message : 'Something went wrong. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -282,29 +327,25 @@ export default function EventRegisterScreen() {
                   </Text>
                 </View>
               </View>
-
               <View style={styles.ticketCountDisplay}>
-                <Text style={[styles.ticketCountText, { color: colors.text }]}>
-                  1
-                </Text>
+                <Text style={styles.ticketCountText}>1</Text>
               </View>
             </View>
 
-            {/* Info message about multiple tickets */}
             {!event.isFree && (
               <View style={[styles.infoNote, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Info size={16} color={colors.textSecondary} />
                 <Text style={[styles.infoNoteText, { color: colors.textSecondary }]}>
                   Only 1 ticket per purchase. Need more tickets? Complete this purchase and register again.
                 </Text>
               </View>
             )}
 
-            {/* Spots remaining warning */}
-            {spotsLeft <= 10 && (
+            {spotsLeft < 10 && spotsLeft > 0 && (
               <View style={styles.spotsWarning}>
                 <Users size={16} color="#FF9800" />
                 <Text style={styles.spotsWarningText}>
-                  Only {spotsLeft} {spotsLeft === 1 ? 'spot' : 'spots'} left!
+                  Only {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} left!
                 </Text>
               </View>
             )}
@@ -312,9 +353,7 @@ export default function EventRegisterScreen() {
 
           {/* Order Summary */}
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              {event.isFree ? 'Registration Summary' : 'Order Summary'}
-            </Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Order Summary</Text>
 
             <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.summaryRow}>
@@ -596,4 +635,3 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
-

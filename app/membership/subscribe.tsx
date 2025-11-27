@@ -2,6 +2,7 @@
  * Subscribe Screen
  * Payment flow for premium membership subscription
  * File: app/membership/subscribe.tsx
+ * FIXED: Web-compatible alerts
  */
 
 import React, { useState, useCallback } from 'react';
@@ -16,6 +17,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Linking,
+  Platform,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -59,6 +61,33 @@ const BENEFIT_ICONS: Record<string, any> = {
   'All yearly benefits': Star,
 };
 
+// ============================================
+// WEB-COMPATIBLE ALERT HELPERS
+// ============================================
+const showAlert = (title: string, message: string, onOk?: () => void) => {
+  if (Platform.OS === 'web') {
+    window.alert(`${title}\n\n${message}`);
+    if (onOk) onOk();
+  } else {
+    Alert.alert(title, message, [{ text: 'OK', onPress: onOk }]);
+  }
+};
+
+const showConfirm = (title: string, message: string, onConfirm: () => void, onCancel?: () => void) => {
+  if (Platform.OS === 'web') {
+    if (window.confirm(`${title}\n\n${message}`)) {
+      onConfirm();
+    } else if (onCancel) {
+      onCancel();
+    }
+  } else {
+    Alert.alert(title, message, [
+      { text: 'Cancel', style: 'cancel', onPress: onCancel },
+      { text: 'OK', onPress: onConfirm },
+    ]);
+  }
+};
+
 export default function SubscribeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -75,16 +104,22 @@ export default function SubscribeScreen() {
 
   // Handle subscription
   const handleSubscribe = useCallback(async () => {
+    console.log('=== SUBSCRIBE BUTTON CLICKED ===');
+    console.log('User:', user?.email);
+    console.log('Plan:', selectedPlan);
+    console.log('Agreed to terms:', agreedToTerms);
+
     if (!user) {
-      Alert.alert('Sign In Required', 'Please sign in to subscribe.', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign In', onPress: () => router.push('/login') },
-      ]);
+      showConfirm(
+        'Sign In Required',
+        'Please sign in to subscribe.',
+        () => router.push('/login')
+      );
       return;
     }
 
     if (!agreedToTerms) {
-      Alert.alert('Terms Required', 'Please agree to the terms and conditions.');
+      showAlert('Terms Required', 'Please agree to the terms and conditions.');
       return;
     }
 
@@ -102,6 +137,7 @@ export default function SubscribeScreen() {
         expiresAt.setFullYear(expiresAt.getFullYear() + 1);
       }
 
+      console.log('Calling processSubscription...');
       // Process subscription payment through eZeePayments
       const subscriptionResult = await processSubscription({
         amount: plan.price,
@@ -114,11 +150,12 @@ export default function SubscribeScreen() {
         endDate: expiresAt.toISOString(),
       });
 
+      console.log('Subscription result:', subscriptionResult);
+
       if (!subscriptionResult.success) {
-        Alert.alert(
+        showAlert(
           'Payment Error',
-          subscriptionResult.error || 'Failed to process subscription. Please try again.',
-          [{ text: 'OK' }]
+          subscriptionResult.error || 'Failed to process subscription. Please try again.'
         );
         setProcessing(false);
         return;
@@ -136,14 +173,14 @@ export default function SubscribeScreen() {
           .eq('id', user.id);
       }
 
-      Alert.alert(
+      showAlert(
         'Subscription Processing! 🎉',
         `Your premium membership subscription is being processed. You will receive a confirmation once payment is complete.`,
-        [{ text: 'Done', onPress: () => router.replace('/membership') }]
+        () => router.replace('/membership')
       );
     } catch (error) {
       console.error('Subscription error:', error);
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to process subscription. Please try again.');
+      showAlert('Error', error instanceof Error ? error.message : 'Failed to process subscription. Please try again.');
     } finally {
       setProcessing(false);
     }
