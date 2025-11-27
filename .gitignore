@@ -24,6 +24,8 @@ web-build/
 *.keystore
 google-service-account.json
 firebase-service-account.json
+firebase-service-account.json.json
+google-services.json
 
 # ===================================
 # ⚙️ EAS & Expo Build Outputs
