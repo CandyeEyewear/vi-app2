@@ -7,20 +7,22 @@ import { useEffect, useRef } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import * as Linking from 'expo-linking';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { FeedProvider } from '../contexts/FeedContext';
 import { MessagingProvider } from '../contexts/MessagingContext';
 import { NetworkProvider } from '../contexts/NetworkContext';
-import ErrorBoundary from '../components/ErrorBoundary';
 import NetworkStatusBanner from '../components/NetworkStatusBanner';
+import WebNavigation from '../components/WebNavigation';
 import { logger } from '../utils/logger';
 import { setupFCMHandlers } from '../services/fcmNotifications';
+import { isWeb } from '../utils/platform';
 
 // Import splash screen with error handling
 let SplashScreen: any = null;
 try {
   SplashScreen = require('expo-splash-screen');
-  // Keep the splash screen visible while we fetch resources
   SplashScreen.preventAutoHideAsync();
 } catch (e) {
   logger.warn('expo-splash-screen not available, splash screen will auto-hide');
@@ -28,31 +30,34 @@ try {
 
 function AppContent() {
   const router = useRouter();
-  const { loading: authLoading } = useAuth();
-  const notificationListener = useRef<any>(null);
+  const { loading: authLoading, user } = useAuth();
   const responseListener = useRef<any>(null);
+  const { width } = useWindowDimensions();
+  
+  // Show WebNavigation on desktop (>= 992px) when user is logged in
+  const isDesktop = isWeb && width >= 992;
+  const showWebNav = isDesktop && !!user;
 
   useEffect(() => {
-    // Hide splash screen once auth is initialized
     if (!authLoading && SplashScreen) {
-      // Small delay to ensure smooth transition
       const timer = setTimeout(() => {
-        SplashScreen.hideAsync().catch(() => {
-          // Ignore errors if splash screen is already hidden
-        });
+        SplashScreen.hideAsync().catch(() => {});
       }, 500);
       return () => clearTimeout(timer);
     }
   }, [authLoading]);
 
   useEffect(() => {
-    // Set up FCM notification handlers with navigation
     setupFCMHandlers((path: string) => {
-      router.push(path as any);
-    });
-
-    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-      logger.info('Notification received', { notification });
+      if (path.startsWith('/conversation/')) {
+        const conversationId = path.replace('/conversation/', '');
+        router.push({
+          pathname: '/conversation/[id]',
+          params: { id: conversationId }
+        } as any);
+      } else {
+        router.push(path as any);
+      }
     });
 
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
@@ -64,13 +69,16 @@ function AppContent() {
             router.push(`/profile/${data.id}` as any);
             break;
           case 'announcement':
-            router.push('/(tabs)' as any);
+            router.push('/feed' as any);
             break;
           case 'opportunity':
             router.push(`/opportunity/${data.id}` as any);
             break;
           case 'message':
-            router.push(`/conversation/${data.id}` as any);
+            router.push({
+              pathname: '/conversation/[id]',
+              params: { id: data.id }
+            } as any);
             break;
           case 'post':
             router.push(`/post/${data.id}` as any);
@@ -82,120 +90,102 @@ function AppContent() {
           case 'opportunity_rejected':
             router.push(`/opportunity/${data.id}` as any);
             break;
+          case 'cause':
+            router.push(`/causes/${data.id}` as any);
+            break;
+          case 'event':
+            router.push(`/events/${data.id}` as any);
+            break;
         }
       }
     });
 
-    // Deep link handler
-    const handleDeepLink = (event: { url: string }) => {
-      logger.info('[DEEP LINK] Received', { url: event.url });
-      const parsed = Linking.parse(event.url);
-      
-      // Handle invite links: https://vibe.volunteersinc.org/invite?code=XXX or vibe://invite?code=XXX
-      if (parsed.hostname === 'vibe.volunteersinc.org' || parsed.scheme === 'vibe') {
-        if (parsed.path === '/invite' || parsed.path?.includes('invite')) {
-          const inviteCode = parsed.queryParams?.code || parsed.queryParams?.ref || parsed.queryParams?.invite;
-          if (inviteCode) {
-            const code = Array.isArray(inviteCode) ? inviteCode[0] : inviteCode;
-            logger.info('[DEEP LINK] Navigating to register with invite code', { code });
-            router.push(`/register?code=${code}` as any);
-            return;
-          }
-        }
-      }
-      
-      // Handle vibe://post/[id] format
-      if (parsed.path) {
-        const pathParts = parsed.path.split('/').filter(Boolean);
-        if (pathParts[0] === 'post' && pathParts[1]) {
-          const postId = pathParts[1];
-          logger.info('[DEEP LINK] Navigating to post', { postId });
-          router.push(`/post/${postId}` as any);
-          return;
-        }
-        // Handle vibe://reset-password format
-        if (pathParts[0] === 'reset-password') {
-          logger.info('[DEEP LINK] Navigating to reset password');
-          router.push('/reset-password' as any);
-          return;
-        }
-        // Handle vibe://invite?code=XXX format
-        if (pathParts[0] === 'invite') {
-          const inviteCode = parsed.queryParams?.code || parsed.queryParams?.ref || parsed.queryParams?.invite;
-          if (inviteCode) {
-            const code = Array.isArray(inviteCode) ? inviteCode[0] : inviteCode;
-            logger.info('[DEEP LINK] Navigating to register with invite code', { code });
-            router.push(`/register?code=${code}` as any);
-            return;
-          }
-        }
-      }
-      
-      // Fallback: check queryParams
-      if (parsed.queryParams?.id) {
-        const postId = Array.isArray(parsed.queryParams.id) ? parsed.queryParams.id[0] : parsed.queryParams.id;
-        logger.info('[DEEP LINK] Navigating to post (from query)', { postId });
-        router.push(`/post/${postId}` as any);
-      }
-    };
-
-    // Handle initial URL (app opened via deep link)
     Linking.getInitialURL().then((url) => {
       if (url) {
         logger.info('[DEEP LINK] Initial URL', { url });
-        handleDeepLink({ url });
+        const parsed = Linking.parse(url);
+        
+        if (parsed.hostname === 'vibe.volunteersinc.org' || parsed.scheme === 'vibe') {
+          if (parsed.path === '/invite' || parsed.path?.includes('invite')) {
+            const inviteCode = parsed.queryParams?.code || parsed.queryParams?.ref || parsed.queryParams?.invite;
+            if (inviteCode) {
+              const code = Array.isArray(inviteCode) ? inviteCode[0] : inviteCode;
+              logger.info('[DEEP LINK] Navigating to register with invite code', { code });
+              router.push(`/register?code=${code}` as any);
+              return;
+            }
+          }
+        }
+        
+        logger.info('[DEEP LINK] Letting expo-router handle', { url });
       }
     });
 
-    // Listen for deep links while app is running
-    const subscription = Linking.addEventListener('url', handleDeepLink);
-
     return () => {
-      if (notificationListener.current?.remove) {
-        notificationListener.current.remove();
-      }
       if (responseListener.current?.remove) {
         responseListener.current.remove();
       }
-      subscription.remove();
     };
-  }, [router]);
+  }, []);
 
   return (
     <>
       <NetworkStatusBanner />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="login" />
-        <Stack.Screen name="register" />
-        <Stack.Screen name="forgot-password" />
-        <Stack.Screen name="reset-password" />
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="edit-profile" />
-        <Stack.Screen name="settings" />
-        <Stack.Screen name="conversation/[id]" />
-        <Stack.Screen name="opportunity/[id]" />
-        <Stack.Screen name="profile/[id]" />
-        <Stack.Screen name="post/[id]" />
-        <Stack.Screen name="propose-opportunity" />
-        <Stack.Screen name="(admin)/opportunity-reviews" />
-        <Stack.Screen name="(admin)/opportunity-review/[id]" />
-      </Stack>
+      {showWebNav && <WebNavigation />}
+      <View style={showWebNav ? { paddingTop: 64, flex: 1 } : { flex: 1 }}>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="login" />
+          <Stack.Screen name="register" />
+          <Stack.Screen name="forgot-password" />
+          <Stack.Screen name="reset-password" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="edit-profile" />
+          <Stack.Screen name="settings" />
+          <Stack.Screen name="conversation/[id]" />
+          <Stack.Screen name="opportunity/[id]" />
+          <Stack.Screen name="profile/[id]" />
+          <Stack.Screen name="post/[id]" />
+          <Stack.Screen name="propose-opportunity" />
+          <Stack.Screen name="membership-features" />
+          <Stack.Screen name="membership" />
+          <Stack.Screen name="membership/subscribe" />
+          <Stack.Screen name="causes/[id]" />
+          <Stack.Screen name="causes/[id]/donate" />
+        </Stack>
+      </View>
     </>
   );
 }
 
 export default function RootLayout() {
   return (
-    // <ErrorBoundary>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <NetworkProvider>
         <AuthProvider>
           <FeedProvider>
             <MessagingProvider>
-              <AppContent />
+              <View style={isWeb ? webStyles.webContainer : styles.container}>
+                <AppContent />
+              </View>
             </MessagingProvider>
           </FeedProvider>
         </AuthProvider>
       </NetworkProvider>
-    // </ErrorBoundary>
+    </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+});
+
+const webStyles = StyleSheet.create({
+  webContainer: {
+    flex: 1,
+    minHeight: '100vh' as any,
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+  },
+});

@@ -28,7 +28,8 @@ import {
   TrendingUp,
   Clock,
   MapPin,
-  MessageSquare
+  MessageSquare,
+  Heart
 } from 'lucide-react-native';
 import { supabase } from '../services/supabase';
 
@@ -39,6 +40,8 @@ interface DashboardStats {
   totalPosts: number;
   totalVolunteerHours: number;
   pendingOpportunityProposals: number;
+  totalCauses: number;
+  totalRaised: number;
 }
 
 export default function AdminDashboardScreen() {
@@ -88,6 +91,19 @@ export default function AdminDashboardScreen() {
         .select('*', { count: 'exact', head: true })
         .eq('proposal_status', 'pending');
 
+      // Get total active causes
+      const { count: causesCount } = await supabase
+        .from('causes')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'active');
+
+      // Get total amount raised across all causes
+      const { data: causesData } = await supabase
+        .from('causes')
+        .select('amount_raised');
+
+      const totalRaised = causesData?.reduce((sum, cause) => sum + (parseFloat(cause.amount_raised) || 0), 0) || 0;
+
       setStats({
         totalVolunteers: volunteersCount || 0,
         activeOpportunities: opportunitiesCount || 0,
@@ -95,6 +111,8 @@ export default function AdminDashboardScreen() {
         totalPosts: postsCount || 0,
         totalVolunteerHours: totalHours,
         pendingOpportunityProposals: pendingProposalsCount || 0,
+        totalCauses: causesCount || 0,
+        totalRaised: totalRaised,
       });
     } catch (error) {
       console.error('Error loading dashboard stats:', error);
@@ -216,6 +234,32 @@ export default function AdminDashboardScreen() {
                 Volunteer Hours
               </Text>
             </View>
+
+            {/* Total Causes */}
+            <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={[styles.statIconContainer, { backgroundColor: '#E91E63' + '15' }]}>
+                <Heart size={24} color="#E91E63" />
+              </View>
+              <Text style={[styles.statValue, { color: colors.text }]}>
+                {stats?.totalCauses || 0}
+              </Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                Active Causes
+              </Text>
+            </View>
+
+            {/* Total Raised */}
+            <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={[styles.statIconContainer, { backgroundColor: '#4CAF50' + '15' }]}>
+                <TrendingUp size={24} color="#4CAF50" />
+              </View>
+              <Text style={[styles.statValue, { color: colors.text }]}>
+                J${((stats?.totalRaised || 0) / 1000).toFixed(0)}K
+              </Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                Total Raised
+              </Text>
+            </View>
           </View>
         )}
 
@@ -240,6 +284,63 @@ export default function AdminDashboardScreen() {
               </Text>
               <Text style={[styles.actionSubtitle, { color: colors.textSecondary }]}>
                 Add a new volunteering opportunity
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Create Cause */}
+          <TouchableOpacity
+            style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/causes/create')}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.actionIconContainer, { backgroundColor: '#E91E63' + '15' }]}>
+              <Heart size={24} color="#E91E63" />
+            </View>
+            <View style={styles.actionContent}>
+              <Text style={[styles.actionTitle, { color: colors.text }]}>
+                Create Cause
+              </Text>
+              <Text style={[styles.actionSubtitle, { color: colors.textSecondary }]}>
+                Start a new fundraising campaign
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Manage Causes */}
+          <TouchableOpacity
+            style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/causes')}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.actionIconContainer, { backgroundColor: '#9C27B0' + '15' }]}>
+              <FileText size={24} color="#9C27B0" />
+            </View>
+            <View style={styles.actionContent}>
+              <Text style={[styles.actionTitle, { color: colors.text }]}>
+                Manage Causes
+              </Text>
+              <Text style={[styles.actionSubtitle, { color: colors.textSecondary }]}>
+                Edit, pause, or delete fundraising campaigns
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Manage Events */}
+          <TouchableOpacity
+            style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/events')}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.actionIconContainer, { backgroundColor: '#FF9800' + '15' }]}>
+              <Calendar size={24} color="#FF9800" />
+            </View>
+            <View style={styles.actionContent}>
+              <Text style={[styles.actionTitle, { color: colors.text }]}>
+                Manage Events
+              </Text>
+              <Text style={[styles.actionSubtitle, { color: colors.textSecondary }]}>
+                Edit, delete, or manage community events
               </Text>
             </View>
           </TouchableOpacity>

@@ -46,6 +46,7 @@ import { useAlert, showErrorAlert } from '../../hooks/useAlert';
 import { sendNotificationToUser } from '../../services/pushNotifications';
 import { cache, CacheKeys } from '../../services/cache';
 import FeedPostCard from '../../components/cards/FeedPostCard';
+import { AvatarWithBadge, UserNameWithBadge } from '../../components';
 
 type TabType = 'posts' | 'checkins' | 'about';
 
@@ -150,6 +151,8 @@ export default function ViewProfileScreen() {
         avatarUrl: data.avatar_url,
         dateOfBirth: data.date_of_birth,
         role: data.role,
+        membershipTier: data.membership_tier || 'free',
+        membershipStatus: data.membership_status || 'inactive',
         isPrivate: data.is_private,
         totalHours: data.total_hours,
         activitiesCompleted: data.activities_completed,
@@ -368,7 +371,10 @@ export default function ViewProfileScreen() {
       const response = await getOrCreateConversation(profileUser.id);
 
       if (response.success && response.data) {
-        router.push(`/conversation/${response.data.id}`);
+        router.push({
+          pathname: '/conversation/[id]',
+          params: { id: response.data.id }
+        } as any);
       } else {
         showAlert(showErrorAlert('Error', response.error || 'Failed to start conversation'));
       }
@@ -795,15 +801,29 @@ export default function ViewProfileScreen() {
         {/* Profile Header - Scrolls away */}
         <View style={[styles.profileHeader, { borderBottomColor: colors.border }]}>
           <View style={styles.avatarSection}>
-            {profileUser.avatarUrl ? (
-              <Image source={{ uri: profileUser.avatarUrl }} style={styles.avatar} />
-            ) : (
-              <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: colors.primary }]}>
-                <Text style={styles.avatarText}>{profileUser.fullName.charAt(0).toUpperCase()}</Text>
-              </View>
-            )}
+            <AvatarWithBadge
+              uri={profileUser.avatarUrl || null}
+              name={profileUser.fullName}
+              size={100}
+              role={profileUser.role || 'volunteer'}
+              membershipTier={profileUser.membershipTier || 'free'}
+              membershipStatus={profileUser.membershipStatus || 'inactive'}
+            />
           </View>
-          <Text style={[styles.name, { color: colors.text }]}>{profileUser.fullName}</Text>
+          <UserNameWithBadge
+            name={profileUser.fullName}
+            role={profileUser.role || 'volunteer'}
+            membershipTier={profileUser.membershipTier || 'free'}
+            membershipStatus={profileUser.membershipStatus || 'inactive'}
+            style={[styles.name, { color: colors.text }]}
+            badgeSize={20}
+          />
+          {/* Role Label */}
+          {profileUser.role === 'admin' ? (
+            <Text style={{ color: '#000000', fontSize: 14, fontWeight: '600', marginTop: 4 }}>Admin</Text>
+          ) : (profileUser.membershipTier === 'premium' && profileUser.membershipStatus === 'active') ? (
+            <Text style={{ color: '#38B6FF', fontSize: 14, fontWeight: '600', marginTop: 4 }}>Official Member</Text>
+          ) : null}
           {profileUser.location && (
             <Text style={[styles.location, { color: colors.textSecondary }]}>{profileUser.location}</Text>
           )}

@@ -1,18 +1,21 @@
-// _layout.tsx - REPLACE the current version with this
 import { Tabs } from 'expo-router';
 import { Home, MessageCircle, Compass, User } from 'lucide-react-native';
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useColorScheme, View, Text, StyleSheet } from 'react-native';
 import { useMessaging } from '../../contexts/MessagingContext';
 import { Colors } from '../../constants/colors';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useResponsive } from '../../hooks/useResponsive';
+import { isWeb as isWebPlatform } from '../../utils/platform';
+import WebNavigation from '../../components/WebNavigation';
 
 export default function TabsLayout() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const { totalUnreadCount, refreshConversations } = useMessaging();
   const insets = useSafeAreaInsets();
+  const { width } = useResponsive();
 
   // Refresh when the tab bar becomes focused/visible
   useFocusEffect(
@@ -20,6 +23,10 @@ export default function TabsLayout() {
       refreshConversations();
     }, [])
   );
+
+  // Show bottom tabs only on mobile/tablet (< 992px)
+  // Show WebNavigation on desktop (>= 992px)
+  const isDesktop = isWebPlatform && width >= 992;
 
   return (
     <Tabs
@@ -31,15 +38,32 @@ export default function TabsLayout() {
           backgroundColor: colors.card,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          height: 60 + insets.bottom,
-          paddingBottom: Math.max(insets.bottom, 8),
+          height: 60 + (isWebPlatform ? 0 : insets.bottom),
+          paddingBottom: isWebPlatform ? 8 : Math.max(insets.bottom, 8),
           paddingTop: 8,
+          // Hide tab bar on desktop (>= 992px)
+          ...(isDesktop && {
+            display: 'none',
+          }),
+          // Web-specific styling for mobile/tablet views
+          ...(isWebPlatform && !isDesktop && {
+            position: 'fixed' as any,
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 1000,
+            maxWidth: 768,
+            alignSelf: 'center',
+          }),
         },
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: isWebPlatform ? 11 : 12,
           fontWeight: '600',
         },
+        // Add header for desktop with WebNavigation
+        header: () => (isDesktop ? <WebNavigation /> : null),
       }}
+      sceneContainerStyle={isDesktop ? { paddingTop: 64 } : undefined}
     >
       <Tabs.Screen
         name="feed"
@@ -101,4 +125,4 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
   },
-}); 
+});

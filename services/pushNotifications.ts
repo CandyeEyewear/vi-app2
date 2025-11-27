@@ -14,7 +14,7 @@ Notifications.setNotificationHandler({
 });
 
 export interface PushNotificationData {
-  type: 'circle_request' | 'announcement' | 'opportunity' | 'message';
+  type: 'circle_request' | 'announcement' | 'opportunity' | 'message' | 'cause' | 'event';
   id: string;
   title: string;
   body: string;

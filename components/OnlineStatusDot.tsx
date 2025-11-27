@@ -1,10 +1,11 @@
 /**
  * Online Status Dot Component  
- * Shows green dot when user is online
+ * Shows blue dot when user is online (matches app theme)
  */
 
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
+import { Colors } from '../constants/colors';
 
 interface OnlineStatusDotProps {
   isOnline: boolean;
@@ -27,7 +28,8 @@ export default function OnlineStatusDot({
           { 
             width: size, 
             height: size, 
-            borderRadius: size / 2 
+            borderRadius: size / 2,
+            backgroundColor: Colors.light.primary, // Blue like app theme
           }
         ]} 
       />
@@ -45,7 +47,6 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   dot: {
-    backgroundColor: '#4CAF50',
     borderWidth: 2,
     borderColor: '#FFFFFF',
   },

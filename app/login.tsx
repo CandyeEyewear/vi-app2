@@ -41,7 +41,7 @@ export default function LoginScreen() {
   // Redirect authenticated users away from login screen
   useEffect(() => {
     if (!loading && user) {
-      router.replace('/(tabs)/feed');
+      router.replace('/feed' as any);
     }
   }, [user, loading, router]);
 
@@ -74,7 +74,7 @@ export default function LoginScreen() {
     if (response.success) {
       // Small delay to ensure Root Layout is fully mounted before navigating
       setTimeout(() => {
-        router.replace('/(tabs)/feed');
+        router.replace('/feed' as any);
       }, 100);
     } else {
       // Provide user-friendly error messages

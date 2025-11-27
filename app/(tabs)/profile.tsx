@@ -13,20 +13,29 @@ import {
   Image,
   Alert,
   useColorScheme,
+  Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors } from '../../constants/colors';
-import { Shield, ShoppingBag, Plus, Edit, Settings, Calendar } from 'lucide-react-native';
+import { Shield, ShoppingBag, Plus, Edit, Settings, Calendar, Crown, Heart, ChevronRight } from 'lucide-react-native';
 import StreakBadge from '../../components/StreakBadge';
+import { AvatarWithBadge, UserNameWithBadge } from '../../components/index';
+import WebContainer from '../../components/WebContainer';
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width >= 992;
   const { user, signOut, isAdmin } = useAuth();
+  const isPremium = user?.membershipTier === 'premium';
+  const isOfficialMember = isPremium || isAdmin;
+  const hasProposeAccess = isOfficialMember;
 
   const handleLogout = () => {
     Alert.alert(
@@ -88,20 +97,26 @@ export default function ProfileScreen() {
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.card }]} contentContainerStyle={styles.scrollContent}>
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 32, backgroundColor: colors.background, borderBottomColor: colors.border }]}>
+      {!isDesktop && (
+        <View style={[styles.header, { paddingTop: insets.top + 32, backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         <View style={styles.avatarSection}>
-          {user.avatarUrl ? (
-            <Image source={{ uri: user.avatarUrl }} style={[styles.avatar, { borderColor: colors.primary }]} />
-          ) : (
-            <View style={[styles.avatar, styles.avatarPlaceholder, { borderColor: colors.primary, backgroundColor: colors.primary }]}>
-              <Text style={styles.avatarText}>
-                {user.fullName.charAt(0).toUpperCase()}
-              </Text>
-            </View>
-          )}
+          <AvatarWithBadge
+            uri={user.avatarUrl || null}
+            name={user.fullName}
+            size={100}
+            role={user.role || 'volunteer'}
+            membershipTier={user.membershipTier || 'free'}
+            membershipStatus={user.membershipStatus || 'inactive'}
+          />
         </View>
-        <Text style={[styles.name, { color: colors.text }]}>{user.fullName}</Text>
+        <UserNameWithBadge
+          name={user.fullName}
+          role={user.role || 'volunteer'}
+          membershipTier={user.membershipTier || 'free'}
+          membershipStatus={user.membershipStatus || 'inactive'}
+          style={[styles.name, { color: colors.text }]}
+          badgeSize={20}
+        />
         <Text style={[styles.email, { color: colors.textSecondary }]}>{user.email}</Text>
         {user.location && (
           <Text style={[styles.location, { color: colors.textSecondary }]}>{user.location}</Text>
@@ -127,7 +142,9 @@ export default function ProfileScreen() {
           </View>
         )}
       </View>
+      )}
 
+      <WebContainer>
       {/* 🔥 STREAK BADGE - Shows if user has a streak */}
       {user.currentStreak && user.currentStreak > 0 && (
         <View style={styles.streakSection}>
@@ -165,25 +182,44 @@ export default function ProfileScreen() {
         </View>
       )}
 
-      {/* Stats */}
+      {/* Stats - Only visible to Official Members */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Impact Statistics</Text>
-        <View style={styles.statsGrid}>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{user.totalHours}</Text>
-            <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit={true}>Hours</Text>
+        {isOfficialMember ? (
+          <View style={styles.statsGrid}>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{user.totalHours}</Text>
+              <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit={true}>Hours</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{user.activitiesCompleted}</Text>
+              <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit={true}>
+                {user.activitiesCompleted === 1 ? 'Activity' : 'Activities'}
+              </Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{user.organizationsHelped}</Text>
+              <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit={true}>Entity/Org</Text>
+            </View>
           </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{user.activitiesCompleted}</Text>
-            <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit={true}>
-              {user.activitiesCompleted === 1 ? 'Activity' : 'Activities'}
+        ) : (
+          <View style={[styles.membershipPrompt, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Crown size={32} color={colors.tint} />
+            <Text style={[styles.membershipPromptTitle, { color: colors.text }]}>
+              Become an Official Member
             </Text>
+            <Text style={[styles.membershipPromptText, { color: colors.textSecondary }]}>
+              Unlock your Impact Statistics and see your volunteer contributions
+            </Text>
+            <TouchableOpacity
+              style={[styles.becomeMemberButton, { backgroundColor: colors.tint }]}
+              onPress={() => router.push('/membership/subscribe')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.becomeMemberButtonText}>Become a Member</Text>
+            </TouchableOpacity>
           </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{user.organizationsHelped}</Text>
-            <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit={true}>Entity/Org</Text>
-          </View>
-        </View>
+        )}
       </View>
 
       {/* Achievements */}
@@ -253,7 +289,15 @@ export default function ProfileScreen() {
               <View style={[styles.actionButtonIcon, { backgroundColor: colors.primary + '15' }]}>
                 <Plus size={20} color={colors.primary} />
               </View>
-              <Text style={[styles.actionButtonText, { color: colors.text }]}>Propose Opportunity</Text>
+              <View style={styles.actionButtonTextContainer}>
+                <Text style={[styles.actionButtonText, { color: colors.text }]}>Propose Opportunity</Text>
+                {!hasProposeAccess && (
+                  <View style={styles.premiumBadge}>
+                    <Crown size={12} color="#38B6FF" fill="#38B6FF" />
+                    <Text style={styles.premiumBadgeText}>Premium</Text>
+                  </View>
+                )}
+              </View>
             </TouchableOpacity>
           )}
 
@@ -278,6 +322,44 @@ export default function ProfileScreen() {
             </View>
             <Text style={[styles.actionButtonText, { color: colors.text }]}>Settings</Text>
           </TouchableOpacity>
+
+          {/* My Donations */}
+          <TouchableOpacity
+            style={[styles.menuItem, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/donation-history')}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.menuIconContainer, { backgroundColor: '#E91E63' + '15' }]}>
+              <Heart size={22} color="#E91E63" />
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={[styles.menuTitle, { color: colors.text }]}>My Donations</Text>
+              <Text style={[styles.menuSubtitle, { color: colors.textSecondary }]}>
+                View your donation history
+              </Text>
+            </View>
+            <ChevronRight size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+
+          {/* Membership */}
+          <TouchableOpacity
+            style={[styles.menuItem, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/membership')}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.menuIconContainer, { backgroundColor: '#38B6FF' + '15' }]}>
+              <Crown size={22} color="#38B6FF" />
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={[styles.menuTitle, { color: colors.text }]}>Membership</Text>
+              <Text style={[styles.menuSubtitle, { color: colors.textSecondary }]}>
+                {user?.membershipTier === 'premium' && user?.membershipStatus === 'active' 
+                  ? 'Official Member ✓' 
+                  : 'Upgrade to Full Membership'}
+              </Text>
+            </View>
+            <ChevronRight size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -294,6 +376,7 @@ export default function ProfileScreen() {
           Member since {new Date(user.createdAt).toLocaleDateString()}
         </Text>
       </View>
+      </WebContainer>
     </ScrollView>
   );
 }
@@ -420,6 +503,34 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 13,
     color: Colors.light.textSecondary,
+  },
+  membershipPrompt: {
+    padding: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    gap: 12,
+  },
+  membershipPromptTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  membershipPromptText: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  becomeMemberButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  becomeMemberButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
     textAlign: 'center',
     minHeight: 16,
   },
@@ -506,10 +617,56 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  actionButtonTextContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   actionButtonText: {
     fontSize: 16,
     fontWeight: '600',
     flex: 1,
+  },
+  premiumBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    backgroundColor: '#38B6FF15',
+  },
+  premiumBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#38B6FF',
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 12,
+  },
+  menuIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuContent: {
+    flex: 1,
+  },
+  menuTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  menuSubtitle: {
+    fontSize: 13,
   },
   logoutSection: {
     padding: 16,

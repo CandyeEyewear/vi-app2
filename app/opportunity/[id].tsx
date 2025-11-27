@@ -44,6 +44,7 @@ import {
   QrCode,
   X,
   Share2,
+  Bookmark,
 } from 'lucide-react-native';
 import { Opportunity } from '../../types';
 import { supabase } from '../../services/supabase';
@@ -70,6 +71,7 @@ export default function OpportunityDetailsScreen() {
   const [signupStatus, setSignupStatus] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<'details' | 'chat' | 'participants'>('details');
+  const [chatMessageCount, setChatMessageCount] = useState<number>(0);
   
   // Check-in state
   const [checkInModalVisible, setCheckInModalVisible] = useState(false);
@@ -87,6 +89,10 @@ export default function OpportunityDetailsScreen() {
   // Share state
   const [showShareModal, setShowShareModal] = useState(false);
   const [sharing, setSharing] = useState(false);
+
+  // Save state
+  const [isSaved, setIsSaved] = useState(false);
+  const [savingBookmark, setSavingBookmark] = useState(false);
 
   // Alert state
   const [alertVisible, setAlertVisible] = useState(false);
@@ -120,11 +126,19 @@ export default function OpportunityDetailsScreen() {
     if (opportunityId) {
       loadOpportunityDetails();
       checkSignupStatus();
+      checkSaveStatus();
       if (isAdmin) {
         loadAdminStats();
       }
     }
-  }, [opportunityId, isAdmin]);
+  }, [opportunityId, isAdmin, user?.id]);
+
+  // Clear chat message count when user opens the chat tab
+  useEffect(() => {
+    if (activeTab === 'chat') {
+      setChatMessageCount(0);
+    }
+  }, [activeTab]);
 
   // Calculate and log check-in window debug info
   useEffect(() => {
@@ -244,6 +258,67 @@ export default function OpportunityDetailsScreen() {
     }
   };
 
+  // Check if opportunity is saved
+  const checkSaveStatus = async () => {
+    if (!user || !opportunityId) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('saved_opportunities')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('opportunity_id', opportunityId)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') throw error;
+      setIsSaved(!!data);
+    } catch (error) {
+      console.error('Error checking save status:', error);
+    }
+  };
+
+  // Handle save/unsave opportunity
+  const handleSaveOpportunity = async () => {
+    if (!user || !opportunity) return;
+
+    setSavingBookmark(true);
+    
+    try {
+      if (isSaved) {
+        // Remove from saved
+        const { error } = await supabase
+          .from('saved_opportunities')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('opportunity_id', opportunity.id);
+
+        if (error) throw error;
+        setIsSaved(false);
+        showAlert('Removed', 'Opportunity removed from saved', 'success');
+      } else {
+        // Add to saved
+        const { error } = await supabase
+          .from('saved_opportunities')
+          .insert([
+            {
+              user_id: user.id,
+              opportunity_id: opportunity.id,
+              saved_at: new Date().toISOString(),
+            }
+          ]);
+
+        if (error && error.code !== '23505') throw error; // Ignore duplicate key error
+        setIsSaved(true);
+        showAlert('Saved', 'Opportunity saved to your list', 'success');
+      }
+    } catch (error) {
+      console.error('Error saving opportunity:', error);
+      showAlert('Error', 'Failed to save opportunity', 'error');
+    } finally {
+      setSavingBookmark(false);
+    }
+  };
+
   // Load admin statistics (signups and check-ins)
   const loadAdminStats = async () => {
     if (!isAdmin) return;
@@ -283,29 +358,37 @@ export default function OpportunityDetailsScreen() {
     if (!user || !opportunity) return;
 
     // Check if signup is within date range
+    // Users can sign up ANYTIME (days/weeks before) up to and including the last day of the date range
+    // Only restriction: signups close after the end date passes
     const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     
-    if (opportunity.dateStart || opportunity.dateEnd) {
-      const startDate = opportunity.dateStart ? new Date(opportunity.dateStart) : null;
-      const endDate = opportunity.dateEnd ? new Date(opportunity.dateEnd) : null;
+    if (opportunity.dateEnd) {
+      // Set end date to end of day (23:59:59.999) to allow signups throughout the entire last day
+      const endDate = new Date(opportunity.dateEnd);
+      const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+      end.setHours(23, 59, 59, 999);
       
-      if (startDate) {
-        const start = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-        if (today < start) {
-          showAlert('Not Available', 'Sign-ups are not yet open for this opportunity', 'warning');
-          return;
-        }
-      }
-      
-      if (endDate) {
-        const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
-        if (today > end) {
-          showAlert('Closed', 'Sign-ups for this opportunity have closed', 'warning');
-          return;
-        }
+      // Block signups only if current time is AFTER the end of the last day
+      // This allows signups anytime before and during the last day
+      if (now > end) {
+        showAlert('Closed', 'Sign-ups for this opportunity have closed', 'warning');
+        return;
       }
     }
+    
+    // Note: We don't check startDate here - signups are allowed anytime before the end date
+    // If you want to restrict signups until a start date, uncomment the code below:
+    /*
+    if (opportunity.dateStart) {
+      const startDate = new Date(opportunity.dateStart);
+      const start = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      if (today < start) {
+        showAlert('Not Available', 'Sign-ups are not yet open for this opportunity', 'warning');
+        return;
+      }
+    }
+    */
 
     if (opportunity.spotsAvailable <= 0) {
       showAlert('Full', 'This opportunity is currently full', 'warning');
@@ -463,15 +546,40 @@ const handleShareQRCode = async () => {
   };
 
   // Determine if check-in button should show
+  // Show check-in button for the entire duration up to and including the end date
   const shouldShowCheckInButton = () => {
-    return (
-      isSignedUp &&
-      !isAdmin &&
-      opportunity &&
-      isToday(opportunity.date) &&
-      !hasCheckedIn &&
-      signupStatus !== 'cancelled'
-    );
+    if (!isSignedUp || isAdmin || !opportunity || hasCheckedIn || signupStatus === 'cancelled') {
+      return false;
+    }
+
+    const now = new Date();
+    
+    // If opportunity has dateEnd, check if current date is on or before the end date
+    if (opportunity.dateEnd) {
+      const endDate = new Date(opportunity.dateEnd);
+      // Set to end of day (23:59:59.999) to allow check-in throughout the entire last day
+      const endOfEndDate = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+      endOfEndDate.setHours(23, 59, 59, 999);
+      
+      // Show check-in if current time is on or before the end date
+      if (now <= endOfEndDate) {
+        // If there's a start date, also check that we're on or after the start date
+        if (opportunity.dateStart) {
+          const startDate = new Date(opportunity.dateStart);
+          const startOfStartDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+          return now >= startOfStartDate;
+        }
+        return true;
+      }
+      return false;
+    }
+    
+    // Fallback to legacy date field if dateEnd is not available
+    if (opportunity.date) {
+      return isToday(opportunity.date);
+    }
+    
+    return false;
   };
 
   // Handle manual check-in
@@ -603,6 +711,20 @@ const handleQRScan = async (scannedCode: string) => {
         </TouchableOpacity>
         
         <View style={styles.headerActions}>
+          {/* Save Button - Available for all users */}
+          <TouchableOpacity
+            onPress={handleSaveOpportunity}
+            disabled={savingBookmark}
+            style={styles.headerButton}
+            accessibilityLabel={isSaved ? 'Remove from saved' : 'Save opportunity'}
+          >
+            <Bookmark
+              size={20}
+              color={isSaved ? colors.tint : colors.textSecondary}
+              fill={isSaved ? colors.tint : 'none'}
+            />
+          </TouchableOpacity>
+
           {/* Share Button - Available for all users */}
           <TouchableOpacity
             style={[styles.iconButton, { backgroundColor: colors.primary + '15' }]}
@@ -801,13 +923,27 @@ const handleQRScan = async (scannedCode: string) => {
                   onPress={() => setActiveTab('chat')}
                 >
                   <MessageCircle size={18} color={activeTab === 'chat' ? colors.primary : colors.textSecondary} />
-                  <Text style={[
-                    styles.tabText,
-                    activeTab === 'chat' && styles.activeTabText,
-                    { color: activeTab === 'chat' ? colors.primary : colors.textSecondary }
-                  ]}>
-                    Chat
-                  </Text>
+                  <View style={styles.tabTextContainer}>
+                    <Text style={[
+                      styles.tabText,
+                      activeTab === 'chat' && styles.activeTabText,
+                      { color: activeTab === 'chat' ? colors.primary : colors.textSecondary }
+                    ]}>
+                      Chat
+                    </Text>
+                    {chatMessageCount > 0 && activeTab !== 'chat' && (
+                      <TouchableOpacity
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          setActiveTab('chat');
+                        }}
+                        style={[styles.messageCountBadge, { backgroundColor: colors.primary }]}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Text style={styles.messageCountText}>{chatMessageCount}</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -981,13 +1117,27 @@ const handleQRScan = async (scannedCode: string) => {
                 onPress={() => setActiveTab('chat')}
               >
                 <MessageCircle size={18} color={activeTab === 'chat' ? colors.primary : colors.textSecondary} />
-                <Text style={[
-                  styles.tabText,
-                  activeTab === 'chat' && styles.activeTabText,
-                  { color: activeTab === 'chat' ? colors.primary : colors.textSecondary }
-                ]}>
-                  Chat
-                </Text>
+                <View style={styles.tabTextContainer}>
+                  <Text style={[
+                    styles.tabText,
+                    activeTab === 'chat' && styles.activeTabText,
+                    { color: activeTab === 'chat' ? colors.primary : colors.textSecondary }
+                  ]}>
+                    Chat
+                  </Text>
+                  {chatMessageCount > 0 && activeTab !== 'chat' && (
+                    <TouchableOpacity
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        setActiveTab('chat');
+                      }}
+                      style={[styles.messageCountBadge, { backgroundColor: colors.primary }]}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.messageCountText}>{chatMessageCount}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1008,6 +1158,7 @@ const handleQRScan = async (scannedCode: string) => {
           <OpportunityGroupChat 
             opportunityId={opportunityId}
             opportunityTitle={opportunity.title}
+            onMessageCountChange={setChatMessageCount}
           />
         </View>
       ) : (
@@ -1035,13 +1186,27 @@ const handleQRScan = async (scannedCode: string) => {
                 onPress={() => setActiveTab('chat')}
               >
                 <MessageCircle size={18} color={activeTab === 'chat' ? colors.primary : colors.textSecondary} />
-                <Text style={[
-                  styles.tabText,
-                  activeTab === 'chat' && styles.activeTabText,
-                  { color: activeTab === 'chat' ? colors.primary : colors.textSecondary }
-                ]}>
-                  Chat
-                </Text>
+                <View style={styles.tabTextContainer}>
+                  <Text style={[
+                    styles.tabText,
+                    activeTab === 'chat' && styles.activeTabText,
+                    { color: activeTab === 'chat' ? colors.primary : colors.textSecondary }
+                  ]}>
+                    Chat
+                  </Text>
+                  {chatMessageCount > 0 && activeTab !== 'chat' && (
+                    <TouchableOpacity
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        setActiveTab('chat');
+                      }}
+                      style={[styles.messageCountBadge, { backgroundColor: colors.primary }]}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.messageCountText}>{chatMessageCount}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1297,6 +1462,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
+  headerButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
   iconButton: {
     width: 40,
     height: 40,
@@ -1546,12 +1715,30 @@ const styles = StyleSheet.create({
   activeTab: {
     borderBottomColor: Colors.light.primary,
   },
+  tabTextContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   tabText: {
     fontSize: 14,
     fontWeight: '600',
   },
   activeTabText: {
     color: Colors.light.primary,
+  },
+  messageCountBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  messageCountText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
   },
   checkInButtonContainer: {
     paddingHorizontal: 16,

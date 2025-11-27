@@ -1,12 +1,13 @@
 /**
  * Message Status Component
- * Shows ✓ sent, ✓✓ delivered, ✓✓ read (blue)
+ * Shows ✓ sent, ✓✓ delivered, ✓✓ read (green)
  */
 
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Check, CheckCheck } from 'lucide-react-native';
-import { Colors } from '../constants/colors';
+
+const GREEN_TICK = '#25D366'; // WhatsApp green for ticks
 
 interface MessageStatusProps {
   status: 'sent' | 'delivered' | 'read';
@@ -17,7 +18,7 @@ export default function MessageStatus({ status, size = 16 }: MessageStatusProps)
   if (status === 'sent') {
     return (
       <View style={styles.container}>
-        <Check size={size} color="rgba(255, 255, 255, 0.6)" />
+        <Check size={size} color={GREEN_TICK} />
       </View>
     );
   }
@@ -25,7 +26,7 @@ export default function MessageStatus({ status, size = 16 }: MessageStatusProps)
   if (status === 'delivered') {
     return (
       <View style={styles.container}>
-        <CheckCheck size={size} color="rgba(255, 255, 255, 0.6)" />
+        <CheckCheck size={size} color={GREEN_TICK} />
       </View>
     );
   }
@@ -33,7 +34,7 @@ export default function MessageStatus({ status, size = 16 }: MessageStatusProps)
   if (status === 'read') {
     return (
       <View style={styles.container}>
-        <CheckCheck size={size} color={Colors.light.primary} />
+        <CheckCheck size={size} color={GREEN_TICK} />
       </View>
     );
   }

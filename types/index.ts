@@ -21,8 +21,9 @@ export interface User {
   avatarUrl?: string;
   dateOfBirth?: string;
   role: UserRole;
+  membershipTier?: 'free' | 'premium'; // Subscription tier
+  membershipStatus?: 'inactive' | 'active' | 'expired' | 'cancelled'; // Subscription status
   isPrivate?: boolean; // Privacy setting for profile visibility
-  
   // Moderation fields
   isBanned?: boolean;
   bannedUntil?: string;
@@ -44,6 +45,11 @@ export interface User {
   // Timestamps
   createdAt: string;
   updatedAt: string;
+  
+  // Donation stats
+  totalDonated?: number;
+  donationCount?: number;
+  donorBadges?: DonorBadge[];
 }
 
 export interface Achievement {
@@ -79,6 +85,7 @@ export interface Opportunity {
   latitude?: number;
   longitude?: number;
   mapLink?: string;
+  distance?: number; // Distance in miles (calculated from user location)
   
   // Timing
   date: string; // Legacy field, use date_start/date_end
@@ -317,6 +324,19 @@ export interface Message {
   read: boolean;
   status?: 'sent' | 'delivered' | 'read';
   createdAt: string;
+  deletedAt?: string;
+  replyTo?: {
+    id: string;
+    senderId: string;
+    senderName: string;
+    text: string;
+  };
+  attachments?: {
+    type: 'image' | 'video' | 'document';
+    url: string;
+    filename?: string;
+    thumbnail?: string;
+  }[];
 }
 
 // ==================== NOTIFICATION TYPES ====================
@@ -428,4 +448,388 @@ export interface TypingIndicator {
   userId: string;
   userName: string;
   isTyping: boolean;
+}
+export type CauseCategory = 
+  | 'disaster_relief'
+  | 'education'
+  | 'healthcare'
+  | 'environment'
+  | 'community'
+  | 'poverty'
+  | 'other';
+
+export type CauseStatus = 'draft' | 'active' | 'paused' | 'completed' | 'cancelled';
+
+export interface Cause {
+  id: string;
+  
+  // Basic Info
+  title: string;
+  description: string;
+  category: CauseCategory;
+  imageUrl?: string;
+  
+  // Fundraising Goals
+  goalAmount: number;
+  amountRaised: number;
+  currency: string;
+  
+  // Timing
+  startDate: string;
+  endDate?: string;
+  
+  // Settings
+  isDonationsPublic: boolean;
+  allowRecurring: boolean;
+  minimumDonation: number;
+  
+  // Status
+  status: CauseStatus;
+  isFeatured: boolean;
+  
+  // Stats
+  donorCount: number;
+  
+  // Admin
+  createdBy: string;
+  creator?: User;  // Populated
+  
+  // Timestamps
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';
+
+export interface Donation {
+  id: string;
+  
+  // References
+  causeId: string;
+  cause?: Cause;  // Populated
+  userId?: string;
+  user?: User;    // Populated
+  
+  // Donation Details
+  amount: number;
+  currency: string;
+  
+  // Donor Info
+  donorName?: string;
+  donorEmail?: string;
+  isAnonymous: boolean;
+  
+  // Payment Info (eZeePayments)
+  paymentStatus: PaymentStatus;
+  transactionNumber?: string;
+  paymentMethod?: string;
+  
+  // Optional message
+  message?: string;
+  
+  // Timestamps
+  createdAt: string;
+  completedAt?: string;
+}
+
+export type RecurringFrequency = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'annually';
+export type RecurringStatus = 'active' | 'paused' | 'cancelled' | 'ended' | 'failed';
+
+export interface RecurringDonation {
+  id: string;
+  
+  // References
+  causeId: string;
+  cause?: Cause;  // Populated
+  userId: string;
+  user?: User;    // Populated
+  
+  // Recurring Details
+  amount: number;
+  currency: string;
+  frequency: RecurringFrequency;
+  
+  // eZeePayments Subscription
+  subscriptionId?: string;
+  
+  // Status
+  status: RecurringStatus;
+  
+  // Dates
+  startDate: string;
+  endDate?: string;
+  nextBillingDate?: string;
+  lastBillingDate?: string;
+  
+  // Stats
+  totalDonated: number;
+  donationCount: number;
+  
+  // Settings
+  isAnonymous: boolean;
+  
+  // Timestamps
+  createdAt: string;
+  updatedAt: string;
+  cancelledAt?: string;
+}
+
+export type DonorBadgeType = 
+  | 'bronze_donor'        // $1,000+ total
+  | 'silver_donor'        // $5,000+ total
+  | 'gold_donor'          // $10,000+ total
+  | 'platinum_donor'      // $25,000+ total
+  | 'champion_donor'      // $50,000+ total
+  | 'recurring_supporter' // Has active recurring donation
+  | 'first_donation'      // Made first donation
+  | 'cause_champion';     // Top donor to a specific cause
+
+export interface DonorBadge {
+  id: string;
+  userId: string;
+  badgeType: DonorBadgeType;
+  causeId?: string;  // For cause_champion badge
+  earnedAt: string;
+}
+
+// Donor Badge Display Info
+export interface DonorBadgeInfo {
+  type: DonorBadgeType;
+  label: string;
+  emoji: string;
+  color: string;
+  threshold?: number;  // Amount threshold for tier badges
+}
+
+export const DONOR_BADGE_INFO: Record<DonorBadgeType, DonorBadgeInfo> = {
+  first_donation: {
+    type: 'first_donation',
+    label: 'First Donation',
+    emoji: '🌱',
+    color: '#4CAF50',
+  },
+  bronze_donor: {
+    type: 'bronze_donor',
+    label: 'Bronze Donor',
+    emoji: '🥉',
+    color: '#CD7F32',
+    threshold: 1000,
+  },
+  silver_donor: {
+    type: 'silver_donor',
+    label: 'Silver Donor',
+    emoji: '🥈',
+    color: '#C0C0C0',
+    threshold: 5000,
+  },
+  gold_donor: {
+    type: 'gold_donor',
+    label: 'Gold Donor',
+    emoji: '🥇',
+    color: '#FFD700',
+    threshold: 10000,
+  },
+  platinum_donor: {
+    type: 'platinum_donor',
+    label: 'Platinum Donor',
+    emoji: '💎',
+    color: '#E5E4E2',
+    threshold: 25000,
+  },
+  champion_donor: {
+    type: 'champion_donor',
+    label: 'Charitable Champion',
+    emoji: '🏆',
+    color: '#9C27B0',
+    threshold: 50000,
+  },
+  recurring_supporter: {
+    type: 'recurring_supporter',
+    label: 'Recurring Supporter',
+    emoji: '🔄',
+    color: '#2196F3',
+  },
+  cause_champion: {
+    type: 'cause_champion',
+    label: 'Cause Champion',
+    emoji: '⭐',
+    color: '#FF9800',
+  },
+};
+
+// Helper function to get highest donor badge
+export function getHighestDonorBadge(totalDonated: number): DonorBadgeInfo | null {
+  const tierBadges: DonorBadgeType[] = [
+    'champion_donor',
+    'platinum_donor', 
+    'gold_donor',
+    'silver_donor',
+    'bronze_donor',
+  ];
+  
+  for (const badgeType of tierBadges) {
+    const info = DONOR_BADGE_INFO[badgeType];
+    if (info.threshold && totalDonated >= info.threshold) {
+      return info;
+    }
+  }
+  return null;
+}
+
+
+// ==================== EVENT TYPES ====================
+
+export type EventCategory = 
+  | 'meetup'
+  | 'gala'
+  | 'fundraiser'
+  | 'workshop'
+  | 'celebration'
+  | 'networking'
+  | 'other';
+
+export type EventStatus = 'draft' | 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
+
+export interface Event {
+  id: string;
+  
+  // Basic Info
+  title: string;
+  description: string;
+  category: EventCategory;
+  imageUrl?: string;
+  
+  // Location
+  location: string;
+  locationAddress?: string;
+  latitude?: number;
+  longitude?: number;
+  mapLink?: string;
+  isVirtual: boolean;
+  virtualLink?: string;
+  
+  // Timing
+  eventDate: string;
+  startTime: string;
+  endTime?: string;
+  timezone: string;
+  
+  // Capacity & Registration
+  capacity?: number;
+  spotsRemaining?: number;
+  registrationRequired: boolean;
+  registrationDeadline?: string;
+  
+  // Pricing
+  isFree: boolean;
+  ticketPrice?: number;
+  currency: string;
+  paymentLink?: string;
+  
+  // Linked cause
+  causeId?: string;
+  cause?: Cause;  // Populated
+  
+  // Contact
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  
+  // Status
+  status: EventStatus;
+  isFeatured: boolean;
+  
+  // Admin
+  createdBy: string;
+  creator?: User;  // Populated
+  
+  // Timestamps
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type EventRegistrationStatus = 'registered' | 'attended' | 'cancelled' | 'no_show';
+
+export interface EventRegistration {
+  id: string;
+  
+  // References
+  eventId: string;
+  event?: Event;  // Populated
+  userId: string;
+  user?: User;    // Populated
+  
+  // Registration Details
+  status: EventRegistrationStatus;
+  ticketCount: number;
+  
+  // Payment (if paid event)
+  paymentStatus?: PaymentStatus;
+  transactionNumber?: string;
+  amountPaid?: number;
+  
+  // Timestamps
+  registeredAt: string;
+  cancelledAt?: string;
+  attendedAt?: string;
+}
+
+
+// ==================== UPDATE USER INTERFACE ====================
+// Add these fields to your existing User interface:
+
+/*
+  // Add to User interface:
+  totalDonated?: number;
+  donationCount?: number;
+  donorBadges?: DonorBadge[];
+*/
+
+
+// ==================== FORM TYPES ====================
+
+export interface CauseFormData {
+  title: string;
+  description: string;
+  category: CauseCategory;
+  goalAmount: number;
+  endDate?: string;
+  imageUrl?: string;
+  isDonationsPublic: boolean;
+  allowRecurring: boolean;
+  minimumDonation?: number;
+}
+
+export interface DonationFormData {
+  causeId: string;
+  amount: number;
+  donorName?: string;
+  donorEmail?: string;
+  isAnonymous: boolean;
+  message?: string;
+  isRecurring: boolean;
+  frequency?: RecurringFrequency;
+}
+
+export interface EventFormData {
+  title: string;
+  description: string;
+  category: EventCategory;
+  location: string;
+  locationAddress?: string;
+  isVirtual: boolean;
+  virtualLink?: string;
+  eventDate: string;
+  startTime: string;
+  endTime?: string;
+  capacity?: number;
+  registrationRequired: boolean;
+  registrationDeadline?: string;
+  isFree: boolean;
+  ticketPrice?: number;
+  causeId?: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  imageUrl?: string;
 }

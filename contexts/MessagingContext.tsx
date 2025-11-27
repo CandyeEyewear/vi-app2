@@ -14,13 +14,14 @@ interface MessagingContextType {
   loading: boolean;
   totalUnreadCount: number;
   getOrCreateConversation: (otherUserId: string) => Promise<ApiResponse<Conversation>>;
-  sendMessage: (conversationId: string, text: string) => Promise<ApiResponse<Message>>;
+  sendMessage: (conversationId: string, text: string, replyTo?: { id: string; senderId: string; senderName: string; text: string }, attachments?: { type: 'image' | 'video' | 'document'; url: string; filename?: string; thumbnail?: string }[]) => Promise<ApiResponse<Message>>;
   markAsRead: (conversationId: string) => Promise<void>;
   refreshConversations: () => Promise<void>;
   deleteConversation: (conversationId: string) => Promise<ApiResponse<void>>;
   setTypingStatus: (conversationId: string, isTyping: boolean) => Promise<void>;
   updateOnlineStatus: (isOnline: boolean) => Promise<void>;
   markMessageDelivered: (messageId: string) => Promise<void>;
+  deleteMessage: (messageId: string) => Promise<ApiResponse<void>>;
 }
 
 const MessagingContext = createContext<MessagingContextType | undefined>(undefined);
@@ -295,22 +296,55 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
 
   const sendMessage = async (
     conversationId: string,
-    text: string
+    text: string,
+    replyTo?: { id: string; senderId: string; senderName: string; text: string },
+    attachments?: { type: 'image' | 'video' | 'document'; url: string; filename?: string; thumbnail?: string }[]
   ): Promise<ApiResponse<Message>> => {
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }
 
     try {
+      // Build insert object - only include fields that exist in the database schema
+      // Store attachments and reply data in text field (temporary workaround until columns are added)
+      let messageText = text;
+      
+      // Store reply data in text field if present
+      if (replyTo?.id) {
+        const replyJson = JSON.stringify({
+          id: replyTo.id,
+          senderId: replyTo.senderId,
+          senderName: replyTo.senderName,
+          text: replyTo.text,
+        });
+        messageText = messageText 
+          ? `${messageText}\n__REPLY_TO__:${replyJson}`
+          : `__REPLY_TO__:${replyJson}`;
+      }
+      
+      // Store attachments in text field if present
+      if (attachments && attachments.length > 0) {
+        const attachmentsJson = JSON.stringify(attachments);
+        // Store attachments with a special marker so we can parse them back
+        messageText = messageText 
+          ? `${messageText}\n__ATTACHMENTS__:${attachmentsJson}`
+          : `__ATTACHMENTS__:${attachmentsJson}`;
+      }
+      
+      const insertData: any = {
+        conversation_id: conversationId,
+        sender_id: user.id,
+        text: messageText,
+        read: false,
+      };
+      
+      // Note: 'status' column may not exist - if insert fails, you may need to remove this
+      // or add the column to your database schema
+      insertData.status = 'sent';
+
       const { data, error } = await supabase
         .from('messages')
-        .insert({
-          conversation_id: conversationId,
-          sender_id: user.id,
-          text,
-          read: false,
-          status: 'sent',
-        })
+        .insert(insertData)
         .select()
         .single();
 
@@ -386,13 +420,91 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   }
 }
 
+      // Use provided reply data or fetch if needed
+      let replyToData: Message['replyTo'] = undefined;
+      if (replyTo) {
+        // Use the provided reply data
+        replyToData = replyTo;
+      } else if (data.reply_to_message_id) {
+        // Fallback: fetch reply data if not provided
+        const { data: replyData } = await supabase
+          .from('messages')
+          .select('id, sender_id, text')
+          .eq('id', data.reply_to_message_id)
+          .single();
+        
+        if (replyData) {
+          // Get sender name
+          const { data: senderData } = await supabase
+            .from('users')
+            .select('full_name')
+            .eq('id', replyData.sender_id)
+            .single();
+          
+          replyToData = {
+            id: replyData.id,
+            senderId: replyData.sender_id,
+            senderName: senderData?.full_name || 'User',
+            text: replyData.text,
+          };
+        }
+      }
+
+      // Parse attachments and reply data from text field if they exist
+      let parsedMessageText = data.text;
+      let parsedAttachments: Message['attachments'] = undefined;
+      let parsedReplyTo: Message['replyTo'] = undefined;
+      
+      // Parse reply data first (it comes before attachments in the text)
+      if (parsedMessageText && parsedMessageText.includes('__REPLY_TO__:')) {
+        const replyParts = parsedMessageText.split('__REPLY_TO__:');
+        parsedMessageText = replyParts[0].trim();
+        try {
+          // Extract reply JSON (everything until __ATTACHMENTS__: or end of string)
+          const replyJson = replyParts[1].includes('__ATTACHMENTS__:')
+            ? replyParts[1].split('__ATTACHMENTS__:')[0]
+            : replyParts[1];
+          const replyData = JSON.parse(replyJson);
+          parsedReplyTo = {
+            id: replyData.id,
+            senderId: replyData.senderId,
+            senderName: replyData.senderName,
+            text: replyData.text,
+          };
+        } catch (e) {
+          console.error('Error parsing reply data from message text:', e);
+        }
+      }
+      
+      // Parse attachments (after reply data)
+      if (parsedMessageText && parsedMessageText.includes('__ATTACHMENTS__:')) {
+        const parts = parsedMessageText.split('__ATTACHMENTS__:');
+        parsedMessageText = parts[0].trim();
+        try {
+          parsedAttachments = JSON.parse(parts[1]);
+        } catch (e) {
+          console.error('Error parsing attachments from message text:', e);
+        }
+      }
+      
+      // Use provided data if available (for immediate display), otherwise use parsed
+      const finalAttachments = attachments || parsedAttachments;
+      const finalReplyTo = replyTo ? {
+        id: replyTo.id,
+        senderId: replyTo.senderId,
+        senderName: replyTo.senderName,
+        text: replyTo.text,
+      } : parsedReplyTo;
+
       const message: Message = {
         id: data.id,
         conversationId: data.conversation_id,
         senderId: data.sender_id,
-        text: data.text,
+        text: parsedMessageText,
         read: data.read,
         status: data.status || 'sent',
+        replyTo: finalReplyTo || replyToData,
+        attachments: finalAttachments,
         createdAt: data.created_at,
       };
 
@@ -510,6 +622,53 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const deleteMessage = async (messageId: string): Promise<ApiResponse<void>> => {
+    if (!user) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    try {
+      const { data: message, error: fetchError } = await supabase
+        .from('messages')
+        .select('sender_id, created_at')
+        .eq('id', messageId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      const isOwner = message.sender_id === user.id;
+
+      // Only sender can delete their own messages
+      if (!isOwner) {
+        return { success: false, error: 'You can only delete your own messages' };
+      }
+
+      // Optional: Check if message is less than 1 hour old
+      const messageAge = Date.now() - new Date(message.created_at).getTime();
+      const oneHour = 60 * 60 * 1000;
+      
+      if (messageAge > oneHour) {
+        return { success: false, error: 'You can only delete messages within 1 hour of sending' };
+      }
+
+      // Soft delete
+      const { error: deleteError } = await supabase
+        .from('messages')
+        .update({ 
+          deleted_at: new Date().toISOString(),
+          text: 'This message was deleted'
+        })
+        .eq('id', messageId);
+
+      if (deleteError) throw deleteError;
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error deleting message:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
   return (
     <MessagingContext.Provider
       value={{
@@ -524,6 +683,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         setTypingStatus,
         updateOnlineStatus,
         markMessageDelivered,
+        deleteMessage,
       }}
     >
       {children}

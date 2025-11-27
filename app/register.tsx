@@ -68,7 +68,7 @@ export default function RegisterScreen() {
   // Redirect if already logged in
   useEffect(() => {
     if (!authLoading && user) {
-      router.replace('/(tabs)/feed');
+      router.replace('/feed' as any);
     }
   }, [user, authLoading, router]);
 
@@ -180,7 +180,7 @@ export default function RegisterScreen() {
         // Small delay to show success message, then navigate
         // The AuthContext has already set the user, so app/index.tsx will handle redirect
         setTimeout(() => {
-          router.replace('/(tabs)/feed');
+          router.replace('/feed' as any);
         }, 1500);
       }
     } catch (error: any) {

@@ -20,6 +20,7 @@ interface AuthContextType {
   updateProfile: (updates: Partial<User>) => Promise<ApiResponse<User>>;
   forgotPassword: (email: string) => Promise<ApiResponse<void>>;
   resetPassword: (newPassword: string) => Promise<ApiResponse<void>>;
+  refreshUser: () => Promise<void>;
   isAdmin: boolean;
 }
 
@@ -151,6 +152,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         avatarUrl: profileData.avatar_url,
         dateOfBirth: profileData.date_of_birth,
         role: profileData.role,
+        membershipTier: profileData.membership_tier || 'free',
+        membershipStatus: profileData.membership_status || 'inactive',
         isPrivate: profileData.is_private,
         totalHours: profileData.total_hours,
         activitiesCompleted: profileData.activities_completed,
@@ -163,6 +166,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Cache the user data (5 minutes TTL)
       cache.set(cacheKey, userData, 5 * 60 * 1000);
       console.log('[AUTH] 💾 User profile cached');
+      console.log('[AUTH] 📊 Membership status:', {
+        tier: userData.membershipTier,
+        status: userData.membershipStatus,
+      });
 
       console.log('[AUTH] 📦 User data transformed successfully');
       setUser(userData);
@@ -740,6 +747,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Refresh user profile from database
+  const refreshUser = async () => {
+    if (!user) {
+      console.log('[AUTH] ⚠️ Cannot refresh: no user');
+      return;
+    }
+    
+    console.log('[AUTH] 🔄 Refreshing user profile...');
+    console.log('[AUTH] User ID:', user.id);
+    
+    // Clear cache to force fresh load
+    const cacheKey = CacheKeys.userProfile(user.id);
+    cache.delete(cacheKey);
+    console.log('[AUTH] ✅ Cache cleared');
+    
+    // Reload profile - this will fetch fresh data from database
+    await loadUserProfile(user.id);
+    console.log('[AUTH] ✅ User profile refreshed');
+  };
+
   const isAdmin = user?.role === 'admin';
 
   return (
@@ -753,6 +780,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         updateProfile,
         forgotPassword,
         resetPassword,
+        refreshUser,
         isAdmin,
       }}
     >

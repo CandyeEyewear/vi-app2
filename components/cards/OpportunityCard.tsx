@@ -12,10 +12,40 @@ import { useFeed } from '../../contexts/FeedContext';
 import ShareOpportunityModal from '../ShareOpportunityModal';
 
 interface OpportunityCardProps {
-  opportunity: Opportunity;
+  opportunity: Opportunity & {
+    highlightedTitle?: string;
+    highlightedDescription?: string;
+  };
   onPress: (opportunity: Opportunity) => void;
   onShare?: (opportunity: Opportunity) => void;
 }
+
+/**
+ * Render text with highlighted search terms
+ * Highlighted terms are marked with **text**
+ */
+const renderHighlightedText = (text: string, color: string, style: any, numberOfLines?: number) => {
+  if (!text.includes('**')) {
+    return <Text style={[style, { color }]} numberOfLines={numberOfLines}>{text}</Text>;
+  }
+
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  return (
+    <Text style={[style, { color }]} numberOfLines={numberOfLines}>
+      {parts.map((part, index) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          const highlightedText = part.slice(2, -2);
+          return (
+            <Text key={index} style={{ backgroundColor: '#FFEB3B', fontWeight: '700' }}>
+              {highlightedText}
+            </Text>
+          );
+        }
+        return <Text key={index}>{part}</Text>;
+      })}
+    </Text>
+  );
+};
 
 export function OpportunityCard({ opportunity, onPress, onShare }: OpportunityCardProps) {
   const colorScheme = useColorScheme() ?? 'light';
@@ -91,9 +121,12 @@ export function OpportunityCard({ opportunity, onPress, onShare }: OpportunityCa
             </View>
           </View>
 
-        <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>
-          {opportunity.title}
-        </Text>
+        {renderHighlightedText(
+          opportunity.highlightedTitle || opportunity.title,
+          colors.text,
+          styles.title,
+          2
+        )}
 
         <View style={styles.orgContainer}>
           <Text style={[styles.orgName, { color: colors.textSecondary }]}>
@@ -131,6 +164,19 @@ export function OpportunityCard({ opportunity, onPress, onShare }: OpportunityCa
             </Text>
           </View>
         </View>
+
+        {/* Distance Badge */}
+        {opportunity.distance !== undefined && (
+          <View style={styles.distanceBadge}>
+            <MapPin size={12} color="#1976D2" />
+            <Text style={styles.distanceText}>
+              {opportunity.distance < 1 
+                ? `${(opportunity.distance * 5280).toFixed(0)} ft away`
+                : `${opportunity.distance.toFixed(1)} mi away`
+              }
+            </Text>
+          </View>
+        )}
 
         <View style={styles.footer}>
           <View style={styles.detailRow}>
@@ -277,6 +323,22 @@ const styles = StyleSheet.create({
   },
   date: {
     fontSize: 15,
+    fontWeight: '600',
+  },
+  distanceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E3F2FD',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginTop: 8,
+  },
+  distanceText: {
+    fontSize: 12,
+    color: '#1976D2',
+    marginLeft: 4,
     fontWeight: '600',
   },
 });

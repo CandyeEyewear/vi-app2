@@ -18,7 +18,10 @@ import {
   Image,
   useColorScheme,
   Alert,
+  Platform,
+  useWindowDimensions,
 } from 'react-native';
+import WebContainer from '../../components/WebContainer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Plus, Search, Camera, Image as ImageIcon } from 'lucide-react-native';
@@ -41,6 +44,8 @@ export default function FeedScreen() {
   const colors = Colors[colorScheme];
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width >= 992;
   const { user } = useAuth();
   const { posts, loading, createPost, refreshFeed } = useFeed();
   
@@ -425,13 +430,14 @@ const renderTabs = () => (
      </View>
    );
 
-  return (
+   return (
     <View style={[styles.container, { backgroundColor: colors.card }]}>
-      {renderHeader()}
-      {renderTabs()}
-      
-      <FlatList
-        data={sortedPosts}
+      {!isDesktop && renderHeader()}
+      <WebContainer>
+        {renderTabs()}
+        
+        <FlatList
+          data={sortedPosts}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <FeedPostCard post={item} />}
         contentContainerStyle={styles.listContent}
@@ -455,10 +461,17 @@ const renderTabs = () => (
           )
         }
       />
+</WebContainer>
 
       {/* Floating Add Button */}
       <TouchableOpacity
-        style={[styles.floatingButton, { backgroundColor: colors.primary }]}
+        style={[
+          styles.floatingButton, 
+          { 
+            backgroundColor: colors.primary,
+            right: isDesktop ? (width - 680) / 2 + 24 : 24,
+          }
+        ]}
         onPress={() => setShowCreateModal(true)}
         activeOpacity={0.8}
       >

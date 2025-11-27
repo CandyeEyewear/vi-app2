@@ -116,7 +116,7 @@ function ErrorFallback({ error, errorInfo, onReset }: ErrorFallbackProps) {
 
   const handleGoHome = () => {
     onReset();
-    router.replace('/(tabs)/feed');
+    router.replace('/feed' as any);
   };
 
   return (

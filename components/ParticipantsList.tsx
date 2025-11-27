@@ -7,7 +7,6 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
-  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { CheckCircle, XCircle, Clock, User, Mail } from 'lucide-react-native';
@@ -15,6 +14,7 @@ import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
 import CustomAlert from './CustomAlert';
+import { AvatarWithBadge, UserNameWithBadge } from './index';
 import type { OpportunitySignupWithCheckIn, CheckInStats } from '../types';
 
 interface ParticipantsListProps {
@@ -122,7 +122,10 @@ export default function ParticipantsList({
             full_name,
             email,
             avatar_url,
-            phone
+            phone,
+            role,
+            membership_tier,
+            membership_status
           )
         `)
         .eq('opportunity_id', opportunityId)
@@ -269,18 +272,26 @@ export default function ParticipantsList({
       <View style={styles.participantCard}>
         <View style={styles.participantHeader}>
           <View style={styles.participantInfo}>
-            {user.avatar_url ? (
-              <Image source={{ uri: user.avatar_url }} style={styles.avatar} />
-            ) : (
-              <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                <User size={24} color={Colors.light.textSecondary} />
-              </View>
-            )}
+            <AvatarWithBadge
+              uri={user.avatar_url || null}
+              name={user.full_name}
+              size={50}
+              role={user.role || 'volunteer'}
+              membershipTier={user.membership_tier || 'free'}
+              membershipStatus={user.membership_status || 'inactive'}
+            />
             
             <View style={styles.participantDetails}>
               {/* ✅ FIXED: Made name clickable */}
               <TouchableOpacity onPress={() => router.push(`/profile/${user.id}`)}>
-                <Text style={styles.participantName}>{user.full_name}</Text>
+                <UserNameWithBadge
+                  name={user.full_name}
+                  role={user.role || 'volunteer'}
+                  membershipTier={user.membership_tier || 'free'}
+                  membershipStatus={user.membership_status || 'inactive'}
+                  style={styles.participantName}
+                  badgeSize={16}
+                />
               </TouchableOpacity>
               {isAdmin && (
                 <View style={styles.contactInfo}>

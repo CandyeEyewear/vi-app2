@@ -18,7 +18,10 @@ import {
   Dimensions,
   Keyboard,
   Share,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { Heart, MessageCircle, Share2, Trash2, Megaphone, Pin, Flag } from 'lucide-react-native';
 import { Post } from '../../types';
 import { Colors } from '../../constants/colors';
@@ -36,6 +39,7 @@ import SharedOpportunityCard from '../SharedOpportunityCard';
 import ImageCollage from '../ImageCollage';
 import VideoPlayer from '../VideoPlayer';
 import LinkText from '../LinkText';
+import { AvatarWithBadge, UserNameWithBadge } from '../index';
 
 const { width } = Dimensions.get('window');
 
@@ -46,6 +50,7 @@ interface FeedPostCardProps {
 export default function FeedPostCard({ post }: FeedPostCardProps) {
   const { user, isAdmin } = useAuth();
   const { likePost, unlikePost, addComment, sharePost, shareToFeed, deletePost, addReaction } = useFeed();
+  const insets = useSafeAreaInsets();
   
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -65,6 +70,7 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
   const [showShareModal, setShowShareModal] = useState(false);
   const [showShareCommentModal, setShowShareCommentModal] = useState(false);
   const [postToShare, setPostToShare] = useState<Post | null>(null);
+  const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
 
   const isLiked = user ? post.likes.includes(user.id) : false;
   const canDelete = user && (isAdmin || post.userId === user.id);
@@ -236,22 +242,27 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
           onPress={() => handleUserTap(post.user.id, post.user.fullName)}
           activeOpacity={0.7}
         >
-          {post.user.avatarUrl ? (
-            <Image source={{ uri: post.user.avatarUrl }} style={styles.avatar} />
-          ) : (
-            <View style={[styles.avatar, styles.avatarPlaceholder]}>
-              <Text style={styles.avatarText}>
-                {post.user.fullName.charAt(0).toUpperCase()}
-              </Text>
-            </View>
-          )}
+          <AvatarWithBadge
+            uri={post.user.avatarUrl || null}
+            name={post.user.fullName}
+            size={40}
+            role={post.user.role || 'volunteer'}
+            membershipTier={post.user.membershipTier || 'free'}
+            membershipStatus={post.user.membershipStatus || 'inactive'}
+          />
         </TouchableOpacity>
         <TouchableOpacity 
           style={styles.headerInfo}
           onPress={() => handleUserTap(post.user.id, post.user.fullName)}
           activeOpacity={0.7}
         >
-          <Text style={styles.userName}>{post.user.fullName}</Text>
+          <UserNameWithBadge
+            name={post.user.fullName}
+            role={post.user.role || 'volunteer'}
+            membershipTier={post.user.membershipTier || 'free'}
+            membershipStatus={post.user.membershipStatus || 'inactive'}
+            style={styles.userName}
+          />
           <Text style={styles.timestamp}>{formatTimeAgo(post.createdAt)}</Text>
         </TouchableOpacity>
         {isPinned && (
@@ -280,7 +291,7 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
         </View>
       )}
 
-      {/* Content */}
+      {/* Content - Text Only (username already in header) */}
       <LinkText text={post.text} style={styles.text} />
 
       {/* NEW: Render Shared Post if this is a share */}
@@ -325,50 +336,98 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
         </View>
       )}
 
-      {/* Stats - Hidden for announcements */}
+      {/* Action Icons Row - Instagram Style */}
       {!isAnnouncement && (
-        <View style={styles.stats}>
-          <Text style={styles.statText}>
-            {post.likes.length} {post.likes.length === 1 ? 'like' : 'likes'}
-          </Text>
-          <Text style={styles.statText}>
-            {post.comments.length} {post.comments.length === 1 ? 'comment' : 'comments'}
-          </Text>
-          <Text style={styles.statText}>
-            {post.shares} {post.shares === 1 ? 'share' : 'shares'}
+        <View style={styles.actionIconsRow}>
+          <View style={styles.actionIconsLeft}>
+            <TouchableOpacity onPress={handleLike} style={styles.actionIcon}>
+              <Heart 
+                size={24} 
+                color={isLiked ? Colors.light.primary : Colors.light.textSecondary}
+                fill={isLiked ? Colors.light.primary : 'none'}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleComment} style={styles.actionIcon}>
+              <MessageCircle size={24} color={Colors.light.textSecondary} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleShare} style={styles.actionIcon}>
+              <Share2 size={24} color={Colors.light.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Like Count */}
+      {!isAnnouncement && post.likes.length > 0 && (
+        <View style={styles.likeCountContainer}>
+          <Text style={styles.likeCount}>
+            {post.likes.length.toLocaleString()} {post.likes.length === 1 ? 'like' : 'likes'}
           </Text>
         </View>
       )}
 
-      {/* Actions - Hidden for announcements */}
-      {!isAnnouncement && (
-        <>
-          <View style={styles.actions}>
-            {/* OLD LIKE BUTTON - Keep for backward compatibility */}
+      {/* Comments Section - Instagram Style (Show last comment with "more" option) */}
+      {!isAnnouncement && post.comments.length > 0 && (
+        <View style={styles.commentsContainer}>
+          {/* Show "View all X comments" if more than 1 comment */}
+          {post.comments.length > 1 && (
             <TouchableOpacity
-              onPress={handleLike}
-              style={styles.actionButton}
+              onPress={handleComment}
+              style={styles.viewAllComments}
             >
-              <Heart 
-                size={22} 
-                color={isLiked ? Colors.light.primary : Colors.light.textSecondary}
-                fill={isLiked ? Colors.light.primary : 'transparent'}
-              />
-              <Text style={[styles.actionText, isLiked && styles.actionTextActive]}>Like</Text>
+              <Text style={styles.viewAllCommentsText}>
+                View all {post.comments.length} comments
+              </Text>
             </TouchableOpacity>
-
-            <TouchableOpacity onPress={handleComment} style={styles.actionButton}>
-              <MessageCircle size={22} color={Colors.light.textSecondary} />
-              <Text style={styles.actionText}>Comment</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={handleShare} style={styles.actionButton}>
-              <Share2 size={22} color={Colors.light.textSecondary} />
-              <Text style={styles.actionText}>Share</Text>
-            </TouchableOpacity>
-          </View>
+          )}
+          
+          {/* Show last comment with "more" option if long */}
+          {(() => {
+            const lastComment = post.comments[post.comments.length - 1];
+            const commentId = lastComment.id;
+            const isExpanded = expandedComments[commentId] || false;
+            const MAX_COMMENT_LENGTH = 100;
+            const isLongComment = lastComment.text.length > MAX_COMMENT_LENGTH;
+            const displayText = isExpanded || !isLongComment 
+              ? lastComment.text 
+              : lastComment.text.substring(0, MAX_COMMENT_LENGTH) + '...';
+            
+            return (
+              <View key={lastComment.id} style={styles.commentItem}>
+                <View style={styles.commentContent}>
+                  <TouchableOpacity
+                    onPress={() => handleCommentUserTap(lastComment.user.id, lastComment.user.fullName)}
+                    activeOpacity={0.7}
+                    style={styles.commentUsernameContainer}
+                  >
+                    <UserNameWithBadge
+                      name={lastComment.user.fullName}
+                      role={lastComment.user.role || 'volunteer'}
+                      membershipTier={lastComment.user.membershipTier || 'free'}
+                      style={styles.commentUsername}
+                      badgeSize={14}
+                    />
+                  </TouchableOpacity>
+                  <View style={styles.commentTextContainer}>
+                    <Text style={styles.commentText}>{displayText}</Text>
+                    {isLongComment && !isExpanded && (
+                      <TouchableOpacity
+                        onPress={() => setExpandedComments(prev => ({ ...prev, [commentId]: true }))}
+                        style={styles.moreButton}
+                      >
+                        <Text style={styles.moreText}>more</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              </View>
+            );
+          })()}
+        </View>
+      )}
 
           {/* ✨ REACTION BAR */}
+      {!isAnnouncement && (
           <View style={styles.reactionBarContainer}>
             <ReactionBar
               reactionSummary={post.reactionSummary || {
@@ -385,97 +444,139 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
               }}
             />
           </View>
-        </>
       )}
 
-      {/* Comments ONLY in modal - not in feed */}
+      {/* Comments Modal - For full comment view */}
 
-      {/* Comment Modal */}
+      {/* Comment Modal - Facebook-style with proper keyboard handling */}
       <Modal
         visible={showCommentModal}
         animationType="slide"
         transparent
-        onRequestClose={() => setShowCommentModal(false)}
+        onRequestClose={() => {
+          Keyboard.dismiss();
+          setShowCommentModal(false);
+        }}
       >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Comments</Text>
-              <TouchableOpacity onPress={() => setShowCommentModal(false)}>
-                <Text style={styles.modalClose}>×</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalCommentsList}>
-              {post.comments.map((comment) => {
-                const isOwnComment = user && comment.userId === user.id;
-                return (
-                  <View 
-                    key={comment.id}
-                    style={[
-                      styles.modalCommentBubbleContainer,
-                      isOwnComment && styles.modalCommentBubbleContainerOwn
-                    ]}
+        <SafeAreaView style={styles.modalSafeArea} edges={['top']}>
+          <KeyboardAvoidingView
+            style={styles.modalKeyboardAvoid}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+          >
+            <View style={styles.modalContainer}>
+              <View style={styles.modalContent}>
+                {/* Header - Fixed at top */}
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Comments</Text>
+                  <TouchableOpacity 
+                    onPress={() => {
+                      Keyboard.dismiss();
+                      setShowCommentModal(false);
+                    }}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
-                    <TouchableOpacity
-                      onPress={() => {
-                        setShowCommentModal(false);
-                        handleCommentUserTap(comment.user.id, comment.user.fullName);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <View style={[
-                        styles.modalCommentBubble,
-                        isOwnComment && styles.modalCommentBubbleOwn
-                      ]}>
-                        <View style={styles.modalCommentHeader}>
-                          <Text style={[
-                            styles.modalCommentUser,
-                            isOwnComment && styles.modalCommentUserOwn
+                    <Text style={styles.modalClose}>×</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Scrollable Comments List */}
+                <ScrollView 
+                  style={styles.modalCommentsList}
+                  contentContainerStyle={styles.modalCommentsListContent}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode="interactive"
+                  showsVerticalScrollIndicator={true}
+                >
+                  {post.comments.map((comment) => {
+                    const isOwnComment = user && comment.userId === user.id;
+                    return (
+                      <View 
+                        key={comment.id}
+                        style={[
+                          styles.modalCommentBubbleContainer,
+                          isOwnComment && styles.modalCommentBubbleContainerOwn
+                        ]}
+                      >
+                        <TouchableOpacity
+                          onPress={() => {
+                            setShowCommentModal(false);
+                            handleCommentUserTap(comment.user.id, comment.user.fullName);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <View style={[
+                            styles.modalCommentBubble,
+                            isOwnComment && styles.modalCommentBubbleOwn
                           ]}>
-                            {comment.user.fullName}
-                          </Text>
-                          <Text style={[
-                            styles.modalCommentTime,
-                            isOwnComment && styles.modalCommentTimeOwn
-                          ]}>
-                            {formatTimeAgo(comment.createdAt)}
-                          </Text>
-                        </View>
-                        <LinkText
-                          text={comment.text}
-                          style={[
-                            styles.modalCommentText,
-                            isOwnComment && styles.modalCommentTextOwn
-                          ]}
-                        />
+                            <View style={styles.modalCommentHeader}>
+                              <UserNameWithBadge
+                                name={comment.user.fullName}
+                                role={comment.user.role || 'volunteer'}
+                                membershipTier={comment.user.membershipTier || 'free'}
+                                style={[
+                                styles.modalCommentUser,
+                                isOwnComment && styles.modalCommentUserOwn
+                                ]}
+                                badgeSize={14}
+                              />
+                              <Text style={[
+                                styles.modalCommentTime,
+                                isOwnComment && styles.modalCommentTimeOwn
+                              ]}>
+                                {formatTimeAgo(comment.createdAt)}
+                              </Text>
+                            </View>
+                            <LinkText
+                              text={comment.text}
+                              style={[
+                                styles.modalCommentText,
+                                isOwnComment && styles.modalCommentTextOwn
+                              ]}
+                            />
+                          </View>
+                        </TouchableOpacity>
                       </View>
+                    );
+                  })}
+                </ScrollView>
+
+                {/* Input Container - Fixed at bottom, above keyboard and nav bar */}
+                <SafeAreaView edges={['bottom']} style={styles.modalInputSafeArea}>
+                  <View style={[
+                    styles.modalInput,
+                    {
+                      paddingBottom: Math.max(insets.bottom, 8),
+                      paddingTop: 8,
+                    }
+                  ]}>
+                    <TextInput
+                      style={styles.commentInput}
+                      placeholder="Write a comment..."
+                      placeholderTextColor={Colors.light.textSecondary}
+                      value={commentText}
+                      onChangeText={setCommentText}
+                      multiline
+                      maxLength={500}
+                      textAlignVertical="center"
+                      onSubmitEditing={handleSubmitComment}
+                      returnKeyType="default"
+                      blurOnSubmit={false}
+                    />
+                    <TouchableOpacity
+                      style={[styles.sendButton, (!commentText.trim() || submitting) && styles.sendButtonDisabled]}
+                      onPress={handleSubmitComment}
+                      disabled={!commentText.trim() || submitting}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Text style={styles.sendButtonText}>Send</Text>
                     </TouchableOpacity>
                   </View>
-                );
-              })}
-            </ScrollView>
-
-            <View style={styles.modalInput}>
-              <TextInput
-                style={styles.commentInput}
-                placeholder="Write a comment..."
-                placeholderTextColor={Colors.light.textSecondary}
-                value={commentText}
-                onChangeText={setCommentText}
-                multiline
-                onSubmitEditing={handleSubmitComment}
-              />
-              <TouchableOpacity
-                style={[styles.sendButton, (!commentText.trim() || submitting) && styles.sendButtonDisabled]}
-                onPress={handleSubmitComment}
-                disabled={!commentText.trim() || submitting}
-              >
-                <Text style={styles.sendButtonText}>Send</Text>
-              </TouchableOpacity>
+                </SafeAreaView>
+              </View>
             </View>
-          </View>
-        </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
       </Modal>
 
       {/* Report Modal */}
@@ -707,62 +808,108 @@ const styles = StyleSheet.create({
   mediaContainer: {
     marginVertical: 8,
   },
-  stats: {
+  actionIconsRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: Colors.light.border,
   },
-  statText: {
+  actionIconsLeft: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  actionIcon: {
+    padding: 4,
+  },
+  likeCountContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  likeCount: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: Colors.light.text,
+  },
+  commentTextContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    flex: 1,
+  },
+  moreButton: {
+    marginLeft: 4,
+  },
+  moreText: {
     fontSize: 14,
     color: Colors.light.textSecondary,
-    marginRight: 16,
   },
-  actions: {
+  commentsContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  commentItem: {
+    marginBottom: 8,
+  },
+  commentContent: {
     flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: Colors.light.border,
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
   },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    gap: 6,
+  commentUsernameContainer: {
+    marginRight: 6,
   },
-  actionButtonActive: {
-    backgroundColor: Colors.light.card,
-  },
-  actionText: {
+  commentUsername: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.light.textSecondary,
   },
-  actionTextActive: {
-    color: Colors.light.primary,
+  commentTextContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    flex: 1,
+    alignItems: 'baseline',
+  },
+  commentText: {
+    fontSize: 14,
+    color: Colors.light.text,
+    flexShrink: 1,
+  },
+  viewAllComments: {
+    marginTop: 4,
+  },
+  viewAllCommentsText: {
+    fontSize: 14,
+    color: Colors.light.textSecondary,
   },
   reactionBarContainer: {
     paddingHorizontal: 16,
     paddingBottom: 8,
   },
-  modalContainer: {
+  modalSafeArea: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalKeyboardAvoid: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    flex: 1,
     justifyContent: 'flex-end',
   },
   modalContent: {
     backgroundColor: Colors.light.background,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '80%',
+    maxHeight: '90%',
+    flex: 1,
+    justifyContent: 'space-between',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: Colors.light.border,
   },
@@ -776,9 +923,12 @@ const styles = StyleSheet.create({
     color: Colors.light.textSecondary,
   },
   modalCommentsList: {
-    maxHeight: 400,
+    flex: 1,
     paddingHorizontal: 16,
+  },
+  modalCommentsListContent: {
     paddingVertical: 12,
+    flexGrow: 1,
   },
   modalCommentBubbleContainer: {
     marginBottom: 12,
@@ -830,22 +980,31 @@ const styles = StyleSheet.create({
   modalCommentTextOwn: {
     color: '#FFFFFF',
   },
-  modalInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
+  modalInputSafeArea: {
+    backgroundColor: Colors.light.background,
     borderTopWidth: 1,
     borderTopColor: Colors.light.border,
+  },
+  modalInput: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingHorizontal: 16,
+    gap: 12,
+    minHeight: 60,
   },
   commentInput: {
     flex: 1,
     backgroundColor: Colors.light.card,
     borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     fontSize: 14,
     color: Colors.light.text,
-    maxHeight: 80,
+    minHeight: 44,
+    maxHeight: 100,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+    textAlignVertical: 'center',
   },
   sendButton: {
     marginLeft: 8,

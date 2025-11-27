@@ -3,7 +3,7 @@
  * Form for volunteers to propose new volunteering opportunities
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -34,12 +34,14 @@ import {
   Link as LinkIcon,
 } from 'lucide-react-native';
 import { supabase } from '../services/supabase';
+import { geocodeLocation, GeocodeResult } from '../services/geocoding';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { File } from 'expo-file-system';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import CustomAlert from '../components/CustomAlert';
 import { sendNotificationToUser } from '../services/pushNotifications';
+import { MembershipFeatureScreen } from '../components/MembershipFeatureScreen';
 
 const CATEGORIES = [
   { value: 'environment', label: 'Environment' },
@@ -55,7 +57,11 @@ export default function ProposeOpportunityScreen() {
   const colors = Colors[colorScheme];
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
+
+  // Check if user has premium membership or is admin
+  const isPremium = user?.membershipTier === 'premium';
+  const hasAccess = isPremium || isAdmin;
 
   // Form state
   const [title, setTitle] = useState('');
@@ -114,6 +120,14 @@ export default function ProposeOpportunityScreen() {
   });
   const [isOnline, setIsOnline] = useState(true);
 
+  // Geocoding state
+  const [geocodingLocation, setGeocodingLocation] = useState<GeocodeResult | null>(null);
+  const [isGeocodingLocation, setIsGeocodingLocation] = useState(false);
+  const [manualLatitude, setManualLatitude] = useState('');
+  const [manualLongitude, setManualLongitude] = useState('');
+  const [locationSuggestions, setLocationSuggestions] = useState<any[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
   const showAlert = (title: string, message: string, type: 'success' | 'error' | 'warning' = 'success') => {
     setAlertConfig({ title, message, type });
     setAlertVisible(true);
@@ -130,11 +144,105 @@ export default function ProposeOpportunityScreen() {
     }
   };
 
+  // Debounced geocoding with suggestions
+  const geocodeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleLocationChange = (text: string) => {
+    setLocation(text);
+    
+    // Clear previous timeout
+    if (geocodeTimeoutRef.current) {
+      clearTimeout(geocodeTimeoutRef.current);
+    }
+    
+    // Only geocode if location has at least 3 characters
+    if (text.trim().length < 3) {
+      setGeocodingLocation(null);
+      setLocationSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    // Keep keyboard open for 1000ms or until user presses Enter
+    setShowSuggestions(true);
+    
+    // Set new timeout - geocode only after user stops typing (500ms)
+    geocodeTimeoutRef.current = setTimeout(async () => {
+      setIsGeocodingLocation(true);
+      try {
+        const result = await geocodeLocation(text);
+        setGeocodingLocation(result);
+        
+        if (result.success) {
+          // Show suggestion for user to confirm
+          setLocationSuggestions([{
+            formattedAddress: result.formattedAddress,
+            latitude: result.latitude,
+            longitude: result.longitude,
+          }]);
+          setShowSuggestions(true);
+          
+          console.log('[PROPOSE_OPP] 📍 Geocoding result:', {
+            location: result.formattedAddress,
+            latitude: result.latitude,
+            longitude: result.longitude,
+          });
+        } else {
+          setLocationSuggestions([]);
+          setShowSuggestions(false);
+        }
+      } finally {
+        setIsGeocodingLocation(false);
+      }
+    }, 500);
+  };
+
+  const handleSelectLocation = (suggestion: any) => {
+    // User clicked on a suggestion - populate the fields
+    setLocation(suggestion.formattedAddress);
+    setManualLatitude(suggestion.latitude.toString());
+    setManualLongitude(suggestion.longitude.toString());
+    
+    // Auto-populate mapLink with Google Maps URL
+    const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${suggestion.latitude},${suggestion.longitude}`;
+    setMapLink(googleMapsUrl);
+    
+    setGeocodingLocation({
+      success: true,
+      latitude: suggestion.latitude,
+      longitude: suggestion.longitude,
+      formattedAddress: suggestion.formattedAddress,
+    });
+    setShowSuggestions(false);
+    
+    console.log('[PROPOSE_OPP] 📍 Location confirmed:', {
+      location: suggestion.formattedAddress,
+      latitude: suggestion.latitude,
+      longitude: suggestion.longitude,
+      mapLink: googleMapsUrl,
+    });
+  };
+
+  const handleLocationKeyPress = (e: any) => {
+    if (e.nativeEvent.key === 'Enter') {
+      setShowSuggestions(false);
+    }
+  };
+
   useEffect(() => {
     checkNetworkStatus();
     // Check network status periodically
     const interval = setInterval(checkNetworkStatus, 30000); // Every 30 seconds
     return () => clearInterval(interval);
+  }, []);
+
+  // Cleanup timeout on component unmount
+  useEffect(() => {
+    return () => {
+      if (geocodeTimeoutRef.current) {
+        clearTimeout(geocodeTimeoutRef.current);
+      }
+    };
   }, []);
 
   // Helper function to get user-friendly error messages
@@ -190,8 +298,7 @@ export default function ProposeOpportunityScreen() {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [16, 9],
+        allowsEditing: false,
         quality: 0.8,
       });
 
@@ -423,6 +530,16 @@ export default function ProposeOpportunityScreen() {
         throw new Error('You must be logged in to create an opportunity. Please log in and try again.');
       }
 
+      // Validate geocoding was successful
+      if (!geocodingLocation || !geocodingLocation.success) {
+        showAlert(
+          'Location Error',
+          'Please enter a valid location and wait for coordinates to be found.',
+          'error'
+        );
+        return;
+      }
+
       // Create opportunity
       const { data, error } = await supabase
         .from('opportunities')
@@ -433,6 +550,8 @@ export default function ProposeOpportunityScreen() {
           category,
           description: description.trim(),
           location: location.trim(),
+          latitude: geocodingLocation.latitude,
+          longitude: geocodingLocation.longitude,
           map_link: mapLink.trim() || null,
           date_start: startDate.toISOString(),
           date_end: endDate.toISOString(),
@@ -564,6 +683,23 @@ export default function ProposeOpportunityScreen() {
     }
   };
 
+  // Membership restriction check - show restriction screen if user doesn't have access
+  if (!hasAccess) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        {/* Header */}
+        <View style={[styles.header, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ChevronLeft size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Propose Opportunity</Text>
+          <View style={styles.backButton} />
+        </View>
+        <MembershipFeatureScreen showHeader={false} onBack={() => router.back()} />
+      </View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -671,21 +807,109 @@ export default function ProposeOpportunityScreen() {
           />
         </View>
 
-        {/* Location */}
+        {/* Location Field */}
         <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.text }]}>
-            Location <Text style={{ color: colors.error }}>*</Text>
-          </Text>
+          <Text style={[styles.label, { color: colors.text }]}>Location *</Text>
           <View style={styles.iconInput}>
-            <MapPin size={20} color={colors.textSecondary} />
+            <MapPin size={20} color={colors.text} />
             <TextInput
-              style={[styles.inputWithIcon, { color: colors.text }]}
+              placeholder="e.g., Kingston, Jamaica"
               value={location}
-              onChangeText={setLocation}
-              placeholder="e.g., Hellshire Beach, St. Catherine"
-              placeholderTextColor={colors.textSecondary}
+              onChangeText={handleLocationChange}
+              onSubmitEditing={handleLocationKeyPress}
+              style={[styles.inputWithIcon, { color: colors.text }]}
+              editable={!isGeocodingLocation}
+              returnKeyType="done"
             />
           </View>
+          
+          {/* Geocoding Status */}
+          {isGeocodingLocation && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 6 }}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={{ fontSize: 13, color: colors.text }}>Finding locations...</Text>
+            </View>
+          )}
+          
+          {/* Location Suggestions */}
+          {showSuggestions && locationSuggestions.length > 0 && (
+            <View style={{ 
+              marginTop: 8, 
+              borderWidth: 1, 
+              borderColor: colors.border,
+              borderRadius: 8,
+              backgroundColor: colors.card,
+              overflow: 'hidden'
+            }}>
+              <Text style={{ 
+                fontSize: 12, 
+                fontWeight: '600', 
+                padding: 8,
+                paddingBottom: 4,
+                color: colors.text 
+              }}>
+                Select a location:
+              </Text>
+              {locationSuggestions.map((suggestion, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={{
+                    padding: 12,
+                    borderTopWidth: index > 0 ? 1 : 0,
+                    borderTopColor: colors.border,
+                  }}
+                  onPress={() => handleSelectLocation(suggestion)}
+                >
+                  <Text style={{
+                    fontSize: 14,
+                    color: colors.text,
+                    fontWeight: '500',
+                  }}>
+                    ✅ {suggestion.formattedAddress}
+                  </Text>
+                  <Text style={{
+                    fontSize: 11,
+                    color: colors.text,
+                    opacity: 0.6,
+                    marginTop: 4,
+                  }}>
+                    Lat: {suggestion.latitude.toFixed(4)}, Lon: {suggestion.longitude.toFixed(4)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          
+          {/* Success Message After Selection */}
+          {geocodingLocation && geocodingLocation.success && !showSuggestions && (
+            <View style={{ 
+              marginTop: 8, 
+              padding: 8, 
+              backgroundColor: '#E8F5E9', 
+              borderRadius: 8 
+            }}>
+              <Text style={{ fontSize: 12, color: '#2E7D32', fontWeight: '500' }}>
+                ✅ Location confirmed
+              </Text>
+              <Text style={{ fontSize: 11, color: '#558B2F', marginTop: 4 }}>
+                {geocodingLocation.formattedAddress}
+              </Text>
+            </View>
+          )}
+          
+          {/* Error Message */}
+          {geocodingLocation && !geocodingLocation.success && location.trim().length >= 3 && !showSuggestions && (
+            <View style={{ 
+              marginTop: 8, 
+              padding: 8, 
+              backgroundColor: '#FFEBEE', 
+              borderRadius: 8 
+            }}>
+              <Text style={{ fontSize: 12, color: '#C62828', fontWeight: '500' }}>
+                ⚠️ {geocodingLocation.error}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Google Maps Link */}

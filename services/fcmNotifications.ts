@@ -1,15 +1,35 @@
-import messaging from '@react-native-firebase/messaging';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import type { FirebaseMessagingTypes } from '@react-native-firebase/messaging';
 
+// ⚠️ PLATFORM CHECK: Only import Firebase on mobile
+let messaging: any = null;
+
+if (Platform.OS !== 'web') {
+  // Only load Firebase on iOS/Android
+  try {
+    messaging = require('@react-native-firebase/messaging').default;
+  } catch (error) {
+    console.warn('[FCM] Firebase messaging not available on this platform');
+  }
+}
+
+// Track if handlers are already set up
+let handlersInitialized = false;
+let messageUnsubscribe: (() => void) | null = null;
+let openedAppUnsubscribe: (() => void) | null = null;
+
 // Request FCM permission and get token
 export async function registerForFCMNotifications(): Promise<string | null> {
+  // ✅ GUARD: Return null on web
+  if (Platform.OS === 'web' || !messaging) {
+    console.log('[FCM] ⚠️ FCM not available on web, using Expo push only');
+    return null;
+  }
+
   try {
     console.log('[FCM] 📱 Requesting notification permissions...');
     
-    // First, request Expo Notifications permissions (this shows the native permission dialog)
-    console.log('[FCM] 🔐 Requesting Expo Notifications permissions...');
     const { status: expoStatus } = await Notifications.requestPermissionsAsync({
       ios: {
         allowAlert: true,
@@ -19,43 +39,31 @@ export async function registerForFCMNotifications(): Promise<string | null> {
       },
     });
     
-    console.log('[FCM] Expo Notifications permission status:', expoStatus);
+    console.log('[FCM] Expo permission status:', expoStatus);
     
     if (expoStatus !== 'granted') {
-      console.log('[FCM] ❌ Expo Notifications permission denied');
+      console.log('[FCM] ❌ Permission denied');
       return null;
     }
     
-    console.log('[FCM] ✅ Expo Notifications permission granted');
+    console.log('[FCM] ✅ Permission granted');
     
-    // Request FCM permission (iOS/Android 13+)
-    console.log('[FCM] 🔐 Requesting FCM permissions...');
     const authStatus = await messaging().requestPermission();
     const enabled =
       authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
       authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
     if (!enabled) {
-      console.log('[FCM] ❌ FCM permission denied. Status:', authStatus);
+      console.log('[FCM] ❌ FCM permission denied');
       return null;
     }
 
-    console.log('[FCM] ✅ FCM permission granted');
-
-    // Get FCM token
-    console.log('[FCM] 🔑 Getting FCM token...');
     const fcmToken = await messaging().getToken();
-    console.log('[FCM] ✅ FCM Token received:', fcmToken ? fcmToken.substring(0, 20) + '...' : 'null');
-
-    if (!fcmToken) {
-      console.log('[FCM] ⚠️ FCM token is null');
-      return null;
-    }
+    console.log('[FCM] ✅ FCM Token:', fcmToken ? fcmToken.substring(0, 20) + '...' : 'null');
 
     return fcmToken;
   } catch (error) {
-    console.error('[FCM] ❌ Error getting FCM token:', error);
-    console.error('[FCM] Error details:', JSON.stringify(error, null, 2));
+    console.error('[FCM] ❌ Error:', error);
     return null;
   }
 }
@@ -102,60 +110,91 @@ function handleNotificationNavigation(
   }
 }
 
-// Set up foreground notification handler
+// Set up foreground notification handler (ONCE)
 export function setupFCMHandlers(navigate?: (path: string) => void) {
-  // Configure how notifications are displayed
+  // ✅ GUARD: Return early on web
+  if (Platform.OS === 'web' || !messaging) {
+    console.log('[FCM] ⚠️ FCM handlers not available on web');
+    return;
+  }
+
+  // ✅ GUARD: Prevent multiple setup
+  if (handlersInitialized) {
+    console.log('[FCM] ⚠️ Handlers already initialized, skipping setup');
+    return;
+  }
+
+  console.log('[FCM] 🔧 Setting up FCM handlers (ONCE)');
+  handlersInitialized = true;
+
+  // Configure how Expo should display notifications
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
       shouldPlaySound: true,
       shouldSetBadge: true,
     }),
   });
 
-  // Handle foreground messages
-  messaging().onMessage(async remoteMessage => {
-    console.log('[FCM] 📬 Foreground notification received:', remoteMessage);
+  // ✅ Single Firebase listener for foreground messages
+  messageUnsubscribe = messaging().onMessage(async remoteMessage => {
+    console.log('[FCM] 📬 Foreground notification received (SINGLE):', remoteMessage);
     
-    // Show local notification when app is in foreground
+    // Use Expo to display
     await Notifications.scheduleNotificationAsync({
       content: {
         title: remoteMessage.notification?.title || 'VIbe',
         body: remoteMessage.notification?.body || '',
-        data: remoteMessage.data,
+        data: remoteMessage.data || {},
       },
-      trigger: null, // Show immediately
+      trigger: null,
     });
   });
 
   // Handle notification tap when app was in background
-  messaging().onNotificationOpenedApp(remoteMessage => {
-    console.log('[FCM] 📱 Notification opened app from background:', remoteMessage);
-    
-    if (navigate && remoteMessage.data) {
-      handleNotificationNavigation(remoteMessage.data, navigate);
-    }
-  });
-
-  // Handle notification tap when app was closed
-  messaging()
-    .getInitialNotification()
-    .then(remoteMessage => {
-      if (remoteMessage) {
-        console.log('[FCM] 📱 Notification opened app from quit state:', remoteMessage);
-        
-        if (navigate && remoteMessage.data) {
-          // Small delay to ensure app is fully initialized
-          setTimeout(() => {
-            handleNotificationNavigation(remoteMessage.data, navigate);
-          }, 1000);
-        }
+  if (navigate) {
+    openedAppUnsubscribe = messaging().onNotificationOpenedApp(remoteMessage => {
+      console.log('[FCM] 📱 Notification opened app from background');
+      if (remoteMessage.data) {
+        handleNotificationNavigation(remoteMessage.data, navigate);
       }
     });
+
+    // Handle notification tap when app was closed
+    messaging()
+      .getInitialNotification()
+      .then(remoteMessage => {
+        if (remoteMessage) {
+          console.log('[FCM] 📱 Notification opened app from quit state');
+          if (remoteMessage.data) {
+            setTimeout(() => {
+              handleNotificationNavigation(remoteMessage.data, navigate);
+            }, 1000);
+          }
+        }
+      });
+  }
 }
 
-// Handle background messages (Android)
-messaging().setBackgroundMessageHandler(async remoteMessage => {
-  console.log('[FCM] 📭 Background notification received:', remoteMessage);
-});
+// Cleanup function (optional, for hot reload during dev)
+export function cleanupFCMHandlers() {
+  if (messageUnsubscribe) {
+    messageUnsubscribe();
+    messageUnsubscribe = null;
+  }
+  if (openedAppUnsubscribe) {
+    openedAppUnsubscribe();
+    openedAppUnsubscribe = null;
+  }
+  handlersInitialized = false;
+  console.log('[FCM] 🧹 Cleaned up FCM handlers');
+}
 
+// ✅ GUARD: Only set up background handler on mobile
+if (Platform.OS !== 'web' && messaging) {
+  // Handle background messages (Android)
+  messaging().setBackgroundMessageHandler(async remoteMessage => {
+    console.log('[FCM] 📭 Background notification received:', remoteMessage);
+  });
+}

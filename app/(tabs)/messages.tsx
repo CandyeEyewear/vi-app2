@@ -3,7 +3,7 @@
  * Lists all conversations
  */
 
-import React from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,8 @@ import {
   ActivityIndicator,
   Image,
   useColorScheme,
+  Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
@@ -25,15 +27,24 @@ import CustomAlert from '../../components/CustomAlert';
 import { useAlert, showErrorAlert } from '../../hooks/useAlert';
 import OnlineStatusDot from '../../components/OnlineStatusDot';
 import { ConversationsSkeleton } from '../../components/SkeletonLayouts';
+import { supabase } from '../../services/supabase';
+import { AvatarWithBadge, UserNameWithBadge } from '../../components/index';
+import WebContainer from '../../components/WebContainer';
 
 export default function MessagesScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width >= 992;
   const { user } = useAuth();
   const { conversations, loading, refreshConversations, deleteConversation } = useMessaging();
   const { alertProps, showAlert } = useAlert();
+  
+  // Track online status per conversation using presence channels
+  const [onlineStatusMap, setOnlineStatusMap] = useState<Record<string, boolean>>({});
+  const presenceChannelsRef = useRef<Record<string, any>>({});
 
   const formatTimeAgo = (dateString: string) => {
     const date = new Date(dateString);
@@ -92,6 +103,104 @@ export default function MessagesScreen() {
     });
   };
 
+  // Set up presence channels for all conversations to track online status
+  useEffect(() => {
+    if (!user || conversations.length === 0) return;
+
+    // Get other user IDs for all conversations
+    const conversationChannels = conversations.map((conv) => {
+      const otherUser = conv.participantDetails.find((p) => p.id !== user.id);
+      return { conversationId: conv.id, otherUserId: otherUser?.id };
+    }).filter((item) => item.otherUserId);
+
+    // Subscribe to presence channels for each conversation
+    conversationChannels.forEach(({ conversationId, otherUserId }) => {
+      // Skip if already subscribed
+      if (presenceChannelsRef.current[conversationId]) return;
+
+      const presenceChannel = supabase.channel(`presence:${conversationId}`, {
+        config: {
+          presence: {
+            key: user.id,
+          },
+        },
+      });
+
+      presenceChannel
+        .on('presence', { event: 'sync' }, () => {
+          const state = presenceChannel.presenceState();
+          const presences = Object.values(state).flat() as any[];
+          
+          // Check if other user is actively online in this conversation (online: true)
+          const otherUserPresence = presences.find(
+            (p: any) => p.user_id === otherUserId && p.online === true
+          );
+          
+          setOnlineStatusMap((prev) => ({
+            ...prev,
+            [conversationId]: !!otherUserPresence,
+          }));
+        })
+        .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+          // Other user joined the chat - check if they're actively online
+          const joinedPresence = newPresences.find(
+            (p: any) => p.user_id === otherUserId && p.online === true
+          );
+          if (joinedPresence) {
+            setOnlineStatusMap((prev) => ({
+              ...prev,
+              [conversationId]: true,
+            }));
+          }
+        })
+        .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+          // Other user left the chat
+          if (leftPresences.some((p: any) => p.user_id === otherUserId)) {
+            setOnlineStatusMap((prev) => ({
+              ...prev,
+              [conversationId]: false,
+            }));
+          }
+        })
+        .on('presence', { event: 'update' }, ({ key, newPresences }) => {
+          // Presence updated (e.g., online status changed)
+          const updatedPresence = newPresences.find(
+            (p: any) => p.user_id === otherUserId
+          );
+          if (updatedPresence) {
+            setOnlineStatusMap((prev) => ({
+              ...prev,
+              [conversationId]: updatedPresence.online === true,
+            }));
+          }
+        })
+        .subscribe(async (status) => {
+          if (status === 'SUBSCRIBED') {
+            // Track current user as present (but not actively in chat, just subscribed to presence)
+            // We don't set online: true here because we only want to show online when they're IN the chat
+            await presenceChannel.track({
+              user_id: user.id,
+              user_name: user.fullName,
+              online: false, // Not actively in chat, just monitoring presence
+              typing: false,
+            });
+          }
+        });
+
+      presenceChannelsRef.current[conversationId] = presenceChannel;
+    });
+
+    // Cleanup: Unsubscribe from all presence channels
+    return () => {
+      Object.values(presenceChannelsRef.current).forEach((channel) => {
+        channel.unsubscribe();
+        supabase.removeChannel(channel);
+      });
+      presenceChannelsRef.current = {};
+      setOnlineStatusMap({});
+    };
+  }, [conversations, user]);
+
   const getOtherUser = (conversation: Conversation) => {
     return conversation.participantDetails.find((p) => p.id !== user?.id);
   };
@@ -100,25 +209,31 @@ export default function MessagesScreen() {
     const otherUser = getOtherUser(item);
     if (!otherUser) return null;
 
+    // Use presence-based online status instead of database field
+    const isOnline = onlineStatusMap[item.id] || false;
+
     return (
       <TouchableOpacity
         style={[styles.conversationCard, { backgroundColor: colors.background, borderBottomColor: colors.border }]}
-        onPress={() => router.push(`/conversation/${item.id}`)}
+        onPress={() => router.push({
+          pathname: '/conversation/[id]',
+          params: { id: item.id }
+        } as any)}
         onLongPress={() => handleDeleteConversation(item.id, otherUser.fullName)}
         activeOpacity={0.7}
       >
         <View style={styles.avatarContainer}>
-          {otherUser.avatarUrl ? (
-            <Image source={{ uri: otherUser.avatarUrl }} style={styles.avatar} />
-          ) : (
-            <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: colors.tint }]}>
-              <Text style={styles.avatarText}>
-                {otherUser.fullName.charAt(0).toUpperCase()}
-              </Text>
+          <AvatarWithBadge
+            uri={otherUser.avatarUrl || null}
+            name={otherUser.fullName}
+            size={50}
+            role={otherUser.role || 'volunteer'}
+            membershipTier={otherUser.membershipTier || 'free'}
+          />
+          {isOnline && (
+            <View style={{ position: 'absolute', bottom: -2, right: -2 }}>
+              <OnlineStatusDot isOnline={true} size={14} />
             </View>
-          )}
-          {otherUser.onlineStatus && (
-            <OnlineStatusDot isOnline={true} size={14} />
           )}
           {item.unreadCount > 0 && (
             <View style={[styles.unreadBadge, { backgroundColor: colors.error }]}>
@@ -129,11 +244,16 @@ export default function MessagesScreen() {
 
         <View style={styles.conversationInfo}>
           <View style={styles.conversationHeader}>
-            <Text style={[styles.userName, { color: colors.text }]} numberOfLines={1}>
-              {otherUser.fullName}
-            </Text>
+            <View style={styles.userNameContainer}>
+              <UserNameWithBadge
+                name={otherUser.fullName}
+                role={otherUser.role || 'volunteer'}
+                membershipTier={otherUser.membershipTier || 'free'}
+                style={[styles.userName, { color: colors.text }]}
+              />
+            </View>
             {item.lastMessage && (
-              <Text style={[styles.timestamp, { color: colors.textSecondary }]}>
+              <Text style={[styles.timestamp, { color: colors.textSecondary }]} numberOfLines={1}>
                 {formatTimeAgo(item.lastMessage.createdAt)}
               </Text>
             )}
@@ -167,44 +287,48 @@ export default function MessagesScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <View style={[styles.container, { backgroundColor: colors.card }]}>
         {/* Header with SafeAreaInsets */}
-        <View style={[
-          styles.header,
-          { paddingTop: insets.top + 16, backgroundColor: colors.background, borderBottomColor: colors.border }
-        ]}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Messages</Text>
-        </View>
+        {!isDesktop && (
+          <View style={[
+            styles.header,
+            { paddingTop: insets.top + 16, backgroundColor: colors.background, borderBottomColor: colors.border }
+          ]}>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>Messages</Text>
+          </View>
+        )}
 
-        {/* Conversations List */}
-        <FlatList
-          data={conversations}
-          keyExtractor={(item) => item.id}
-          renderItem={renderConversation}
-          contentContainerStyle={[
-            styles.listContent,
-            { paddingBottom: insets.bottom + 20 }
-          ]}
-          refreshControl={
-            <RefreshControl
-              refreshing={loading}
-              onRefresh={refreshConversations}
-              tintColor={colors.tint}
-            />
-          }
-          ListEmptyComponent={
-            loading ? (
-              <View style={styles.listContent}>
-                <ConversationsSkeleton count={4} />
-              </View>
-            ) : (
-              <View style={styles.emptyContainer}>
-                <Text style={[styles.emptyText, { color: colors.text }]}>No messages yet</Text>
-                <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
-                  Connect with other volunteers to start chatting
-                </Text>
-              </View>
-            )
-          }
-        />
+        <WebContainer>
+          {/* Conversations List */}
+          <FlatList
+            data={conversations}
+            keyExtractor={(item) => item.id}
+            renderItem={renderConversation}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: insets.bottom + 20 }
+            ]}
+            refreshControl={
+              <RefreshControl
+                refreshing={loading}
+                onRefresh={refreshConversations}
+                tintColor={colors.tint}
+              />
+            }
+            ListEmptyComponent={
+              loading ? (
+                <View style={styles.listContent}>
+                  <ConversationsSkeleton count={4} />
+                </View>
+              ) : (
+                <View style={styles.emptyContainer}>
+                  <Text style={[styles.emptyText, { color: colors.text }]}>No messages yet</Text>
+                  <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
+                    Connect with other volunteers to start chatting
+                  </Text>
+                </View>
+              )
+            }
+          />
+        </WebContainer>
       </View>
 
       {/* Custom Alert */}
@@ -279,15 +403,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 4,
+    gap: 8,
+  },
+  userNameContainer: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
   },
   userName: {
     fontSize: 16,
     fontWeight: '600',
-    flex: 1,
   },
   timestamp: {
     fontSize: 12,
-    marginLeft: 8,
+    flexShrink: 0,
   },
   lastMessage: {
     fontSize: 14,

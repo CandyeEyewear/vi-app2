@@ -9,21 +9,25 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Image,
+  Keyboard,
+  Animated,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { Send, User } from 'lucide-react-native';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
 import CustomAlert from './CustomAlert';
+import { AvatarWithBadge, UserNameWithBadge } from './index';
 import type { OpportunityChatMessage, TypingIndicator } from '../types';
 
 interface OpportunityGroupChatProps {
   opportunityId: string;
+  opportunityTitle?: string;
+  onMessageCountChange?: (count: number) => void;
 }
 
-export default function OpportunityGroupChat({ opportunityId }: OpportunityGroupChatProps) {
+export default function OpportunityGroupChat({ opportunityId, onMessageCountChange }: OpportunityGroupChatProps) {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<OpportunityChatMessage[]>([]);
@@ -36,6 +40,7 @@ export default function OpportunityGroupChat({ opportunityId }: OpportunityGroup
   const userCacheRef = useRef<Map<string, { id: string; fullName: string; avatarUrl: string | null }>>(
     new Map()
   );
+  const keyboardAnim = useRef(new Animated.Value(0)).current;
 
   // Alert state
   const [alertVisible, setAlertVisible] = useState(false);
@@ -53,6 +58,45 @@ export default function OpportunityGroupChat({ opportunityId }: OpportunityGroup
     setAlertConfig({ title, message, type });
     setAlertVisible(true);
   };
+
+  // Smooth keyboard animations for both iOS and Android
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        const height = e.endCoordinates.height;
+        
+        // Ultra smooth animation - no gaps
+        Animated.timing(keyboardAnim, {
+          toValue: height,
+          duration: Platform.OS === 'ios' ? 250 : 150,
+          useNativeDriver: false,
+        }).start();
+        
+        // Scroll to bottom when keyboard appears
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, Platform.OS === 'ios' ? 50 : 100);
+      }
+    );
+
+    const hideSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        // Ultra smooth animation - smooth transition back
+        Animated.timing(keyboardAnim, {
+          toValue: 0,
+          duration: Platform.OS === 'ios' ? 250 : 150,
+          useNativeDriver: false,
+        }).start();
+      }
+    );
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [keyboardAnim]);
 
   useEffect(() => {
     loadMessages();
@@ -124,7 +168,12 @@ export default function OpportunityGroupChat({ opportunityId }: OpportunityGroup
                 console.log('[CHAT] ⚠️ Message already exists, skipping:', newMessage.id);
                 return prev;
               }
-              return [...prev, newMessage];
+              const updated = [...prev, newMessage];
+              // Notify parent of updated message count
+              if (onMessageCountChange) {
+                onMessageCountChange(updated.length);
+              }
+              return updated;
             });
             
             // Scroll to bottom
@@ -162,7 +211,10 @@ export default function OpportunityGroupChat({ opportunityId }: OpportunityGroup
           user:users (
             id,
             full_name,
-            avatar_url
+            avatar_url,
+            role,
+            membership_tier,
+            membership_status
           )
         `)
         .eq('opportunity_id', opportunityId)
@@ -182,10 +234,18 @@ export default function OpportunityGroupChat({ opportunityId }: OpportunityGroup
           id: msg.user.id,
           fullName: msg.user.full_name,
           avatarUrl: msg.user.avatar_url,
+          role: msg.user.role || 'volunteer',
+          membershipTier: msg.user.membership_tier || 'free',
+          membershipStatus: msg.user.membership_status || 'inactive',
         } : undefined,
       }));
 
       setMessages(formattedMessages as OpportunityChatMessage[]);
+      
+      // Notify parent of message count
+      if (onMessageCountChange) {
+        onMessageCountChange(formattedMessages.length);
+      }
 
       // Scroll to bottom after loading
       setTimeout(() => {
@@ -250,19 +310,27 @@ export default function OpportunityGroupChat({ opportunityId }: OpportunityGroup
       >
         {!isOwnMessage && (
           <View style={styles.avatarContainer}>
-            {messageUser?.avatarUrl ? (
-              <Image source={{ uri: messageUser.avatarUrl }} style={styles.avatar} />
-            ) : (
-              <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                <User size={16} color={Colors.light.textSecondary} />
-              </View>
-            )}
+            <AvatarWithBadge
+              uri={messageUser?.avatarUrl || null}
+              name={messageUser?.fullName || 'Unknown'}
+              size={32}
+              role={messageUser?.role || 'volunteer'}
+              membershipTier={messageUser?.membershipTier || 'free'}
+              membershipStatus={messageUser?.membershipStatus || 'inactive'}
+            />
           </View>
         )}
 
         <View style={styles.messageContent}>
           {!isOwnMessage && (
-            <Text style={styles.senderName}>{messageUser?.fullName || 'Unknown'}</Text>
+            <UserNameWithBadge
+              name={messageUser?.fullName || 'Unknown'}
+              role={messageUser?.role || 'volunteer'}
+              membershipTier={messageUser?.membershipTier || 'free'}
+              membershipStatus={messageUser?.membershipStatus || 'inactive'}
+              style={styles.senderName}
+              badgeSize={14}
+            />
           )}
           <View
             style={[
@@ -299,81 +367,106 @@ export default function OpportunityGroupChat({ opportunityId }: OpportunityGroup
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-    >
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        renderItem={renderMessage}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.messagesList}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No messages yet</Text>
-            <Text style={styles.emptySubtext}>
-              Start a conversation with other volunteers!
+    <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+        enabled={Platform.OS === 'ios'}
+      >
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={renderMessage}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={[
+            styles.messagesList,
+            { paddingBottom: 8 }
+          ]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>No messages yet</Text>
+              <Text style={styles.emptySubtext}>
+                Start a conversation with other volunteers!
+              </Text>
+            </View>
+          }
+          onContentSizeChange={() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          }}
+        />
+
+        {/* Typing Indicator */}
+        {typingUsers.length > 0 && (
+          <View style={styles.typingIndicator}>
+            <Text style={styles.typingText}>
+              {typingUsers[0].userName} is typing...
             </Text>
           </View>
-        }
-        onContentSizeChange={() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }}
-      />
+        )}
 
-      {/* Typing Indicator */}
-      {typingUsers.length > 0 && (
-        <View style={styles.typingIndicator}>
-          <Text style={styles.typingText}>
-            {typingUsers[0].userName} is typing...
-          </Text>
-        </View>
-      )}
-
-      {/* Input Bar */}
-      <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 8 }]}>
-        <TextInput
-          style={styles.input}
-          value={messageText}
-          onChangeText={(text) => {
-            setMessageText(text);
-            handleTyping();
-          }}
-          placeholder="Type a message..."
-          placeholderTextColor={Colors.light.textSecondary}
-          multiline
-          maxLength={500}
-        />
-        <TouchableOpacity
+        {/* Input Bar - WhatsApp Style with ultra smooth keyboard transition */}
+        <Animated.View
           style={[
-            styles.sendButton,
-            (!messageText.trim() || sending) && styles.sendButtonDisabled,
+            styles.inputContainer,
+            {
+              paddingBottom: keyboardAnim.interpolate({
+                inputRange: [0, 1000],
+                outputRange: [Math.max(insets.bottom, 8), 0],
+                extrapolate: 'clamp',
+              }),
+              paddingTop: 8,
+            },
           ]}
-          onPress={handleSendMessage}
-          disabled={!messageText.trim() || sending}
         >
-          {sending ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Send size={20} color="#fff" />
-          )}
-        </TouchableOpacity>
-      </View>
+          <TextInput
+            style={styles.input}
+            value={messageText}
+            onChangeText={(text) => {
+              setMessageText(text);
+              handleTyping();
+            }}
+            placeholder="Type a message..."
+            placeholderTextColor={Colors.light.textSecondary}
+            multiline
+            maxLength={500}
+            textAlignVertical="center"
+          />
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              (!messageText.trim() || sending) && styles.sendButtonDisabled,
+            ]}
+            onPress={handleSendMessage}
+            disabled={!messageText.trim() || sending}
+          >
+            {sending ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Send size={20} color="#fff" />
+            )}
+          </TouchableOpacity>
+        </Animated.View>
 
-      <CustomAlert
-        visible={alertVisible}
-        title={alertConfig.title}
-        message={alertConfig.message}
-        type={alertConfig.type}
-        onClose={() => setAlertVisible(false)}
-      />
-    </KeyboardAvoidingView>
+        <CustomAlert
+          visible={alertVisible}
+          title={alertConfig.title}
+          message={alertConfig.message}
+          type={alertConfig.type}
+          onClose={() => setAlertVisible(false)}
+        />
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: Colors.light.background,
+  },
   container: {
     flex: 1,
     backgroundColor: Colors.light.background,
@@ -483,11 +576,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 16,
-    paddingVertical: 12,
     backgroundColor: Colors.light.card,
     borderTopWidth: 1,
     borderTopColor: Colors.light.border,
     gap: 12,
+    minHeight: 60,
   },
   input: {
     flex: 1,
@@ -497,6 +590,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 15,
     color: Colors.light.text,
+    minHeight: 44,
     maxHeight: 100,
     borderWidth: 1,
     borderColor: Colors.light.border,

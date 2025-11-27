@@ -12,21 +12,21 @@ import {
   StyleSheet,
   ActivityIndicator,
   useColorScheme,
-  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Bell, MessageCircle, Calendar, UserPlus, Megaphone, Trash2, Check, X, User } from 'lucide-react-native';
+import { ChevronLeft, Bell, MessageCircle, Calendar, UserPlus, Megaphone, Trash2, Check, X, User, Heart, Ticket } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import CustomAlert from '../components/CustomAlert';
 import { NotificationsSkeleton } from '../components/SkeletonLayouts';
 import { cache, CacheKeys } from '../services/cache';
+import { AvatarWithBadge } from '../components/index';
 
 interface Notification {
   id: string;
-  type: 'circle_request' | 'announcement' | 'opportunity' | 'message' | 'opportunity_submitted' | 'opportunity_approved' | 'opportunity_rejected';
+  type: 'circle_request' | 'announcement' | 'opportunity' | 'message' | 'opportunity_submitted' | 'opportunity_approved' | 'opportunity_rejected' | 'cause' | 'event';
   title: string;
   message: string;
   link: string | null;
@@ -40,6 +40,9 @@ interface SenderInfo {
   id: string;
   avatarUrl: string | null;
   fullName: string;
+  role?: string;
+  membershipTier?: string;
+  membershipStatus?: string;
 }
 
 export default function NotificationsScreen() {
@@ -140,7 +143,7 @@ export default function NotificationsScreen() {
       try {
         const { data: usersData } = await supabase
           .from('users')
-          .select('id, full_name, avatar_url')
+          .select('id, full_name, avatar_url, role, membership_tier, membership_status')
           .in('id', Array.from(senderIds));
 
         if (usersData) {
@@ -149,6 +152,9 @@ export default function NotificationsScreen() {
               id: userData.id,
               avatarUrl: userData.avatar_url,
               fullName: userData.full_name,
+              role: userData.role || 'volunteer',
+              membershipTier: userData.membership_tier || 'free',
+              membershipStatus: userData.membership_status || 'inactive',
             });
           });
         }
@@ -257,6 +263,10 @@ export default function NotificationsScreen() {
         return <Megaphone size={20} color={colors.primary} />;
       case 'opportunity':
         return <Calendar size={20} color={colors.primary} />;
+      case 'cause':
+        return <Heart size={20} color={colors.primary} />;
+      case 'event':
+        return <Ticket size={20} color={colors.primary} />;
       default:
         return <Bell size={20} color={colors.primary} />;
     }
@@ -315,19 +325,14 @@ export default function NotificationsScreen() {
             const senderInfo = getNotificationAvatar(item);
             return (
               <View style={styles.avatarContainer}>
-                {senderInfo?.avatarUrl ? (
-                  <Image source={{ uri: senderInfo.avatarUrl }} style={styles.avatar} />
-                ) : (
-                  <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: colors.primary + '15' }]}>
-                    {senderInfo?.fullName ? (
-                      <Text style={[styles.avatarText, { color: colors.primary }]}>
-                        {senderInfo.fullName.charAt(0).toUpperCase()}
-                      </Text>
-                    ) : (
-                      <User size={20} color={colors.primary} />
-                    )}
-                  </View>
-                )}
+                <AvatarWithBadge
+                  uri={senderInfo?.avatarUrl || null}
+                  name={senderInfo?.fullName || 'User'}
+                  size={40}
+                  role={senderInfo?.role || 'volunteer'}
+                  membershipTier={senderInfo?.membershipTier || 'free'}
+                  membershipStatus={senderInfo?.membershipStatus || 'inactive'}
+                />
               </View>
             );
           })()
