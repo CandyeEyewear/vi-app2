@@ -190,7 +190,7 @@ export default function SubscribeScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Hero Section */}
@@ -382,7 +382,6 @@ export default function SubscribeScreen() {
           </Text>
         </View>
 
-        <View style={{ height: 100 }} />
       </ScrollView>
 
       {/* Subscribe Button */}
