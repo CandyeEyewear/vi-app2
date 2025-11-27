@@ -37,7 +37,16 @@ export default async function handler(req: Request) {
   }
 
   try {
-    const body = await req.json();
+    let body;
+    try {
+      body = await req.json();
+    } catch (jsonError) {
+      console.error('Failed to parse webhook body:', jsonError);
+      return new Response(JSON.stringify({ error: 'Invalid webhook payload' }), {
+        status: 400,
+        headers: corsHeaders,
+      });
+    }
     const headers = Object.fromEntries(req.headers.entries());
 
     console.log('Webhook received:', JSON.stringify(body, null, 2));
@@ -53,13 +62,13 @@ export default async function handler(req: Request) {
     } = body;
 
     // Log webhook to database
-    await supabase.from('payment_webhooks').insert({
+    const { data: webhookRecord } = await supabase.from('payment_webhooks').insert({
       event_type: subscription_id ? 'subscription_payment' : 'one_time_payment',
       transaction_number,
       payload: body,
       headers,
       processed: false,
-    });
+    }).select().single();
 
     const isSuccessful = status === 'APPROVED' || response_code === '00' || response_code === '000';
 
@@ -69,10 +78,19 @@ export default async function handler(req: Request) {
       await handleOneTimePayment(order_id, transaction_number, isSuccessful, body);
     }
 
-    await supabase
-      .from('payment_webhooks')
-      .update({ processed: true, processed_at: new Date().toISOString() })
-      .eq('transaction_number', transaction_number);
+    // Update webhook as processed
+    if (webhookRecord?.id) {
+      await supabase
+        .from('payment_webhooks')
+        .update({ processed: true, processed_at: new Date().toISOString() })
+        .eq('id', webhookRecord.id);
+    } else if (transaction_number) {
+      // Fallback: update by transaction_number if ID not available
+      await supabase
+        .from('payment_webhooks')
+        .update({ processed: true, processed_at: new Date().toISOString() })
+        .eq('transaction_number', transaction_number);
+    }
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
@@ -124,7 +142,7 @@ async function handleSubscriptionPayment(
   const { data: subscription } = await supabase
     .from('payment_subscriptions')
     .select()
-    .or(`ezee_subscription_id.eq.${webhookData.subscription_id}`)
+    .eq('ezee_subscription_id', webhookData.subscription_id)
     .single();
 
   if (!subscription) {

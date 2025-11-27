@@ -84,7 +84,14 @@ async function handleGetStatus(url: URL) {
         );
 
         if (ezeeResponse.ok) {
-          const ezeeData = await ezeeResponse.json();
+          let ezeeData;
+          try {
+            ezeeData = await ezeeResponse.json();
+          } catch (jsonError) {
+            console.error('Failed to parse eZeePayments status response:', jsonError);
+            // Continue with database status if JSON parsing fails
+            ezeeData = { status: subscription.status };
+          }
           const statusMap: Record<string, string> = {
             'ACTIVE': 'active',
             'CANCELLED': 'cancelled',

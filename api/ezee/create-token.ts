@@ -1,8 +1,8 @@
-//**
-* Vercel API Route: /api/ezee/create-token.ts
-* Creates a payment token for one-time payments
-* WITH CORS SUPPORT
-*/
+/**
+ * Vercel API Route: /api/ezee/create-token.ts
+ * Creates a payment token for one-time payments
+ * WITH CORS SUPPORT
+ */
 
 import { createClient } from '@supabase/supabase-js';
 
@@ -91,7 +91,18 @@ export default async function handler(req: Request) {
      }),
    });
 
-   const tokenData = await tokenResponse.json();
+   let tokenData;
+   try {
+     tokenData = await tokenResponse.json();
+   } catch (jsonError) {
+     console.error('Failed to parse eZeePayments response:', jsonError);
+     const textResponse = await tokenResponse.text();
+     console.error('Response text:', textResponse);
+     return new Response(
+       JSON.stringify({ error: 'Invalid response from payment provider' }),
+       { status: 500, headers: corsHeaders }
+     );
+   }
 
    if (!tokenResponse.ok || !tokenData.token) {
      console.error('eZeePayments token error:', tokenData);

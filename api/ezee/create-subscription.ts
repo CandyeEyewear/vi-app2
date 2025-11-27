@@ -114,7 +114,18 @@ export default async function handler(req: Request) {
       }),
     });
 
-    const subscriptionData = await subscriptionResponse.json();
+    let subscriptionData;
+    try {
+      subscriptionData = await subscriptionResponse.json();
+    } catch (jsonError) {
+      console.error('Failed to parse eZeePayments subscription response:', jsonError);
+      const textResponse = await subscriptionResponse.text();
+      console.error('Response text:', textResponse);
+      return new Response(
+        JSON.stringify({ error: 'Invalid response from payment provider' }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
 
     if (!subscriptionResponse.ok) {
       console.error('eZeePayments subscription error:', subscriptionData);
@@ -172,7 +183,18 @@ export default async function handler(req: Request) {
       }),
     });
 
-    const tokenData = await tokenResponse.json();
+    let tokenData;
+    try {
+      tokenData = await tokenResponse.json();
+    } catch (jsonError) {
+      console.error('Failed to parse eZeePayments token response:', jsonError);
+      const textResponse = await tokenResponse.text();
+      console.error('Response text:', textResponse);
+      return new Response(
+        JSON.stringify({ error: 'Invalid response from payment provider' }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
 
     const paymentUrl = EZEE_API_URL.includes('test')
       ? 'https://secure-test.ezeepayments.com/pay'

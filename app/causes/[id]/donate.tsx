@@ -373,8 +373,16 @@ export default function DonateScreen() {
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top, borderBottomColor: colors.border }]}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+      <View style={[styles.header, { paddingTop: insets.top, borderBottomColor: colors.border, backgroundColor: colors.background }]}>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={() => {
+            console.log('Back button pressed');
+            router.back();
+          }}
+          activeOpacity={0.7}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
           <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Donate</Text>
@@ -659,6 +667,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
+    zIndex: 1000,
+    position: 'relative',
   },
   backButton: {
     width: 44,
@@ -666,6 +676,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: -8,
+    zIndex: 1001,
+    minWidth: 44,
+    minHeight: 44,
   },
   headerTitle: {
     fontSize: 18,
