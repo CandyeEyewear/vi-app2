@@ -60,6 +60,9 @@ export default function FeedScreen() {
       return () => window.removeEventListener('resize', checkDesktop);
     }
   }, [width]);
+  
+  // Detect mobile web (web but not desktop)
+  const isMobileWeb = Platform.OS === 'web' && !isDesktop;
   const { user } = useAuth();
   const { posts, loading, createPost, refreshFeed } = useFeed();
   
@@ -485,7 +488,11 @@ const renderTabs = () => (
           styles.floatingButton, 
           { 
             backgroundColor: colors.primary,
-            bottom: isDesktop ? 24 : 100,
+            // Desktop: 24px from bottom (no tab bar)
+            // Mobile web: 70px from bottom (smaller tab bar)
+            // Native mobile: 100px from bottom (larger tab bar)
+            bottom: isDesktop ? 24 : isMobileWeb ? 70 : 100,
+            zIndex: 1001,
           }
         ]}
         onPress={() => setShowCreateModal(true)}

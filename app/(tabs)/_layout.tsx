@@ -46,6 +46,7 @@ export default function TabsLayout() {
   }, [width, isWebPlatform]);
   
   const isDesktop = isWebPlatform && windowWidth >= 992;
+  const isMobileWeb = isWebPlatform && !isDesktop; // Web but not desktop
 
   return (
     <Tabs
@@ -57,15 +58,17 @@ export default function TabsLayout() {
           backgroundColor: colors.card,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          height: isWebPlatform ? 80 : 85,
-          paddingBottom: isWebPlatform ? 16 : 20,
-          paddingTop: 8,
+          // Different heights for each platform
+          height: isDesktop ? 0 : isMobileWeb ? 56 : 70,
+          // Different padding for each platform
+          paddingBottom: isDesktop ? 0 : isMobileWeb ? 6 : 12,
+          paddingTop: isDesktop ? 0 : 6,
           // Hide tab bar on desktop (>= 992px)
           ...(isDesktop && {
             display: 'none',
           }),
-          // Web-specific styling for mobile/tablet views
-          ...(isWebPlatform && !isDesktop && {
+          // Mobile web specific - fixed position
+          ...(isMobileWeb && {
             position: 'fixed' as any,
             bottom: 0,
             left: 0,
@@ -76,8 +79,12 @@ export default function TabsLayout() {
           }),
         },
         tabBarLabelStyle: {
-          fontSize: isWebPlatform ? 11 : 12,
+          fontSize: isMobileWeb ? 10 : 12,
           fontWeight: '600',
+          marginTop: -2,
+        },
+        tabBarIconStyle: {
+          marginBottom: -4,
         },
         // Add header for desktop with WebNavigation
         header: () => (isDesktop ? <WebNavigation /> : null),
