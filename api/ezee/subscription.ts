@@ -1,205 +1,177 @@
 /**
- * eZeePayments - Subscription Management API
- * Vercel Serverless Function
- * File: api/ezee/subscription.ts
- * 
- * Check status and cancel subscriptions
+ * Vercel API Route: /api/ezee/subscription.ts
+ * Manage subscriptions (status check, cancel)
+ * WITH CORS SUPPORT
  */
 
-import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
-// Environment variables
 const EZEE_API_URL = process.env.EZEE_API_URL || 'https://api-test.ezeepayments.com';
 const EZEE_LICENCE_KEY = process.env.EZEE_LICENCE_KEY!;
-const EZEE_SITE = process.env.EZEE_SITE || 'https://test.com';
-const SUPABASE_URL = process.env.SUPABASE_URL!;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// Initialize Supabase
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+const supabase = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+// CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Content-Type': 'application/json',
+};
 
+export const config = {
+  runtime: 'edge',
+};
+
+export default async function handler(req: Request) {
+  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    return new Response(null, { status: 200, headers: corsHeaders });
   }
 
-  const { action } = req.query;
+  const url = new URL(req.url);
+  const action = url.searchParams.get('action');
 
-  switch (action) {
-    case 'status':
-      return handleGetStatus(req, res);
-    case 'cancel':
-      return handleCancel(req, res);
-    default:
-      return res.status(400).json({ error: 'Invalid action. Use: status, cancel' });
+  if (action === 'status' && req.method === 'GET') {
+    return handleGetStatus(url);
   }
+
+  if (action === 'cancel' && req.method === 'POST') {
+    return handleCancel(req);
+  }
+
+  return new Response(JSON.stringify({ error: 'Invalid action' }), {
+    status: 400,
+    headers: corsHeaders,
+  });
 }
 
-/**
- * Get subscription status from eZeePayments
- */
-async function handleGetStatus(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET' && req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+async function handleGetStatus(url: URL) {
+  const subscriptionId = url.searchParams.get('subscriptionId');
+
+  if (!subscriptionId) {
+    return new Response(
+      JSON.stringify({ error: 'subscriptionId required' }),
+      { status: 400, headers: corsHeaders }
+    );
   }
 
   try {
-    const subscriptionId = req.query.subscriptionId || req.body?.subscriptionId;
-    const transactionNumber = req.query.transactionNumber || req.body?.transactionNumber;
-
-    if (!subscriptionId && !transactionNumber) {
-      return res.status(400).json({ error: 'Missing subscriptionId or transactionNumber' });
-    }
-
-    // Get subscription from our database
-    let subscription;
-    if (subscriptionId) {
-      const { data } = await supabase
-        .from('payment_subscriptions')
-        .select('*')
-        .eq('id', subscriptionId)
-        .single();
-      subscription = data;
-    } else if (transactionNumber) {
-      const { data } = await supabase
-        .from('payment_subscriptions')
-        .select('*')
-        .eq('transaction_number', transactionNumber)
-        .single();
-      subscription = data;
-    }
-
-    if (!subscription) {
-      return res.status(404).json({ error: 'Subscription not found' });
-    }
-
-    // Get status from eZeePayments
-    const formData = new FormData();
-    formData.append('TransactionNumber', subscription.transaction_number || subscription.ezee_subscription_id);
-
-    const ezeeResponse = await fetch(`${EZEE_API_URL}/v1/subscription/status/`, {
-      method: 'POST',
-      headers: {
-        'licence_key': EZEE_LICENCE_KEY,
-        'site': EZEE_SITE,
-      },
-      body: formData,
-    });
-
-    const ezeeData = await ezeeResponse.json();
-
-    // Map eZeePayments status to our status
-    let mappedStatus = subscription.status;
-    if (ezeeData.result?.message) {
-      const message = ezeeData.result.message.toLowerCase();
-      if (message.includes('active')) {
-        mappedStatus = 'active';
-      } else if (message.includes('cancelled')) {
-        mappedStatus = 'cancelled';
-      } else if (message.includes('ended') || message.includes('expired')) {
-        mappedStatus = 'ended';
-      }
-
-      // Update our database if status changed
-      if (mappedStatus !== subscription.status) {
-        await supabase
-          .from('payment_subscriptions')
-          .update({ status: mappedStatus })
-          .eq('id', subscription.id);
-      }
-    }
-
-    return res.status(200).json({
-      success: true,
-      subscription: {
-        id: subscription.id,
-        status: mappedStatus,
-        amount: subscription.amount,
-        currency: subscription.currency,
-        frequency: subscription.frequency,
-        nextBillingDate: subscription.next_billing_date,
-        lastBillingDate: subscription.last_billing_date,
-        startDate: subscription.start_date,
-        endDate: subscription.end_date,
-      },
-      ezeeStatus: ezeeData.result?.message || 'Unknown',
-    });
-  } catch (error) {
-    console.error('Get subscription status error:', error);
-    return res.status(500).json({
-      error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-}
-
-/**
- * Cancel subscription
- */
-async function handleCancel(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST' && req.method !== 'DELETE') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  try {
-    const { subscriptionId, userId } = req.body;
-
-    if (!subscriptionId) {
-      return res.status(400).json({ error: 'Missing subscriptionId' });
-    }
-
-    // Get subscription from our database
-    const { data: subscription, error: findError } = await supabase
+    const { data: subscription, error } = await supabase
       .from('payment_subscriptions')
       .select('*')
       .eq('id', subscriptionId)
       .single();
 
-    if (findError || !subscription) {
-      return res.status(404).json({ error: 'Subscription not found' });
+    if (error || !subscription) {
+      return new Response(
+        JSON.stringify({ error: 'Subscription not found' }),
+        { status: 404, headers: corsHeaders }
+      );
     }
 
-    // Verify ownership if userId provided
-    if (userId && subscription.user_id !== userId) {
-      return res.status(403).json({ error: 'Not authorized to cancel this subscription' });
+    if (subscription.ezee_subscription_id) {
+      try {
+        const ezeeResponse = await fetch(
+          `${EZEE_API_URL}/v1/subscription/status/${subscription.ezee_subscription_id}/`,
+          {
+            method: 'GET',
+            headers: { 'Licence': EZEE_LICENCE_KEY },
+          }
+        );
+
+        if (ezeeResponse.ok) {
+          const ezeeData = await ezeeResponse.json();
+          const statusMap: Record<string, string> = {
+            'ACTIVE': 'active',
+            'CANCELLED': 'cancelled',
+            'ENDED': 'ended',
+            'PAUSED': 'paused',
+          };
+
+          const mappedStatus = statusMap[ezeeData.status] || subscription.status;
+
+          if (mappedStatus !== subscription.status) {
+            await supabase
+              .from('payment_subscriptions')
+              .update({ status: mappedStatus })
+              .eq('id', subscriptionId);
+
+            subscription.status = mappedStatus;
+          }
+        }
+      } catch (ezeeError) {
+        console.error('eZee status check error:', ezeeError);
+      }
     }
 
-    // Cancel with eZeePayments
-    const formData = new FormData();
-    formData.append('TransactionNumber', subscription.transaction_number || subscription.ezee_subscription_id);
+    return new Response(
+      JSON.stringify({ success: true, subscription }),
+      { status: 200, headers: corsHeaders }
+    );
+  } catch (error) {
+    console.error('Get status error:', error);
+    return new Response(
+      JSON.stringify({ error: 'Failed to get subscription status' }),
+      { status: 500, headers: corsHeaders }
+    );
+  }
+}
 
-    const ezeeResponse = await fetch(`${EZEE_API_URL}/v1/subscription/cancel/`, {
-      method: 'POST',
-      headers: {
-        'licence_key': EZEE_LICENCE_KEY,
-        'site': EZEE_SITE,
-      },
-      body: formData,
-    });
+async function handleCancel(req: Request) {
+  try {
+    const body = await req.json();
+    const { subscriptionId, userId } = body;
 
-    const ezeeData = await ezeeResponse.json();
-
-    if (ezeeData.result?.status !== 1) {
-      console.error('eZeePayments cancel error:', ezeeData);
-      // Still update our database even if eZee fails
+    if (!subscriptionId || !userId) {
+      return new Response(
+        JSON.stringify({ error: 'subscriptionId and userId required' }),
+        { status: 400, headers: corsHeaders }
+      );
     }
 
-    // Update our database
+    const { data: subscription, error } = await supabase
+      .from('payment_subscriptions')
+      .select('*')
+      .eq('id', subscriptionId)
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !subscription) {
+      return new Response(
+        JSON.stringify({ error: 'Subscription not found or unauthorized' }),
+        { status: 404, headers: corsHeaders }
+      );
+    }
+
+    if (subscription.ezee_subscription_id) {
+      try {
+        await fetch(`${EZEE_API_URL}/v1/subscription/cancel/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Licence': EZEE_LICENCE_KEY,
+          },
+          body: JSON.stringify({
+            subscription_id: subscription.ezee_subscription_id,
+          }),
+        });
+      } catch (ezeeError) {
+        console.error('eZee cancel error:', ezeeError);
+      }
+    }
+
     await supabase
       .from('payment_subscriptions')
       .update({
         status: 'cancelled',
-        cancelled_at: new Date().toISOString(),
+        end_date: new Date().toISOString().split('T')[0],
       })
-      .eq('id', subscription.id);
+      .eq('id', subscriptionId);
 
-    // Update related records
     if (subscription.subscription_type === 'recurring_donation' && subscription.reference_id) {
       await supabase
         .from('recurring_donations')
@@ -207,16 +179,22 @@ async function handleCancel(req: VercelRequest, res: VercelResponse) {
         .eq('id', subscription.reference_id);
     }
 
-    return res.status(200).json({
-      success: true,
-      message: 'Subscription cancelled successfully',
-      ezeeMessage: ezeeData.result?.message || 'Cancelled',
-    });
+    if (subscription.subscription_type === 'membership') {
+      await supabase
+        .from('users')
+        .update({ membership_status: 'cancelled', is_premium: false })
+        .eq('id', userId);
+    }
+
+    return new Response(
+      JSON.stringify({ success: true, message: 'Subscription cancelled' }),
+      { status: 200, headers: corsHeaders }
+    );
   } catch (error) {
     console.error('Cancel subscription error:', error);
-    return res.status(500).json({
-      error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
+    return new Response(
+      JSON.stringify({ error: 'Failed to cancel subscription' }),
+      { status: 500, headers: corsHeaders }
+    );
   }
 }

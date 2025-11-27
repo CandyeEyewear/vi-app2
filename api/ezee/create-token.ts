@@ -1,164 +1,152 @@
-/**
- * eZeePayments - Create Token API
- * Vercel Serverless Function
- * File: api/ezee/create-token.ts
- * 
- * Creates a payment token for one-time payments
- */
+//**
+* Vercel API Route: /api/ezee/create-token.ts
+* Creates a payment token for one-time payments
+* WITH CORS SUPPORT
+*/
 
-import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
-// Environment variables
 const EZEE_API_URL = process.env.EZEE_API_URL || 'https://api-test.ezeepayments.com';
 const EZEE_LICENCE_KEY = process.env.EZEE_LICENCE_KEY!;
 const EZEE_SITE = process.env.EZEE_SITE || 'https://test.com';
-const SUPABASE_URL = process.env.SUPABASE_URL!;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://your-app.vercel.app';
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://vibe.volunteersinc.org';
 
-// Initialize Supabase with service role for server-side operations
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+const supabase = createClient(
+ process.env.SUPABASE_URL!,
+ process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
-interface CreateTokenRequest {
-  amount: number;
-  orderId: string;
-  orderType: 'donation' | 'event_registration' | 'membership' | 'other';
-  referenceId?: string;
-  userId?: string;
-  customerEmail: string;
-  customerName?: string;
-  description?: string;
-}
+// CORS headers
+const corsHeaders = {
+ 'Access-Control-Allow-Origin': '*',
+ 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+ 'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+ 'Content-Type': 'application/json',
+};
 
-interface EzeeTokenResponse {
-  result: {
-    status: number;
-    token?: string;
-    message?: string;
-  };
-}
+export const config = {
+ runtime: 'edge',
+};
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+export default async function handler(req: Request) {
+ // Handle CORS preflight
+ if (req.method === 'OPTIONS') {
+   return new Response(null, { status: 200, headers: corsHeaders });
+ }
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+ if (req.method !== 'POST') {
+   return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+     status: 405,
+     headers: corsHeaders,
+   });
+ }
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+ try {
+   const body = await req.json();
+   const {
+     amount,
+     orderId,
+     orderType,
+     referenceId,
+     userId,
+     customerEmail,
+     customerName,
+     description,
+   } = body;
 
-  try {
-    const {
-      amount,
-      orderId,
-      orderType,
-      referenceId,
-      userId,
-      customerEmail,
-      customerName,
-      description,
-    }: CreateTokenRequest = req.body;
+   // Validate required fields
+   if (!amount || !orderId || !orderType || !customerEmail) {
+     return new Response(
+       JSON.stringify({ error: 'Missing required fields: amount, orderId, orderType, customerEmail' }),
+       { status: 400, headers: corsHeaders }
+     );
+   }
 
-    // Validate required fields
-    if (!amount || !orderId || !orderType || !customerEmail) {
-      return res.status(400).json({
-        error: 'Missing required fields: amount, orderId, orderType, customerEmail',
-      });
-    }
+   // Generate unique order ID with timestamp
+   const uniqueOrderId = `${orderType}_${orderId}_${Date.now()}`;
 
-    // Generate unique order ID with timestamp
-    const uniqueOrderId = `${orderType}_${orderId}_${Date.now()}`;
+   // Callback URLs
+   const postBackUrl = `${APP_URL}/api/ezee/webhook`;
+   const returnUrl = `${APP_URL}/payment/success?orderId=${orderId}`;
+   const cancelUrl = `${APP_URL}/payment/cancel?orderId=${orderId}`;
 
-    // Define callback URLs
-    const postBackUrl = `${APP_URL}/api/ezee/webhook`;
-    const returnUrl = `${APP_URL}/payment/success?orderId=${uniqueOrderId}`;
-    const cancelUrl = `${APP_URL}/payment/cancel?orderId=${uniqueOrderId}`;
+   // Create token with eZeePayments
+   const tokenResponse = await fetch(`${EZEE_API_URL}/v1/custom_token/`, {
+     method: 'POST',
+     headers: {
+       'Content-Type': 'application/json',
+       'Licence': EZEE_LICENCE_KEY,
+     },
+     body: JSON.stringify({
+       site: EZEE_SITE,
+       order_id: uniqueOrderId,
+       amount: amount.toFixed(2),
+       currency: 'JMD',
+       cardholder_email: customerEmail,
+       cardholder_name: customerName || 'Customer',
+       description: description || `Payment for ${orderType}`,
+       postback_url: postBackUrl,
+       return_url: returnUrl,
+       cancel_url: cancelUrl,
+     }),
+   });
 
-    // Create form data for eZeePayments
-    const formData = new FormData();
-    formData.append('amount', amount.toString());
-    formData.append('currency', 'JMD');
-    formData.append('order_id', uniqueOrderId);
-    formData.append('post_back_url', postBackUrl);
-    formData.append('return_url', returnUrl);
-    formData.append('cancel_url', cancelUrl);
+   const tokenData = await tokenResponse.json();
 
-    // Call eZeePayments API to get token
-    const ezeeResponse = await fetch(`${EZEE_API_URL}/v1/custom_token/`, {
-      method: 'POST',
-      headers: {
-        'licence_key': EZEE_LICENCE_KEY,
-        'site': EZEE_SITE,
-      },
-      body: formData,
-    });
+   if (!tokenResponse.ok || !tokenData.token) {
+     console.error('eZeePayments token error:', tokenData);
+     return new Response(
+       JSON.stringify({ error: 'Failed to create payment token', details: tokenData }),
+       { status: 500, headers: corsHeaders }
+     );
+   }
 
-    const ezeeData: EzeeTokenResponse = await ezeeResponse.json();
+   // Store transaction in database
+   const { data: transaction, error: dbError } = await supabase
+     .from('payment_transactions')
+     .insert({
+       user_id: userId || null,
+       order_id: uniqueOrderId,
+       order_type: orderType,
+       reference_id: referenceId || orderId,
+       amount,
+       currency: 'JMD',
+       description: description || `Payment for ${orderType}`,
+       ezee_token: tokenData.token,
+       status: 'pending',
+       customer_email: customerEmail,
+       customer_name: customerName,
+       metadata: { original_order_id: orderId },
+     })
+     .select()
+     .single();
 
-    if (ezeeData.result.status !== 1 || !ezeeData.result.token) {
-      console.error('eZeePayments token error:', ezeeData);
-      return res.status(400).json({
-        error: 'Failed to create payment token',
-        message: ezeeData.result.message || 'Unknown error',
-      });
-    }
+   if (dbError) {
+     console.error('Database error:', dbError);
+   }
 
-    // Store transaction in database
-    const { data: transaction, error: dbError } = await supabase
-      .from('payment_transactions')
-      .insert({
-        user_id: userId || null,
-        order_id: uniqueOrderId,
-        order_type: orderType,
-        reference_id: referenceId || null,
-        amount,
-        currency: 'JMD',
-        description: description || null,
-        ezee_token: ezeeData.result.token,
-        status: 'pending',
-        customer_email: customerEmail,
-        customer_name: customerName || null,
-        metadata: {
-          original_order_id: orderId,
-        },
-      })
-      .select()
-      .single();
+   // Payment page URL
+   const paymentUrl = EZEE_API_URL.includes('test') 
+     ? 'https://secure-test.ezeepayments.com/pay'
+     : 'https://secure.ezeepayments.com/pay';
 
-    if (dbError) {
-      console.error('Database error:', dbError);
-      // Continue anyway - payment can still work
-    }
-
-    // Return token and payment URL
-    return res.status(200).json({
-      success: true,
-      token: ezeeData.result.token,
-      transactionId: transaction?.id,
-      paymentUrl: `https://secure-test.ezeepayments.com`,
-      paymentData: {
-        platform: 'custom',
-        token: ezeeData.result.token,
-        amount: amount.toString(),
-        currency: 'JMD',
-        order_id: uniqueOrderId,
-        email_address: customerEmail,
-        customer_name: customerName || '',
-        description: description || '',
-        recurring: 'false',
-      },
-    });
-  } catch (error) {
-    console.error('Create token error:', error);
-    return res.status(500).json({
-      error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
+   return new Response(
+     JSON.stringify({
+       success: true,
+       token: tokenData.token,
+       transactionId: transaction?.id,
+       paymentUrl,
+       paymentData: {
+         token: tokenData.token,
+       },
+     }),
+     { status: 200, headers: corsHeaders }
+   );
+ } catch (error) {
+   console.error('Create token error:', error);
+   return new Response(
+     JSON.stringify({ error: 'Internal server error' }),
+     { status: 500, headers: corsHeaders }
+   );
+ }
 }
