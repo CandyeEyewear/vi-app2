@@ -56,6 +56,7 @@ import {
   formatCurrency,
 } from '../../services/eventsService';
 import { useAuth } from '../../contexts/AuthContext';
+import WebContainer from '../../components/WebContainer';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
@@ -345,19 +346,20 @@ export default function EventDetailScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor="#38B6FF"
-          />
-        }
-      >
-        {/* Hero Image */}
-        <View style={styles.imageContainer}>
+      <WebContainer>
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor="#38B6FF"
+            />
+          }
+        >
+          {/* Hero Image */}
+          <View style={styles.imageContainer}>
           {event.imageUrl ? (
             <Image source={{ uri: event.imageUrl }} style={styles.heroImage} resizeMode="cover" />
           ) : (
@@ -634,7 +636,8 @@ export default function EventDetailScreen() {
           {/* Bottom spacing */}
           <View style={{ height: 120 }} />
         </View>
-      </ScrollView>
+        </ScrollView>
+      </WebContainer>
 
       {/* Fixed Bottom Button */}
       {!isPast && (

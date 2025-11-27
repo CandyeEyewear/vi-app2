@@ -43,6 +43,7 @@ import {
   formatCurrency,
 } from '../../../services/causesService';
 import { useAuth } from '../../../contexts/AuthContext';
+import WebContainer from '../../../components/WebContainer';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
@@ -271,14 +272,15 @@ export default function DonateScreen() {
       </View>
 
       <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Cause Info */}
-          <View style={[styles.causeCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <WebContainer>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* Cause Info */}
+            <View style={[styles.causeCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Heart size={24} color="#38B6FF" />
             <View style={styles.causeInfo}>
               <Text style={[styles.causeName, { color: colors.text }]} numberOfLines={2}>
@@ -509,7 +511,8 @@ export default function DonateScreen() {
           </View>
 
           <View style={{ height: 100 }} />
-        </ScrollView>
+          </ScrollView>
+        </WebContainer>
       </KeyboardAvoidingView>
 
       {/* Submit Button */}

@@ -481,11 +481,13 @@ const renderTabs = () => (
           )
         }
       />
+      </WebContainer>
       
-      {/* Floating Add Button */}
+      {/* Floating Add Button - Outside WebContainer for proper positioning */}
       <TouchableOpacity
         style={[
-          styles.floatingButton, 
+          styles.floatingButton,
+          Platform.OS === 'web' && styles.floatingButtonWeb,
           { 
             backgroundColor: colors.primary,
             // Desktop: 24px (no tab bar)
@@ -500,7 +502,6 @@ const renderTabs = () => (
       >
         <Plus size={28} color="#FFFFFF" strokeWidth={2.5} />
       </TouchableOpacity>
-</WebContainer>
 
       {/* Create Post Modal */}
       <Modal
@@ -631,6 +632,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.light.card,
+    position: 'relative',
   },
   header: {
     flexDirection: 'row',
@@ -685,6 +687,10 @@ headerRight: {
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+  },
+  floatingButtonWeb: {
+    position: 'fixed' as any,
+    zIndex: 1001,
   },
   emptyContainer: {
     alignItems: 'center',

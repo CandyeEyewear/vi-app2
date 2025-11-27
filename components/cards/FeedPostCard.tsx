@@ -22,7 +22,7 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
-import { Heart, MessageCircle, Share2, Trash2, Megaphone, Pin, Flag } from 'lucide-react-native';
+import { Heart, MessageCircle, Share2, Trash2, Megaphone, Pin, Flag, MoreVertical, Copy, Edit } from 'lucide-react-native';
 import { Post } from '../../types';
 import { Colors } from '../../constants/colors';
 import { useFeed } from '../../contexts/FeedContext';
@@ -30,8 +30,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import ProfileActionSheet from '../ProfileActionSheet';
 import { supabase } from '../../services/supabase';
 import CustomAlert from '../CustomAlert';
-import ReactionBar from '../ReactionBar';
-import ReactionPicker from '../ReactionPicker';
 import ShareModal from '../ShareModal';
 import ShareCommentModal from '../ShareCommentModal';
 import SharedPostCard from '../SharedPostCard';
@@ -49,7 +47,7 @@ interface FeedPostCardProps {
 
 export default function FeedPostCard({ post }: FeedPostCardProps) {
   const { user, isAdmin } = useAuth();
-  const { likePost, unlikePost, addComment, sharePost, shareToFeed, deletePost, addReaction } = useFeed();
+  const { likePost, unlikePost, addComment, sharePost, shareToFeed, deletePost } = useFeed();
   const insets = useSafeAreaInsets();
   
   const [showCommentModal, setShowCommentModal] = useState(false);
@@ -66,11 +64,11 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
     message: '',
     type: 'success' as 'success' | 'error' | 'warning',
   });
-  const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showShareCommentModal, setShowShareCommentModal] = useState(false);
   const [postToShare, setPostToShare] = useState<Post | null>(null);
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   const isLiked = user ? post.likes.includes(user.id) : false;
   const canDelete = user && (isAdmin || post.userId === user.id);
@@ -270,17 +268,10 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
             <Pin size={18} color={Colors.light.primary} fill={Colors.light.primary} />
           </View>
         )}
-        {/* Report button - for volunteers on other people's posts (not announcements) */}
-        {!isAnnouncement && user && post.userId !== user.id && !isAdmin && (
-          <TouchableOpacity onPress={() => setShowReportModal(true)} style={styles.reportButton}>
-            <Flag size={20} color={Colors.light.textSecondary} />
-          </TouchableOpacity>
-        )}
-        {canDelete && (
-          <TouchableOpacity onPress={handleDelete} style={styles.deleteButton}>
-            <Trash2 size={20} color={Colors.light.textSecondary} />
-          </TouchableOpacity>
-        )}
+        {/* More Options Menu */}
+        <TouchableOpacity onPress={() => setShowMoreMenu(true)} style={styles.moreButton}>
+          <MoreVertical size={20} color={Colors.light.textSecondary} />
+        </TouchableOpacity>
       </View>
 
       {/* Announcement Badge */}
@@ -336,33 +327,34 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
         </View>
       )}
 
-      {/* Action Icons Row - Instagram Style */}
+      {/* Action Icons Row - With Counts */}
       {!isAnnouncement && (
         <View style={styles.actionIconsRow}>
           <View style={styles.actionIconsLeft}>
-            <TouchableOpacity onPress={handleLike} style={styles.actionIcon}>
+            <TouchableOpacity onPress={handleLike} style={styles.actionIconWithCount}>
               <Heart 
                 size={24} 
                 color={isLiked ? Colors.light.primary : Colors.light.textSecondary}
                 fill={isLiked ? Colors.light.primary : 'none'}
               />
+              {post.likes.length > 0 && (
+                <Text style={[styles.actionCount, isLiked && { color: Colors.light.primary }]}>
+                  {post.likes.length.toLocaleString()}
+                </Text>
+              )}
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleComment} style={styles.actionIcon}>
+            <TouchableOpacity onPress={handleComment} style={styles.actionIconWithCount}>
               <MessageCircle size={24} color={Colors.light.textSecondary} />
+              {post.comments.length > 0 && (
+                <Text style={styles.actionCount}>
+                  {post.comments.length.toLocaleString()}
+                </Text>
+              )}
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleShare} style={styles.actionIcon}>
+            <TouchableOpacity onPress={handleShare} style={styles.actionIconWithCount}>
               <Share2 size={24} color={Colors.light.textSecondary} />
             </TouchableOpacity>
           </View>
-        </View>
-      )}
-
-      {/* Like Count */}
-      {!isAnnouncement && post.likes.length > 0 && (
-        <View style={styles.likeCountContainer}>
-          <Text style={styles.likeCount}>
-            {post.likes.length.toLocaleString()} {post.likes.length === 1 ? 'like' : 'likes'}
-          </Text>
         </View>
       )}
 
@@ -375,7 +367,7 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
               onPress={handleComment}
               style={styles.viewAllComments}
             >
-              <Text style={styles.viewAllCommentsText}>
+              <Text style={[styles.viewAllCommentsText, { color: Colors.light.primary, fontWeight: '500' }]}>
                 View all {post.comments.length} comments
               </Text>
             </TouchableOpacity>
@@ -426,25 +418,6 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
         </View>
       )}
 
-          {/* ✨ REACTION BAR */}
-      {!isAnnouncement && (
-          <View style={styles.reactionBarContainer}>
-            <ReactionBar
-              reactionSummary={post.reactionSummary || {
-                heart: 0,
-                thumbsup: 0,
-                clap: 0,
-                fire: 0,
-                star: 0,
-                total: 0,
-              }}
-              onReactionPress={() => setShowReactionPicker(true)}
-              onReactionCountPress={() => {
-                console.log('Show who reacted to post:', post.id);
-              }}
-            />
-          </View>
-      )}
 
       {/* Comments Modal - For full comment view */}
 
@@ -651,15 +624,6 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
         </View>
       </Modal>
 
-      {/* ✨ REACTION PICKER MODAL */}
-      <ReactionPicker
-        visible={showReactionPicker}
-        onClose={() => setShowReactionPicker(false)}
-        onSelectReaction={async (reactionType) => {
-          await addReaction(post.id, reactionType);
-        }}
-        currentReaction={post.reactionSummary?.userReaction}
-      />
 
       {/* Share Modal */}
       <ShareModal
@@ -694,6 +658,83 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
         showCancel
       />
 
+      {/* More Options Menu Modal */}
+      <Modal
+        visible={showMoreMenu}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMoreMenu(false)}
+      >
+        <TouchableOpacity
+          style={styles.moreMenuOverlay}
+          activeOpacity={1}
+          onPress={() => setShowMoreMenu(false)}
+        >
+          <View style={styles.moreMenuContent}>
+            {canDelete && (
+              <TouchableOpacity
+                style={styles.moreMenuItem}
+                onPress={() => {
+                  setShowMoreMenu(false);
+                  handleDelete();
+                }}
+              >
+                <Trash2 size={20} color={Colors.light.error} />
+                <Text style={[styles.moreMenuText, { color: Colors.light.error }]}>Delete</Text>
+              </TouchableOpacity>
+            )}
+            {canDelete && (
+              <TouchableOpacity
+                style={styles.moreMenuItem}
+                onPress={() => {
+                  setShowMoreMenu(false);
+                  // TODO: Implement edit functionality
+                }}
+              >
+                <Edit size={20} color={Colors.light.text} />
+                <Text style={styles.moreMenuText}>Edit</Text>
+              </TouchableOpacity>
+            )}
+            {!isAnnouncement && user && post.userId !== user.id && !isAdmin && (
+              <TouchableOpacity
+                style={styles.moreMenuItem}
+                onPress={() => {
+                  setShowMoreMenu(false);
+                  setShowReportModal(true);
+                }}
+              >
+                <Flag size={20} color={Colors.light.text} />
+                <Text style={styles.moreMenuText}>Report</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.moreMenuItem}
+              onPress={async () => {
+                setShowMoreMenu(false);
+                try {
+                  const postUrl = `https://volunteersinc.org/post?id=${post.id}`;
+                  await Share.share({
+                    message: postUrl,
+                    url: postUrl,
+                  });
+                } catch (error) {
+                  // User cancelled or error
+                }
+              }}
+            >
+              <Copy size={20} color={Colors.light.text} />
+              <Text style={styles.moreMenuText}>Copy Link</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.moreMenuItem, styles.moreMenuCancel]}
+              onPress={() => setShowMoreMenu(false)}
+            >
+              <Text style={[styles.moreMenuText, { fontWeight: '600' }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* General Alert */}
       <CustomAlert
         visible={alertVisible}
@@ -721,9 +762,15 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: Colors.light.background,
-    marginBottom: 8,
-    paddingBottom: 8,
+    backgroundColor: Colors.light.card,
+    borderRadius: 12,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+    overflow: 'hidden',
   },
   announcementCard: {
     backgroundColor: Colors.light.primary + '08',
@@ -731,8 +778,8 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    paddingBottom: 12,
+    padding: 12,
+    paddingBottom: 8,
   },
   avatarContainer: {
     marginRight: 12,
@@ -768,12 +815,36 @@ const styles = StyleSheet.create({
   pinIcon: {
     marginRight: 8,
   },
-  reportButton: {
+  moreButton: {
     padding: 4,
-    marginRight: 8,
   },
-  deleteButton: {
-    padding: 4,
+  moreMenuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  moreMenuContent: {
+    backgroundColor: Colors.light.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 20,
+  },
+  moreMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.light.border,
+  },
+  moreMenuCancel: {
+    borderBottomWidth: 0,
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  moreMenuText: {
+    fontSize: 16,
+    color: Colors.light.text,
   },
   announcementBadge: {
     flexDirection: 'row',
@@ -797,8 +868,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     color: Colors.light.text,
-    paddingHorizontal: 16,
-    marginBottom: 12,
+    paddingHorizontal: 12,
+    marginBottom: 8,
   },
   media: {
     width: width - 2,
@@ -812,23 +883,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   actionIconsLeft: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 20,
+    alignItems: 'center',
   },
-  actionIcon: {
+  actionIconWithCount: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     padding: 4,
   },
-  likeCountContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  likeCount: {
-    fontSize: 16,
-    fontWeight: 'bold',
+  actionCount: {
+    fontSize: 14,
+    fontWeight: '600',
     color: Colors.light.text,
   },
   commentTextContainer: {
@@ -844,7 +915,7 @@ const styles = StyleSheet.create({
     color: Colors.light.textSecondary,
   },
   commentsContainer: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingBottom: 8,
   },
   commentItem: {
@@ -878,11 +949,6 @@ const styles = StyleSheet.create({
   },
   viewAllCommentsText: {
     fontSize: 14,
-    color: Colors.light.textSecondary,
-  },
-  reactionBarContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
   },
   modalSafeArea: {
     flex: 1,

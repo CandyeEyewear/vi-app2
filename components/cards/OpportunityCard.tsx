@@ -94,7 +94,7 @@ export function OpportunityCard({ opportunity, onPress, onShare }: OpportunityCa
   return (
     <>
       <TouchableOpacity
-        style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
+        style={[styles.card, { backgroundColor: colors.background, borderColor: colors.border }]}
         onPress={() => onPress(opportunity)}
         activeOpacity={0.7}
       >
