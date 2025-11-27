@@ -24,6 +24,7 @@ import { Shield, ShoppingBag, Plus, Edit, Settings, Calendar, Crown, Heart, Chev
 import StreakBadge from '../../components/StreakBadge';
 import { AvatarWithBadge, UserNameWithBadge } from '../../components/index';
 import WebContainer from '../../components/WebContainer';
+import Head from 'expo-router/head';
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -97,6 +98,9 @@ export default function ProfileScreen() {
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.card }]} contentContainerStyle={styles.scrollContent}>
+      <Head>
+        <title>Profile | VIbe</title>
+      </Head>
       {!isDesktop && (
         <View style={[styles.header, { paddingTop: insets.top + 32, backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         <View style={styles.avatarSection}>

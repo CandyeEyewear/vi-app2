@@ -25,6 +25,7 @@ import WebContainer from '../../components/WebContainer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Plus, Search, Camera, Image as ImageIcon } from 'lucide-react-native';
+import Head from 'expo-router/head';
 import { useAuth } from '../../contexts/AuthContext';
 import { useFeed } from '../../contexts/FeedContext';
 import { Colors } from '../../constants/colors';
@@ -445,6 +446,9 @@ const renderTabs = () => (
 
    return (
     <View style={[styles.container, { backgroundColor: colors.card }]}>
+      <Head>
+        <title>Feed | VIbe</title>
+      </Head>
       {!isDesktop && renderHeader()}
       <WebContainer>
         {renderTabs()}

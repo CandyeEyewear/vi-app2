@@ -37,6 +37,7 @@ import { useDebounce } from '../../hooks/useDebounce';
 import { CausesList } from '../../components/CausesList';
 import { EventsList } from '../../components/EventsList';
 import WebContainer from '../../components/WebContainer';
+import Head from 'expo-router/head';
 import {
   searchOpportunities,
   getSearchHistory,
@@ -1617,6 +1618,9 @@ export default function DiscoverScreen() {
           }
         }}
       >
+        <Head>
+          <title>Discover | VIbe</title>
+        </Head>
         {/* Header with SafeAreaInsets */}
         {!isDesktop && (
           <View style={[

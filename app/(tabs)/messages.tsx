@@ -30,6 +30,7 @@ import { ConversationsSkeleton } from '../../components/SkeletonLayouts';
 import { supabase } from '../../services/supabase';
 import { AvatarWithBadge, UserNameWithBadge } from '../../components/index';
 import WebContainer from '../../components/WebContainer';
+import Head from 'expo-router/head';
 
 export default function MessagesScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -286,6 +287,9 @@ export default function MessagesScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={[styles.container, { backgroundColor: colors.card }]}>
+        <Head>
+          <title>Messages | VIbe</title>
+        </Head>
         {/* Header with SafeAreaInsets */}
         {!isDesktop && (
           <View style={[
