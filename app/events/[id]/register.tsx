@@ -158,6 +158,15 @@ export default function EventRegisterScreen() {
       return;
     }
 
+    // Validate minimum payment amount (eZeePayments requirement: minimum 1000 JMD)
+    if (!event.isFree && totalAmount > 0 && totalAmount < 1000) {
+      showAlert(
+        'Minimum Payment Required',
+        `The minimum payment amount is ${formatCurrency(1000)}. Please increase the number of tickets.`
+      );
+      return;
+    }
+
     console.log('Starting payment process...');
     setSubmitting(true);
 
@@ -181,13 +190,13 @@ export default function EventRegisterScreen() {
       }
 
       // For paid events, process payment through eZeePayments
-      // First, create a pending registration
+          // First, create a pending registration
       console.log('Paid event - creating registration...');
-      const registrationResponse = await registerForEvent({
-        eventId: id,
-        userId: user.id,
-        ticketCount,
-      });
+          const registrationResponse = await registerForEvent({
+            eventId: id,
+            userId: user.id,
+            ticketCount,
+          });
 
       console.log('Registration response:', registrationResponse);
 
@@ -284,11 +293,11 @@ export default function EventRegisterScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <WebContainer>
-          <ScrollView
-            style={styles.scrollView}
+        <ScrollView
+          style={styles.scrollView}
             contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
-            showsVerticalScrollIndicator={false}
-          >
+          showsVerticalScrollIndicator={false}
+        >
           {/* Event Info Card */}
           <View style={[styles.eventCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.eventTitle, { color: colors.text }]} numberOfLines={2}>
@@ -460,7 +469,7 @@ export default function EventRegisterScreen() {
             </View>
           )}
 
-          </ScrollView>
+        </ScrollView>
         </WebContainer>
       </KeyboardAvoidingView>
 

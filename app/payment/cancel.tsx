@@ -25,7 +25,7 @@ export default function PaymentCancelScreen() {
         )}
         <TouchableOpacity 
           style={[styles.button, { backgroundColor: '#38B6FF' }]}
-          onPress={() => router.replace('/(tabs)')}
+          onPress={() => router.replace('/feed')}
           activeOpacity={0.8}
         >
           <Text style={styles.buttonText}>Return Home</Text>

@@ -54,8 +54,8 @@ import {
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
 
-// Preset donation amounts (JMD)
-const PRESET_AMOUNTS = [500, 1000, 2500, 5000, 10000, 25000];
+// Preset donation amounts (JMD) - minimum 1000 JMD for eZeePayments
+const PRESET_AMOUNTS = [1000, 2500, 5000, 10000, 25000];
 
 // Recurring frequency options
 const FREQUENCY_OPTIONS: { value: RecurringFrequency; label: string; description: string }[] = [
@@ -105,7 +105,7 @@ export default function DonateScreen() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // Form state
+  // Form state - default to minimum 1000 JMD
   const [selectedAmount, setSelectedAmount] = useState<number | null>(1000);
   const [customAmount, setCustomAmount] = useState('');
   const [isCustom, setIsCustom] = useState(false);
@@ -172,6 +172,16 @@ export default function DonateScreen() {
       return false;
     }
 
+    // eZeePayments requirement: minimum 1000 JMD
+    const MINIMUM_PAYMENT = 1000;
+    if (finalAmount < MINIMUM_PAYMENT) {
+      showAlert(
+        'Minimum Payment Required',
+        `The minimum payment amount is ${formatCurrency(MINIMUM_PAYMENT)}. eZeePayments does not accept payments below ${formatCurrency(MINIMUM_PAYMENT)}.`
+      );
+      return false;
+    }
+
     if (cause?.minimumDonation && finalAmount < cause.minimumDonation) {
       showAlert(
         'Minimum Donation',
@@ -194,6 +204,16 @@ export default function DonateScreen() {
         showAlert('Invalid Email', 'Please enter a valid email address');
         return false;
       }
+    }
+
+    // eZeePayments requirement: minimum 1000 JMD for subscriptions
+    const MINIMUM_SUBSCRIPTION = 1000;
+    if (isRecurring && finalAmount < MINIMUM_SUBSCRIPTION) {
+      showAlert(
+        'Minimum Subscription Required',
+        `The minimum subscription amount is ${formatCurrency(MINIMUM_SUBSCRIPTION)}. eZeePayments does not accept subscriptions below ${formatCurrency(MINIMUM_SUBSCRIPTION)}.`
+      );
+      return false;
     }
 
     if (isRecurring && !user) {
@@ -274,10 +294,10 @@ export default function DonateScreen() {
           showAlert(
             'Payment Error',
             subscriptionResult.error || 'Failed to process subscription. Please try again.'
-          );
-          setSubmitting(false);
-          return;
-        }
+        );
+        setSubmitting(false);
+        return;
+      }
 
         showAlert(
           'Subscription Created! 💝',

@@ -100,33 +100,58 @@ function AppContent() {
       }
     });
 
-    Linking.getInitialURL().then((url) => {
-      if (url) {
-        logger.info('[DEEP LINK] Initial URL', { url });
-        const parsed = Linking.parse(url);
-        
-        if (parsed.hostname === 'vibe.volunteersinc.org' || parsed.scheme === 'vibe') {
-          if (parsed.path === '/invite' || parsed.path?.includes('invite')) {
-            const inviteCode = parsed.queryParams?.code || parsed.queryParams?.ref || parsed.queryParams?.invite;
-            if (inviteCode) {
-              const code = Array.isArray(inviteCode) ? inviteCode[0] : inviteCode;
-              logger.info('[DEEP LINK] Navigating to register with invite code', { code });
-              router.push(`/register?code=${code}` as any);
-              return;
-            }
+    // Handle deep links for payment redirects and other URLs
+    const handleDeepLink = (url: string) => {
+      if (!url) return;
+      
+      logger.info('[DEEP LINK] Received URL', { url });
+      const parsed = Linking.parse(url);
+      
+      // Handle payment redirects (vibe://payment/success or vibe://payment/cancel)
+      if (parsed.scheme === 'vibe' && parsed.path) {
+        if (parsed.path.includes('payment/success') || parsed.path.includes('payment/cancel')) {
+          logger.info('[DEEP LINK] Payment redirect detected, navigating to feed', { path: parsed.path });
+          router.replace('/feed');
+          return;
+        }
+      }
+      
+      // Handle web URLs
+      if (parsed.hostname === 'vibe.volunteersinc.org' || parsed.scheme === 'vibe') {
+        if (parsed.path === '/invite' || parsed.path?.includes('invite')) {
+          const inviteCode = parsed.queryParams?.code || parsed.queryParams?.ref || parsed.queryParams?.invite;
+          if (inviteCode) {
+            const code = Array.isArray(inviteCode) ? inviteCode[0] : inviteCode;
+            logger.info('[DEEP LINK] Navigating to register with invite code', { code });
+            router.push(`/register?code=${code}` as any);
+            return;
           }
         }
-        
-        logger.info('[DEEP LINK] Letting expo-router handle', { url });
       }
+      
+      logger.info('[DEEP LINK] Letting expo-router handle', { url });
+    };
+
+    // Handle initial URL
+    Linking.getInitialURL().then((url) => {
+      if (url) handleDeepLink(url);
+    });
+
+    // Listen for deep links while app is running
+    const subscription = Linking.addEventListener('url', (event) => {
+      handleDeepLink(event.url);
     });
 
     return () => {
       if (responseListener.current?.remove) {
         responseListener.current.remove();
       }
+      // Clean up deep link subscription
+      if (subscription?.remove) {
+        subscription.remove();
+      }
     };
-  }, []);
+  }, [router]);
 
   return (
     <>
@@ -151,6 +176,9 @@ function AppContent() {
           <Stack.Screen name="membership/subscribe" />
           <Stack.Screen name="causes/[id]" />
           <Stack.Screen name="causes/[id]/donate" />
+          <Stack.Screen name="events/[id]" />
+          <Stack.Screen name="events/[id]/register" />
+          <Stack.Screen name="(admin)" />
         </Stack>
       </View>
     </>

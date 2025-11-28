@@ -40,11 +40,11 @@ export default async function handler(req: any, res: any) {
   try {
     if (req.method === 'GET' && action === 'status') {
       return await getSubscriptionStatus(req, res);
-    }
+  }
 
     if (req.method === 'POST' && action === 'cancel') {
       return await cancelSubscription(req, res);
-    }
+  }
 
     return res.status(400).json({ error: 'Invalid action' });
 
@@ -63,12 +63,12 @@ async function getSubscriptionStatus(req: any, res: any) {
 
   // Try to find by ID first, then by ezee_subscription_id
   let { data: subscription, error } = await supabase
-    .from('payment_subscriptions')
-    .select('*')
-    .eq('id', subscriptionId)
-    .single();
+      .from('payment_subscriptions')
+      .select('*')
+      .eq('id', subscriptionId)
+      .single();
 
-  if (error || !subscription) {
+    if (error || !subscription) {
     // Try by ezee_subscription_id
     const { data: subByEzee, error: ezeeError } = await supabase
       .from('payment_subscriptions')
@@ -80,19 +80,19 @@ async function getSubscriptionStatus(req: any, res: any) {
       return res.status(404).json({ error: 'Subscription not found' });
     }
     subscription = subByEzee;
-  }
+    }
 
-  if (subscription.ezee_subscription_id) {
-    try {
-      const ezeeResponse = await fetch(
-        `${EZEE_API_URL}/v1/subscription/status/${subscription.ezee_subscription_id}/`,
-        {
-          method: 'GET',
-          headers: { 'Licence': EZEE_LICENCE_KEY },
-        }
-      );
+    if (subscription.ezee_subscription_id) {
+      try {
+        const ezeeResponse = await fetch(
+          `${EZEE_API_URL}/v1/subscription/status/${subscription.ezee_subscription_id}/`,
+          {
+            method: 'GET',
+            headers: { 'Licence': EZEE_LICENCE_KEY },
+          }
+        );
 
-      if (ezeeResponse.ok) {
+        if (ezeeResponse.ok) {
         let ezeeData;
         try {
           ezeeData = await ezeeResponse.json();
@@ -102,28 +102,28 @@ async function getSubscriptionStatus(req: any, res: any) {
           ezeeData = { status: subscription.status };
         }
 
-        const statusMap: Record<string, string> = {
-          'ACTIVE': 'active',
-          'CANCELLED': 'cancelled',
-          'ENDED': 'ended',
-          'PAUSED': 'paused',
-        };
+          const statusMap: Record<string, string> = {
+            'ACTIVE': 'active',
+            'CANCELLED': 'cancelled',
+            'ENDED': 'ended',
+            'PAUSED': 'paused',
+          };
 
-        const mappedStatus = statusMap[ezeeData.status] || subscription.status;
+          const mappedStatus = statusMap[ezeeData.status] || subscription.status;
 
-        if (mappedStatus !== subscription.status) {
-          await supabase
-            .from('payment_subscriptions')
+          if (mappedStatus !== subscription.status) {
+            await supabase
+              .from('payment_subscriptions')
             .update({ status: mappedStatus, updated_at: new Date().toISOString() })
             .eq('id', subscription.id);
 
-          subscription.status = mappedStatus;
+            subscription.status = mappedStatus;
+          }
         }
+      } catch (ezeeError) {
+        console.error('eZee status check error:', ezeeError);
       }
-    } catch (ezeeError) {
-      console.error('eZee status check error:', ezeeError);
     }
-  }
 
   return res.status(200).json({
     success: true,
@@ -142,19 +142,19 @@ async function getSubscriptionStatus(req: any, res: any) {
 async function cancelSubscription(req: any, res: any) {
   const { subscriptionId, userId } = req.body;
 
-  if (!subscriptionId || !userId) {
+    if (!subscriptionId || !userId) {
     return res.status(400).json({ error: 'subscriptionId and userId are required' });
-  }
+    }
 
   // Try to find by ID first, then by ezee_subscription_id
   let { data: subscription, error } = await supabase
-    .from('payment_subscriptions')
-    .select('*')
-    .eq('id', subscriptionId)
-    .eq('user_id', userId)
-    .single();
+      .from('payment_subscriptions')
+      .select('*')
+      .eq('id', subscriptionId)
+      .eq('user_id', userId)
+      .single();
 
-  if (error || !subscription) {
+    if (error || !subscription) {
     // Try by ezee_subscription_id
     const { data: subByEzee, error: ezeeError } = await supabase
       .from('payment_subscriptions')
@@ -167,20 +167,20 @@ async function cancelSubscription(req: any, res: any) {
       return res.status(404).json({ error: 'Subscription not found or unauthorized' });
     }
     subscription = subByEzee;
-  }
+    }
 
-  if (subscription.ezee_subscription_id) {
-    try {
+    if (subscription.ezee_subscription_id) {
+      try {
       const ezeeResponse = await fetch(`${EZEE_API_URL}/v1/subscription/cancel/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
           licence_key: EZEE_LICENCE_KEY,
-          subscription_id: subscription.ezee_subscription_id,
-        }),
-      });
+            subscription_id: subscription.ezee_subscription_id,
+          }),
+        });
 
       if (!ezeeResponse.ok) {
         const ezeeError = await ezeeResponse.json().catch(() => ({}));
@@ -188,34 +188,34 @@ async function cancelSubscription(req: any, res: any) {
       }
     } catch (ezeeError) {
       console.error('eZee cancel request error:', ezeeError);
+      }
     }
-  }
 
-  await supabase
-    .from('payment_subscriptions')
-    .update({ 
-      status: 'cancelled', 
+    await supabase
+      .from('payment_subscriptions')
+      .update({
+        status: 'cancelled',
       cancelled_at: new Date().toISOString(),
       updated_at: new Date().toISOString() 
-    })
+      })
     .eq('id', subscription.id);
 
-  if (subscription.subscription_type === 'recurring_donation' && subscription.reference_id) {
-    await supabase
-      .from('recurring_donations')
-      .update({ status: 'cancelled' })
-      .eq('id', subscription.reference_id);
-  }
+    if (subscription.subscription_type === 'recurring_donation' && subscription.reference_id) {
+      await supabase
+        .from('recurring_donations')
+        .update({ status: 'cancelled' })
+        .eq('id', subscription.reference_id);
+    }
 
-  if (subscription.subscription_type === 'membership') {
-    await supabase
-      .from('users')
-      .update({ membership_status: 'cancelled', is_premium: false })
-      .eq('id', userId);
-  }
+    if (subscription.subscription_type === 'membership') {
+      await supabase
+        .from('users')
+        .update({ membership_status: 'cancelled', is_premium: false })
+        .eq('id', userId);
+    }
 
   return res.status(200).json({
     success: true,
     message: 'Subscription cancelled successfully'
   });
-}
+  }

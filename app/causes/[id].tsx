@@ -255,19 +255,19 @@ export default function CauseDetailScreen() {
       </View>
 
       <WebContainer>
-        <ScrollView
-          style={styles.scrollView}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor="#38B6FF"
-            />
-          }
-        >
-          {/* Hero Image */}
-          <View style={styles.imageContainer}>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#38B6FF"
+          />
+        }
+      >
+        {/* Hero Image */}
+        <View style={styles.imageContainer}>
           {cause.imageUrl ? (
             <Image source={{ uri: cause.imageUrl }} style={styles.heroImage} resizeMode="cover" />
           ) : (
@@ -478,7 +478,7 @@ export default function CauseDetailScreen() {
           {/* Bottom spacing for fixed button */}
           <View style={{ height: 100 }} />
         </View>
-        </ScrollView>
+      </ScrollView>
       </WebContainer>
 
       {/* Fixed Bottom Button */}

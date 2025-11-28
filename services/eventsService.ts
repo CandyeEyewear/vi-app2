@@ -571,6 +571,99 @@ export async function getEventRegistrations(
   }
 }
 
+/**
+ * Deregister a user from an event (Admin)
+ * Cancels the registration and optionally processes refund
+ */
+export async function deregisterUser(
+  registrationId: string,
+  processRefund: boolean = false
+): Promise<ApiResponse<{ refundProcessed?: boolean; refundError?: string }>> {
+  try {
+    // Get registration details
+    const { data: registration, error: regError } = await supabase
+      .from('event_registrations')
+      .select('*, event:events(id, ticket_price, is_free)')
+      .eq('id', registrationId)
+      .single();
+
+    if (regError || !registration) {
+      return { success: false, error: 'Registration not found' };
+    }
+
+    // Update registration status to cancelled
+    const { error: updateError } = await supabase
+      .from('event_registrations')
+      .update({
+        status: 'cancelled',
+        cancelled_at: new Date().toISOString(),
+      })
+      .eq('id', registrationId);
+
+    if (updateError) throw updateError;
+
+    // If it's a paid event and refund is requested, process refund
+    let refundResult: { refundProcessed?: boolean; refundError?: string } = {};
+    if (processRefund && !registration.event?.is_free && registration.event?.ticket_price) {
+      // Find the payment transaction for this registration
+      const { data: transaction } = await supabase
+        .from('payment_transactions')
+        .select('*')
+        .eq('reference_id', registrationId)
+        .eq('order_type', 'event_registration')
+        .eq('status', 'completed')
+        .single();
+
+      if (transaction) {
+        // Process refund through API
+        try {
+          const refundResponse = await fetch(
+            `${process.env.EXPO_PUBLIC_API_URL || 'https://vibe.volunteersinc.org'}/api/ezee/refund`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                transactionId: transaction.transaction_number,
+                orderId: transaction.order_id,
+                amount: transaction.amount,
+                reason: 'Admin deregistration',
+              }),
+            }
+          );
+
+          const refundData = await refundResponse.json();
+          if (refundData.success) {
+            // Update transaction status
+            await supabase
+              .from('payment_transactions')
+              .update({
+                status: 'refunded',
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', transaction.id);
+
+            refundResult.refundProcessed = true;
+          } else {
+            refundResult.refundError = refundData.error || 'Refund processing failed';
+          }
+        } catch (refundError) {
+          console.error('Refund error:', refundError);
+          refundResult.refundError = 'Failed to process refund. Please process manually.';
+        }
+      } else {
+        refundResult.refundError = 'Payment transaction not found';
+      }
+    }
+
+    return { success: true, data: refundResult };
+  } catch (error) {
+    console.error('Error deregistering user:', error);
+    return { success: false, error: 'Failed to deregister user' };
+  }
+}
+
 
 // ==================== HELPER FUNCTIONS ====================
 

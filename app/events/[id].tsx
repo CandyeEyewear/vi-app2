@@ -159,7 +159,11 @@ export default function EventDetailScreen() {
       setLoadingRegistrations(true);
       const response = await getEventRegistrations(id);
       if (response.success && response.data) {
-        setRegistrations(response.data);
+        // Filter out cancelled registrations
+        const activeRegistrations = response.data.filter(
+          (reg) => reg.status !== 'cancelled'
+        );
+        setRegistrations(activeRegistrations);
       }
     } catch (error) {
       console.error('Error fetching registrations:', error);
@@ -347,19 +351,19 @@ export default function EventDetailScreen() {
       </View>
 
       <WebContainer>
-        <ScrollView
-          style={styles.scrollView}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor="#38B6FF"
-            />
-          }
-        >
-          {/* Hero Image */}
-          <View style={styles.imageContainer}>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#38B6FF"
+          />
+        }
+      >
+        {/* Hero Image */}
+        <View style={styles.imageContainer}>
           {event.imageUrl ? (
             <Image source={{ uri: event.imageUrl }} style={styles.heroImage} resizeMode="cover" />
           ) : (
@@ -636,7 +640,7 @@ export default function EventDetailScreen() {
           {/* Bottom spacing */}
           <View style={{ height: 120 }} />
         </View>
-        </ScrollView>
+      </ScrollView>
       </WebContainer>
 
       {/* Fixed Bottom Button */}

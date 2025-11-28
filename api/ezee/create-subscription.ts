@@ -89,6 +89,7 @@ export default async function handler(req: any, res: any) {
       customerName,
       description,
       endDate,
+      platform,  // 'web' or 'app'
     } = req.body;
 
     if (!amount || !frequency || !subscriptionType || !userId || !customerEmail) {
@@ -102,9 +103,16 @@ export default async function handler(req: any, res: any) {
     const timestamp = Date.now().toString();
     const randomStr = Math.random().toString(36).substring(2, 8);
     const subscriptionOrderId = `SUB_${timestamp}_${randomStr}`;
+    
+    // Determine redirect URLs based on platform
+    const isApp = platform === 'app';
     const postBackUrl = `${APP_URL}/api/ezee/webhook`;
-    const returnUrl = `${APP_URL}/payment/success?type=subscription`;
-    const cancelUrl = `${APP_URL}/payment/cancel?type=subscription`;
+    const returnUrl = isApp 
+      ? `vibe://payment/success?orderId=${subscriptionOrderId}&type=subscription`
+      : `${APP_URL}/payment/success?orderId=${subscriptionOrderId}&type=subscription`;
+    const cancelUrl = isApp 
+      ? `vibe://payment/cancel?orderId=${subscriptionOrderId}&type=subscription`
+      : `${APP_URL}/payment/cancel?orderId=${subscriptionOrderId}&type=subscription`;
 
     // Create subscription with eZeePayments using form data
     const subscriptionFormData = new URLSearchParams();
@@ -235,12 +243,12 @@ export default async function handler(req: any, res: any) {
     }).toString();
 
     return res.status(200).json({
-      success: true,
-      subscriptionId: subscription?.id,
+        success: true,
+        subscriptionId: subscription?.id,
       ezeeSubscriptionId: ezeeSubscriptionId,
       token: token,
       paymentUrl: paymentRedirectUrl,  // This URL will auto-POST to eZeePayments
-      paymentData: {
+        paymentData: {
         token: token,
         amount: amount,
         currency: 'JMD',

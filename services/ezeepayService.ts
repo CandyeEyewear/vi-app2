@@ -106,7 +106,7 @@ export const MEMBERSHIP_PLANS = {
   monthly: {
     id: 'premium_monthly',
     name: 'Premium Monthly',
-    price: 500,
+    price: 1000,
     currency: 'JMD',
     frequency: 'monthly' as PaymentFrequency,
     description: 'VIbe Premium Membership - Monthly',
@@ -122,11 +122,11 @@ export const MEMBERSHIP_PLANS = {
   yearly: {
     id: 'premium_yearly',
     name: 'Premium Yearly',
-    price: 6000,
+    price: 12000,
     currency: 'JMD',
     frequency: 'annually' as PaymentFrequency,
     description: 'VIbe Premium Membership - Yearly',
-    savings: 0, // J$500 * 12 = J$6,000 (no savings, but could add discount later)
+    savings: 0, // J$1000 * 12 = J$12,000 (no savings, but could add discount later)
     benefits: [
       'Blue verification tick',
       'Official Member designation',

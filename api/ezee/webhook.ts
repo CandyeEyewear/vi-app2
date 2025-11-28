@@ -61,11 +61,11 @@ export default async function handler(req: any, res: any) {
     const { data: webhookRecord, error: logError } = await supabase
       .from('payment_webhooks')
       .insert({
-        event_type: subscription_id ? 'subscription_payment' : 'one_time_payment',
+      event_type: subscription_id ? 'subscription_payment' : 'one_time_payment',
         transaction_number: TransactionNumber || null,
-        payload: body,
-        headers,
-        processed: false,
+      payload: body,
+      headers,
+      processed: false,
       })
       .select()
       .single();
@@ -81,34 +81,34 @@ export default async function handler(req: any, res: any) {
     if (customOrderId && TransactionNumber) {
       // Find transaction by order_id (which is the uniqueOrderId we sent to eZeePayments)
       const { data: transaction, error: updateError } = await supabase
-        .from('payment_transactions')
-        .update({
-          status: isSuccessful ? 'completed' : 'failed',
+    .from('payment_transactions')
+    .update({
+      status: isSuccessful ? 'completed' : 'failed',
           transaction_number: TransactionNumber,
           response_code: ResponseCode?.toString() || null,
           response_description: ResponseDescription || null,
           updated_at: new Date().toISOString(),
           completed_at: isSuccessful ? new Date().toISOString() : null,
-        })
+    })
         .eq('order_id', customOrderId)  // Match by CustomOrderId (uniqueOrderId)
-        .select()
-        .single();
+    .select()
+    .single();
 
       if (updateError) {
         console.error('Transaction update error:', updateError);
         console.error('Looking for order_id:', customOrderId);
         console.error('Webhook body:', JSON.stringify(body, null, 2));
-      }
+  }
 
       if (transaction && isSuccessful) {
-        await handleSuccessfulPayment(transaction);
-      }
-    }
+    await handleSuccessfulPayment(transaction);
+  }
+}
 
     // Handle subscription payment
     if (subscription_id) {
       const { data: subscription, error: subUpdateError } = await supabase
-        .from('payment_subscriptions')
+    .from('payment_subscriptions')
         .update({
           status: isSuccessful ? 'active' : 'failed',
           transaction_number: TransactionNumber || null,
@@ -116,20 +116,20 @@ export default async function handler(req: any, res: any) {
           updated_at: new Date().toISOString(),
         })
         .eq('ezee_subscription_id', subscription_id)
-        .select()
-        .single();
+    .select()
+    .single();
 
       if (subUpdateError) {
         console.error('Subscription update error:', subUpdateError);
-      }
+  }
 
       if (subscription && isSuccessful) {
         // Calculate next billing date
-        const nextBillingDate = calculateNextBillingDate(subscription.frequency);
-        await supabase
-          .from('payment_subscriptions')
+  const nextBillingDate = calculateNextBillingDate(subscription.frequency);
+  await supabase
+    .from('payment_subscriptions')
           .update({ next_billing_date: nextBillingDate })
-          .eq('id', subscription.id);
+    .eq('id', subscription.id);
 
         await handleSuccessfulSubscriptionPayment(subscription);
       }

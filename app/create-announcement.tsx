@@ -403,14 +403,14 @@ export default function CreateAnnouncementScreen() {
 
       {/* Form */}
       <WebContainer>
-        <ScrollView 
-          style={styles.scrollView} 
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: styles.scrollContent.paddingBottom + insets.bottom + 100 }
-          ]}
-          keyboardShouldPersistTaps="handled"
-        >
+      <ScrollView 
+        style={styles.scrollView} 
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: styles.scrollContent.paddingBottom + insets.bottom + 100 }
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Info Banner */}
         <View style={[styles.infoBanner, { backgroundColor: colors.primary + '10', borderColor: colors.primary }]}>
           <Megaphone size={20} color={colors.primary} />
@@ -533,7 +533,7 @@ export default function CreateAnnouncementScreen() {
             {loading ? 'Posting...' : 'Post Announcement'}
           </Text>
         </TouchableOpacity>
-        </ScrollView>
+      </ScrollView>
       </WebContainer>
 
       {/* Custom Alert */}

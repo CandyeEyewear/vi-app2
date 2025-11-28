@@ -16,7 +16,7 @@ export default function PaymentSuccessScreen() {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          router.replace('/(tabs)');
+          router.replace('/feed');
           return 0;
         }
         return prev - 1;

@@ -473,12 +473,12 @@ export default function CreateEventScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <WebContainer>
-          <ScrollView
-            style={styles.scrollView}
+        <ScrollView
+          style={styles.scrollView}
             contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Basic Info Section */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Basic Information</Text>
@@ -1021,7 +1021,7 @@ export default function CreateEventScreen() {
             </View>
           </View>
 
-          </ScrollView>
+        </ScrollView>
         </WebContainer>
       </KeyboardAvoidingView>
 

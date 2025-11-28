@@ -51,6 +51,7 @@ export interface CreatePaymentParams {
   customerEmail: string;
   customerName?: string;
   description?: string;
+  platform?: 'web' | 'app'; // Platform source for smart redirects
 }
 
 export interface CreateSubscriptionParams {
@@ -63,6 +64,7 @@ export interface CreateSubscriptionParams {
   customerName?: string;
   description?: string;
   endDate?: string;
+  platform?: 'web' | 'app'; // Platform source for smart redirects
 }
 
 export interface PaymentResponse {
@@ -185,14 +187,20 @@ async function fetchWithTimeout(
  */
 export async function createPayment(params: CreatePaymentParams): Promise<PaymentResponse> {
   try {
+    // Default to 'app' if platform not specified
+    const requestBody = {
+      ...params,
+      platform: params.platform || 'app',
+    };
+
     const response = await fetchWithTimeout(
       `${API_BASE_URL}/api/ezee/create-token`,
       {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(params),
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
       },
       30000 // 30 second timeout
     );
@@ -269,24 +277,24 @@ export async function processPayment(params: CreatePaymentParams): Promise<{
   }
 
   try {
-    // Create payment token
-    const paymentResult = await createPayment(params);
+  // Create payment token
+  const paymentResult = await createPayment(params);
 
-    if (!paymentResult.success || !paymentResult.paymentUrl || !paymentResult.paymentData) {
-      return {
-        success: false,
-        error: paymentResult.error || 'Failed to create payment',
-      };
-    }
-
-    // Open payment page
-    const browserResult = await openPaymentPage(paymentResult.paymentUrl, paymentResult.paymentData);
-
+  if (!paymentResult.success || !paymentResult.paymentUrl || !paymentResult.paymentData) {
     return {
-      success: browserResult.success,
-      transactionId: paymentResult.transactionId,
-      error: browserResult.error,
+      success: false,
+      error: paymentResult.error || 'Failed to create payment',
     };
+  }
+
+  // Open payment page
+  const browserResult = await openPaymentPage(paymentResult.paymentUrl, paymentResult.paymentData);
+
+  return {
+    success: browserResult.success,
+    transactionId: paymentResult.transactionId,
+    error: browserResult.error,
+  };
   } catch (error) {
     console.error('Process payment error:', error);
     return {
@@ -305,14 +313,20 @@ export async function processPayment(params: CreatePaymentParams): Promise<{
  */
 export async function createSubscription(params: CreateSubscriptionParams): Promise<SubscriptionResponse> {
   try {
+    // Default to 'app' if platform not specified
+    const requestBody = {
+      ...params,
+      platform: params.platform || 'app',
+    };
+
     const response = await fetchWithTimeout(
       `${API_BASE_URL}/api/ezee/create-subscription`,
       {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(params),
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
       },
       30000 // 30 second timeout
     );
@@ -361,24 +375,24 @@ export async function processSubscription(params: CreateSubscriptionParams): Pro
   }
 
   try {
-    // Create subscription
-    const subscriptionResult = await createSubscription(params);
+  // Create subscription
+  const subscriptionResult = await createSubscription(params);
 
-    if (!subscriptionResult.success || !subscriptionResult.paymentUrl || !subscriptionResult.paymentData) {
-      return {
-        success: false,
-        error: subscriptionResult.error || 'Failed to create subscription',
-      };
-    }
-
-    // Open payment page for first payment
-    const browserResult = await openPaymentPage(subscriptionResult.paymentUrl, subscriptionResult.paymentData);
-
+  if (!subscriptionResult.success || !subscriptionResult.paymentUrl || !subscriptionResult.paymentData) {
     return {
-      success: browserResult.success,
-      subscriptionId: subscriptionResult.subscriptionId,
-      error: browserResult.error,
+      success: false,
+      error: subscriptionResult.error || 'Failed to create subscription',
     };
+  }
+
+  // Open payment page for first payment
+  const browserResult = await openPaymentPage(subscriptionResult.paymentUrl, subscriptionResult.paymentData);
+
+  return {
+    success: browserResult.success,
+    subscriptionId: subscriptionResult.subscriptionId,
+    error: browserResult.error,
+  };
   } catch (error) {
     console.error('Process subscription error:', error);
     return {
@@ -462,11 +476,11 @@ export async function cancelSubscription(
     const response = await fetchWithTimeout(
       `${API_BASE_URL}/api/ezee/subscription?action=cancel`,
       {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ subscriptionId, userId }),
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ subscriptionId, userId }),
       },
       30000 // 30 second timeout
     );

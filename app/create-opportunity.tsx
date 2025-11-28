@@ -698,14 +698,14 @@ export default function CreateOpportunityScreen() {
       )}
 
       <WebContainer>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: styles.scrollContent.paddingBottom + insets.bottom + 80 },
-          ]}
-          keyboardShouldPersistTaps="handled"
-        >
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: styles.scrollContent.paddingBottom + insets.bottom + 80 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Title */}
         <View style={styles.field}>
           <Text style={[styles.label, { color: colors.text }]}>
@@ -1311,7 +1311,7 @@ export default function CreateOpportunityScreen() {
             </Text>
           )}
         </TouchableOpacity>
-        </ScrollView>
+      </ScrollView>
       </WebContainer>
 
       {/* Custom Alert */}

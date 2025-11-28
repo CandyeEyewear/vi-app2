@@ -71,8 +71,8 @@ export default function ProfileScreen() {
       'Are you sure you want to logout?',
       async () => {
         try {
-          await signOut();
-          router.replace('/login');
+            await signOut();
+            router.replace('/login');
         } catch (error) {
           console.error('Logout error:', error);
           showAlert(

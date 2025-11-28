@@ -202,12 +202,12 @@ export default function EditProfileScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <WebContainer>
-        <ScrollView 
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: (styles.scrollContent.paddingBottom || 32) + insets.bottom + 80 }
-          ]}
-        >
+      <ScrollView 
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: (styles.scrollContent.paddingBottom || 32) + insets.bottom + 80 }
+        ]}
+      >
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -414,7 +414,7 @@ export default function EditProfileScreen() {
             <Text style={styles.cancelButtonText}>Cancel</Text>
           </TouchableOpacity>
         </View>
-        </ScrollView>
+      </ScrollView>
       </WebContainer>
 
       {/* Custom Alert */}

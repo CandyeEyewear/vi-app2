@@ -486,7 +486,7 @@ const renderTabs = () => (
       {/* Floating Add Button - Outside WebContainer for proper positioning */}
       <TouchableOpacity
         style={[
-          styles.floatingButton,
+          styles.floatingButton, 
           Platform.OS === 'web' && styles.floatingButtonWeb,
           { 
             backgroundColor: colors.primary,

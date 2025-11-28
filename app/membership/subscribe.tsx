@@ -130,12 +130,12 @@ export default function SubscribeScreen() {
       const frequency: Frequency = selectedPlan === 'monthly' ? 'monthly' : 'annually';
 
       // Calculate expiration date
-      const expiresAt = new Date();
-      if (selectedPlan === 'monthly') {
-        expiresAt.setMonth(expiresAt.getMonth() + 1);
-      } else {
-        expiresAt.setFullYear(expiresAt.getFullYear() + 1);
-      }
+                const expiresAt = new Date();
+                if (selectedPlan === 'monthly') {
+                  expiresAt.setMonth(expiresAt.getMonth() + 1);
+                } else {
+                  expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+                }
 
       console.log('Calling processSubscription...');
       // Process subscription payment through eZeePayments
@@ -164,13 +164,13 @@ export default function SubscribeScreen() {
       // Store subscription ID and update membership status
       // The status will be updated by webhook when payment is confirmed
       if (subscriptionResult.subscriptionId) {
-        await supabase
-          .from('users')
-          .update({
+      await supabase
+        .from('users')
+        .update({
             revenuecat_user_id: subscriptionResult.subscriptionId,
             membership_status: 'pending', // Will be updated by webhook when payment completes
-          })
-          .eq('id', user.id);
+        })
+        .eq('id', user.id);
       }
 
       showAlert(

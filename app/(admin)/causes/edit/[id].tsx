@@ -391,12 +391,12 @@ export default function EditCauseScreen() {
 
       <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <WebContainer>
-          <ScrollView
-            style={styles.scrollView}
+        <ScrollView
+          style={styles.scrollView}
             contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Status */}
           <View style={styles.section}>
             <Text style={[styles.label, { color: colors.text }]}>Status</Text>
@@ -714,7 +714,7 @@ export default function EditCauseScreen() {
             </View>
           </View>
 
-          </ScrollView>
+        </ScrollView>
         </WebContainer>
       </KeyboardAvoidingView>
 

@@ -1468,23 +1468,23 @@ export default function DiscoverScreen() {
           const counts = {
             trending: opportunities.length > 0 ? Math.min(opportunities.length, 12) : 0,
             filling: opportunities.filter(o => {
-              const spots = o.spotsAvailable;
-              return spots > 0 && spots <= 5;
+          const spots = o.spotsAvailable;
+          return spots > 0 && spots <= 5;
             }).length,
             saved: savedOpportunityIds.length,
           };
           const count = counts[filter.id as keyof typeof counts];
 
           return (
-            <TouchableOpacity
+          <TouchableOpacity
               key={filter.id}
-              style={[
+            style={[
                 styles.unifiedFilterChip,
                 {
                   backgroundColor: isSelected ? colors.primary : colors.card,
                   borderColor: isSelected ? colors.primary : colors.border,
-                },
-              ]}
+              },
+            ]}
               onPress={() => {
                 handleSelectQuickFilter(filter.id);
                 setSelectedCategory('all');
@@ -1495,14 +1495,14 @@ export default function DiscoverScreen() {
                 color={isSelected ? '#FFFFFF' : colors.text}
                 style={{ marginRight: 4 }}
               />
-              <Text
-                style={[
+            <Text
+              style={[
                   styles.unifiedFilterChipText,
                   { color: isSelected ? '#FFFFFF' : colors.text },
-                ]}
-              >
+              ]}
+            >
                 {filter.label}
-              </Text>
+            </Text>
               {count > 0 && (
                 <View
                   style={[
@@ -1522,7 +1522,7 @@ export default function DiscoverScreen() {
                   </Text>
                 </View>
               )}
-            </TouchableOpacity>
+          </TouchableOpacity>
           );
         })}
       </ScrollView>
@@ -1692,7 +1692,7 @@ export default function DiscoverScreen() {
             { paddingTop: insets.top + 12, backgroundColor: colors.background, borderBottomColor: colors.border }
           ]}>
             <View style={styles.headerContent}>
-              <Text style={[styles.headerTitle, { color: colors.text }]}>Discover</Text>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>Discover</Text>
               <TouchableOpacity 
                 onPress={() => setIsSearchExpanded(true)}
                 style={[styles.searchIconButton, { borderColor: colors.border }]}

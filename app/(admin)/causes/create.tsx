@@ -439,12 +439,12 @@ export default function CreateCauseScreen() {
 
       <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <WebContainer>
-          <ScrollView
-            style={styles.scrollView}
+        <ScrollView
+          style={styles.scrollView}
             contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Title */}
           <View style={styles.section}>
             <Text style={[styles.label, { color: colors.text }]}>
@@ -741,7 +741,7 @@ export default function CreateCauseScreen() {
             </View>
           </View>
 
-          </ScrollView>
+        </ScrollView>
         </WebContainer>
       </KeyboardAvoidingView>
 

@@ -32,6 +32,7 @@ import {
   Eye,
   MoreVertical,
   Star,
+  List,
 } from 'lucide-react-native';
 import { Colors } from '../../../constants/colors';
 import { Event, EventStatus } from '../../../types';
@@ -70,9 +71,10 @@ interface EventItemProps {
   onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onRegistrations: () => void;
 }
 
-function EventItem({ event, colors, onView, onEdit, onDelete }: EventItemProps) {
+function EventItem({ event, colors, onView, onEdit, onDelete, onRegistrations }: EventItemProps) {
   const [showActions, setShowActions] = useState(false);
   const statusConfig = STATUS_CONFIG[event.status] || STATUS_CONFIG.draft;
 
@@ -146,6 +148,10 @@ function EventItem({ event, colors, onView, onEdit, onDelete }: EventItemProps) 
           <TouchableOpacity style={styles.actionButton} onPress={onView}>
             <Eye size={18} color="#38B6FF" />
             <Text style={[styles.actionText, { color: '#38B6FF' }]}>View</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionButton} onPress={onRegistrations}>
+            <List size={18} color="#9C27B0" />
+            <Text style={[styles.actionText, { color: '#9C27B0' }]}>Registrations</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionButton} onPress={onEdit}>
             <Edit3 size={18} color="#FF9800" />
@@ -222,6 +228,11 @@ export default function AdminEventsScreen() {
     router.push(`/events/edit/${event.id}`);
   }, [router]);
 
+  // Handle registrations
+  const handleRegistrations = useCallback((event: Event) => {
+    router.push(`/(admin)/events/${event.id}/registrations`);
+  }, [router]);
+
   // Handle delete
   const handleDelete = useCallback((event: Event) => {
     Alert.alert(
@@ -254,8 +265,9 @@ export default function AdminEventsScreen() {
       onView={() => handleView(item)}
       onEdit={() => handleEdit(item)}
       onDelete={() => handleDelete(item)}
+      onRegistrations={() => handleRegistrations(item)}
     />
-  ), [colors, handleView, handleEdit, handleDelete]);
+  ), [colors, handleView, handleEdit, handleDelete, handleRegistrations]);
 
   // Render empty state
   const renderEmptyComponent = useCallback(() => {

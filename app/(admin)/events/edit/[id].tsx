@@ -495,12 +495,12 @@ export default function EditEventScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <WebContainer>
-          <ScrollView
-            style={styles.scrollView}
+        <ScrollView
+          style={styles.scrollView}
             contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Status & Featured Section */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Status</Text>
@@ -1093,7 +1093,7 @@ export default function EditEventScreen() {
             </View>
           </View>
 
-          </ScrollView>
+        </ScrollView>
         </WebContainer>
       </KeyboardAvoidingView>
 

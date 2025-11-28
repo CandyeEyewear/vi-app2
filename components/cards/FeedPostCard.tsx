@@ -271,7 +271,7 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
         {/* More Options Menu */}
         <TouchableOpacity onPress={() => setShowMoreMenu(true)} style={styles.moreButton}>
           <MoreVertical size={20} color={Colors.light.textSecondary} />
-        </TouchableOpacity>
+          </TouchableOpacity>
       </View>
 
       {/* Announcement Badge */}
