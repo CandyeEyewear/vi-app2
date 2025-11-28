@@ -186,6 +186,40 @@ export default async function handler(req: any, res: any) {
       console.error('Database error:', dbError);
     }
 
+    // ALSO store in payment_transactions so webhook can find it by order_id
+    // Map subscription_type to order_type for webhook compatibility
+    let orderType: string = 'other';
+    if (subscriptionType === 'membership') {
+      orderType = 'membership';
+    } else if (subscriptionType === 'recurring_donation') {
+      orderType = 'donation';
+    }
+
+    const { error: txError } = await supabase
+      .from('payment_transactions')
+      .insert({
+        user_id: userId,
+        order_id: subscriptionOrderId,  // This is what webhook looks for
+        order_type: orderType,
+        reference_id: subscription?.id || null,  // Link to payment_subscriptions record
+        amount,
+        currency: 'JMD',
+        description: description || `${frequency} subscription`,
+        status: 'pending',
+        customer_email: customerEmail,
+        customer_name: customerName,
+        metadata: {
+          subscription_type: subscriptionType,
+          frequency: frequency,
+          ezee_subscription_id: ezeeSubscriptionId,
+          payment_subscriptions_id: subscription?.id,
+        },
+      });
+
+    if (txError) {
+      console.error('Transaction record error:', txError);
+    }
+
     // Get token for first payment using form data
     const tokenFormData = new URLSearchParams();
     tokenFormData.append('amount', amount.toString());

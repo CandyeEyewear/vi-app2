@@ -194,17 +194,28 @@ async function handleSuccessfulPayment(transaction: any) {
       break;
 
     case 'membership':
-      const { data: paymentSub } = await supabase
-        .from('payment_subscriptions')
-        .select('user_id')
-        .eq('reference_id', reference_id)
-        .single();
-
-      if (paymentSub?.user_id) {
+      // Update payment_subscriptions status if linked via metadata
+      if (transaction.metadata?.payment_subscriptions_id) {
+        await supabase
+          .from('payment_subscriptions')
+          .update({ 
+            status: 'active',
+            transaction_number: transaction.transaction_number,
+            last_billing_date: new Date().toISOString().split('T')[0],
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', transaction.metadata.payment_subscriptions_id);
+      }
+      
+      // Update user membership status
+      if (transaction.user_id) {
         await supabase
           .from('users')
-          .update({ membership_status: 'active', is_premium: true })
-          .eq('id', paymentSub.user_id);
+          .update({ 
+            membership_status: 'active', 
+            is_premium: true 
+          })
+          .eq('id', transaction.user_id);
       }
       break;
   }
