@@ -19,35 +19,26 @@ const corsHeaders = {
   'Content-Type': 'application/json',
 };
 
-export const config = {
-  runtime: 'edge',
-};
-
-export default async function handler(req: Request) {
+export default async function handler(req: any, res: any) {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 200, headers: corsHeaders });
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    return res.status(200).end();
   }
 
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: corsHeaders,
-    });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    let body;
-    try {
-      body = await req.json();
-    } catch (jsonError) {
-      console.error('Failed to parse webhook body:', jsonError);
-      return new Response(JSON.stringify({ error: 'Invalid webhook payload' }), {
-        status: 400,
-        headers: corsHeaders,
-      });
-    }
-    const headers = Object.fromEntries(req.headers.entries());
+    const body = req.body;
+    const headers = typeof req.headers === 'object' ? req.headers : {};
 
     console.log('Webhook received:', JSON.stringify(body, null, 2));
 
@@ -62,108 +53,104 @@ export default async function handler(req: Request) {
     } = body;
 
     // Log webhook to database
-    const { data: webhookRecord } = await supabase.from('payment_webhooks').insert({
-      event_type: subscription_id ? 'subscription_payment' : 'one_time_payment',
-      transaction_number,
-      payload: body,
-      headers,
-      processed: false,
-    }).select().single();
+    const { data: webhookRecord, error: logError } = await supabase
+      .from('payment_webhooks')
+      .insert({
+        event_type: subscription_id ? 'subscription_payment' : 'one_time_payment',
+        transaction_number: transaction_number || null,
+        payload: body,
+        headers,
+        processed: false,
+      })
+      .select()
+      .single();
+
+    if (logError) {
+      console.error('Webhook log error:', logError);
+    }
 
     const isSuccessful = status === 'APPROVED' || response_code === '00' || response_code === '000';
 
+    // Handle one-time payment
+    if (order_id && transaction_number) {
+      // Find transaction by order_id (the order_id we sent to eZee)
+      const { data: transaction, error: updateError } = await supabase
+        .from('payment_transactions')
+        .update({
+          status: isSuccessful ? 'completed' : 'failed',
+          transaction_number: transaction_number,
+          response_code: response_code || null,
+          response_description: response_description || null,
+          updated_at: new Date().toISOString(),
+          completed_at: isSuccessful ? new Date().toISOString() : null,
+        })
+        .eq('order_id', order_id)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error('Transaction update error:', updateError);
+      }
+
+      if (transaction && isSuccessful) {
+        await handleSuccessfulPayment(transaction);
+      }
+    }
+
+    // Handle subscription payment
     if (subscription_id) {
-      await handleSubscriptionPayment(order_id, transaction_number, isSuccessful, body);
-    } else {
-      await handleOneTimePayment(order_id, transaction_number, isSuccessful, body);
+      const { data: subscription, error: subUpdateError } = await supabase
+        .from('payment_subscriptions')
+        .update({
+          status: isSuccessful ? 'active' : 'failed',
+          transaction_number: transaction_number || null,
+          last_billing_date: isSuccessful ? new Date().toISOString().split('T')[0] : null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('ezee_subscription_id', subscription_id)
+        .select()
+        .single();
+
+      if (subUpdateError) {
+        console.error('Subscription update error:', subUpdateError);
+      }
+
+      if (subscription && isSuccessful) {
+        // Calculate next billing date
+        const nextBillingDate = calculateNextBillingDate(subscription.frequency);
+        await supabase
+          .from('payment_subscriptions')
+          .update({ next_billing_date: nextBillingDate })
+          .eq('id', subscription.id);
+
+        await handleSuccessfulSubscriptionPayment(subscription);
+      }
     }
 
     // Update webhook as processed
     if (webhookRecord?.id) {
       await supabase
         .from('payment_webhooks')
-        .update({ processed: true, processed_at: new Date().toISOString() })
+        .update({ 
+          processed: true,
+          processed_at: new Date().toISOString()
+        })
         .eq('id', webhookRecord.id);
     } else if (transaction_number) {
       // Fallback: update by transaction_number if ID not available
       await supabase
         .from('payment_webhooks')
-        .update({ processed: true, processed_at: new Date().toISOString() })
+        .update({ 
+          processed: true,
+          processed_at: new Date().toISOString()
+        })
         .eq('transaction_number', transaction_number);
     }
 
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: corsHeaders,
-    });
-  } catch (error) {
+    return res.status(200).json({ success: true });
+  } catch (error: any) {
     console.error('Webhook error:', error);
-    return new Response(JSON.stringify({ error: 'Webhook processing failed' }), {
-      status: 500,
-      headers: corsHeaders,
-    });
-  }
-}
-
-async function handleOneTimePayment(
-  orderId: string,
-  transactionNumber: string,
-  isSuccessful: boolean,
-  webhookData: any
-) {
-  const { data: transaction } = await supabase
-    .from('payment_transactions')
-    .update({
-      status: isSuccessful ? 'completed' : 'failed',
-      transaction_number: transactionNumber,
-      response_code: webhookData.response_code,
-      response_description: webhookData.response_description,
-    })
-    .eq('order_id', orderId)
-    .select()
-    .single();
-
-  if (!transaction) {
-    console.error('Transaction not found for order:', orderId);
-    return;
-  }
-
-  if (isSuccessful) {
-    await handleSuccessfulPayment(transaction);
-  }
-}
-
-async function handleSubscriptionPayment(
-  orderId: string,
-  transactionNumber: string,
-  isSuccessful: boolean,
-  webhookData: any
-) {
-  const { data: subscription } = await supabase
-    .from('payment_subscriptions')
-    .select()
-    .eq('ezee_subscription_id', webhookData.subscription_id)
-    .single();
-
-  if (!subscription) {
-    console.error('Subscription not found:', webhookData.subscription_id);
-    return;
-  }
-
-  const nextBillingDate = calculateNextBillingDate(subscription.frequency);
-
-  await supabase
-    .from('payment_subscriptions')
-    .update({
-      status: isSuccessful ? 'active' : 'failed',
-      transaction_number: transactionNumber,
-      last_billing_date: new Date().toISOString().split('T')[0],
-      next_billing_date: nextBillingDate,
-    })
-    .eq('id', subscription.id);
-
-  if (isSuccessful) {
-    await handleSuccessfulSubscriptionPayment(subscription, webhookData);
+    return res.status(500).json({ error: 'Webhook processing failed' });
   }
 }
 
@@ -217,7 +204,7 @@ async function handleSuccessfulPayment(transaction: any) {
   console.log(`Successfully processed ${order_type} payment for ${reference_id}`);
 }
 
-async function handleSuccessfulSubscriptionPayment(subscription: any, webhookData: any) {
+async function handleSuccessfulSubscriptionPayment(subscription: any) {
   const { subscription_type, reference_id, user_id, amount } = subscription;
 
   switch (subscription_type) {
@@ -264,7 +251,7 @@ async function handleSuccessfulSubscriptionPayment(subscription: any, webhookDat
 
 function calculateNextBillingDate(frequency: string): string {
   const now = new Date();
-  switch (frequency) {
+  switch (frequency.toLowerCase()) {
     case 'daily': now.setDate(now.getDate() + 1); break;
     case 'weekly': now.setDate(now.getDate() + 7); break;
     case 'monthly': now.setMonth(now.getMonth() + 1); break;

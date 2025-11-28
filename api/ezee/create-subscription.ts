@@ -24,10 +24,6 @@ const corsHeaders = {
   'Content-Type': 'application/json',
 };
 
-export const config = {
-  runtime: 'edge',
-};
-
 function mapFrequency(freq: string): string {
   const map: Record<string, string> = {
     daily: 'DAILY',
@@ -36,12 +32,12 @@ function mapFrequency(freq: string): string {
     quarterly: 'QUARTERLY',
     annually: 'YEARLY',
   };
-  return map[freq] || 'MONTHLY';
+  return map[freq.toLowerCase()] || 'MONTHLY';
 }
 
 function calculateNextBillingDate(frequency: string): string {
   const now = new Date();
-  switch (frequency) {
+  switch (frequency.toLowerCase()) {
     case 'daily': now.setDate(now.getDate() + 1); break;
     case 'weekly': now.setDate(now.getDate() + 7); break;
     case 'monthly': now.setMonth(now.getMonth() + 1); break;
@@ -51,21 +47,24 @@ function calculateNextBillingDate(frequency: string): string {
   return now.toISOString().split('T')[0];
 }
 
-export default async function handler(req: Request) {
+export default async function handler(req: any, res: any) {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 200, headers: corsHeaders });
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    return res.status(200).end();
   }
 
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: corsHeaders,
-    });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const body = await req.json();
     const {
       amount,
       frequency,
@@ -76,13 +75,12 @@ export default async function handler(req: Request) {
       customerName,
       description,
       endDate,
-    } = body;
+    } = req.body;
 
     if (!amount || !frequency || !subscriptionType || !userId || !customerEmail) {
-      return new Response(
-        JSON.stringify({ error: 'Missing required fields' }),
-        { status: 400, headers: corsHeaders }
-      );
+      return res.status(400).json({ 
+        error: 'Missing required fields: amount, frequency, subscriptionType, userId, customerEmail' 
+      });
     }
 
     const subscriptionOrderId = `sub_${subscriptionType}_${userId}_${Date.now()}`;
@@ -121,18 +119,15 @@ export default async function handler(req: Request) {
       console.error('Failed to parse eZeePayments subscription response:', jsonError);
       const textResponse = await subscriptionResponse.text();
       console.error('Response text:', textResponse);
-      return new Response(
-        JSON.stringify({ error: 'Invalid response from payment provider' }),
-        { status: 500, headers: corsHeaders }
-      );
+      return res.status(500).json({ error: 'Invalid response from payment provider' });
     }
 
     if (!subscriptionResponse.ok) {
       console.error('eZeePayments subscription error:', subscriptionData);
-      return new Response(
-        JSON.stringify({ error: 'Failed to create subscription', details: subscriptionData }),
-        { status: 500, headers: corsHeaders }
-      );
+      return res.status(500).json({ 
+        error: 'Failed to create subscription', 
+        details: subscriptionData 
+      });
     }
 
     // Store subscription in database
@@ -141,7 +136,7 @@ export default async function handler(req: Request) {
       .insert({
         user_id: userId,
         subscription_type: subscriptionType,
-        reference_id: referenceId,
+        reference_id: referenceId || null,
         amount,
         currency: 'JMD',
         frequency,
@@ -190,34 +185,25 @@ export default async function handler(req: Request) {
       console.error('Failed to parse eZeePayments token response:', jsonError);
       const textResponse = await tokenResponse.text();
       console.error('Response text:', textResponse);
-      return new Response(
-        JSON.stringify({ error: 'Invalid response from payment provider' }),
-        { status: 500, headers: corsHeaders }
-      );
+      return res.status(500).json({ error: 'Invalid response from payment provider' });
     }
 
     const paymentUrl = EZEE_API_URL.includes('test')
       ? 'https://secure-test.ezeepayments.com/pay'
       : 'https://secure.ezeepayments.com/pay';
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        subscriptionId: subscription?.id,
-        ezeeSubscriptionId: subscriptionData.subscription_id,
+    return res.status(200).json({
+      success: true,
+      subscriptionId: subscription?.id,
+      ezeeSubscriptionId: subscriptionData.subscription_id,
+      token: tokenData.token,
+      paymentUrl,
+      paymentData: {
         token: tokenData.token,
-        paymentUrl,
-        paymentData: {
-          token: tokenData.token,
-        },
-      }),
-      { status: 200, headers: corsHeaders }
-    );
-  } catch (error) {
+      },
+    });
+  } catch (error: any) {
     console.error('Create subscription error:', error);
-    return new Response(
-      JSON.stringify({ error: 'Internal server error' }),
-      { status: 500, headers: corsHeaders }
-    );
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
