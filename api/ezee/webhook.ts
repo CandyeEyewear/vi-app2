@@ -2,6 +2,7 @@
  * Vercel API Route: /api/ezee/webhook.ts
  * Handles payment confirmations from eZeePayments
  * WITH CORS SUPPORT
+ * Uses official eZeePayments webhook format
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -42,14 +43,14 @@ export default async function handler(req: any, res: any) {
 
     console.log('Webhook received:', JSON.stringify(body, null, 2));
 
+    // eZeePayments webhook format
     const {
-      transaction_number,
-      order_id,
-      status,
-      response_code,
-      response_description,
+      ResponseCode,           // 1 = success, other = failure
+      ResponseDescription,    // "Transaction is approved" or error message
+      TransactionNumber,      // Reference for reconciliation
+      order_id,              // The order_id we sent
       amount,
-      subscription_id,
+      subscription_id,        // For recurring payments
     } = body;
 
     // Log webhook to database
@@ -57,7 +58,7 @@ export default async function handler(req: any, res: any) {
       .from('payment_webhooks')
       .insert({
         event_type: subscription_id ? 'subscription_payment' : 'one_time_payment',
-        transaction_number: transaction_number || null,
+        transaction_number: TransactionNumber || null,
         payload: body,
         headers,
         processed: false,
@@ -69,18 +70,19 @@ export default async function handler(req: any, res: any) {
       console.error('Webhook log error:', logError);
     }
 
-    const isSuccessful = status === 'APPROVED' || response_code === '00' || response_code === '000';
+    // ResponseCode: 1 = success, other = failure
+    const isSuccessful = ResponseCode === 1 || ResponseCode === '1';
 
     // Handle one-time payment
-    if (order_id && transaction_number) {
+    if (order_id && TransactionNumber) {
       // Find transaction by order_id (the order_id we sent to eZee)
       const { data: transaction, error: updateError } = await supabase
         .from('payment_transactions')
         .update({
           status: isSuccessful ? 'completed' : 'failed',
-          transaction_number: transaction_number,
-          response_code: response_code || null,
-          response_description: response_description || null,
+          transaction_number: TransactionNumber,
+          response_code: ResponseCode?.toString() || null,
+          response_description: ResponseDescription || null,
           updated_at: new Date().toISOString(),
           completed_at: isSuccessful ? new Date().toISOString() : null,
         })
@@ -103,7 +105,7 @@ export default async function handler(req: any, res: any) {
         .from('payment_subscriptions')
         .update({
           status: isSuccessful ? 'active' : 'failed',
-          transaction_number: transaction_number || null,
+          transaction_number: TransactionNumber || null,
           last_billing_date: isSuccessful ? new Date().toISOString().split('T')[0] : null,
           updated_at: new Date().toISOString(),
         })
@@ -136,7 +138,7 @@ export default async function handler(req: any, res: any) {
           processed_at: new Date().toISOString()
         })
         .eq('id', webhookRecord.id);
-    } else if (transaction_number) {
+    } else if (TransactionNumber) {
       // Fallback: update by transaction_number if ID not available
       await supabase
         .from('payment_webhooks')
@@ -144,7 +146,7 @@ export default async function handler(req: any, res: any) {
           processed: true,
           processed_at: new Date().toISOString()
         })
-        .eq('transaction_number', transaction_number);
+        .eq('transaction_number', TransactionNumber);
     }
 
     return res.status(200).json({ success: true });

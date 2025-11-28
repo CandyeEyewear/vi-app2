@@ -2,6 +2,7 @@
  * Vercel API Route: /api/ezee/create-token.ts
  * Creates a payment token for one-time payments
  * WITH CORS SUPPORT
+ * Uses official eZeePayments API format with form data
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -69,25 +70,25 @@ export default async function handler(req: any, res: any) {
     const returnUrl = `${APP_URL}/payment/success?orderId=${orderId}`;
     const cancelUrl = `${APP_URL}/payment/cancel?orderId=${orderId}`;
 
+    // Create form data (NOT JSON) - eZeePayments requires form data
+    const formData = new URLSearchParams();
+    formData.append('amount', amount.toString());
+    formData.append('currency', 'JMD');
+    formData.append('order_id', uniqueOrderId);
+    formData.append('post_back_url', postBackUrl);
+    formData.append('return_url', returnUrl);
+    formData.append('cancel_url', cancelUrl);
+
     // Create token with eZeePayments
+    // licence_key and site MUST be in headers, not body
     const tokenResponse = await fetch(`${EZEE_API_URL}/v1/custom_token/`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'licence_key': EZEE_LICENCE_KEY,
+        'site': EZEE_SITE,
       },
-      body: JSON.stringify({
-        licence_key: EZEE_LICENCE_KEY,
-        site: EZEE_SITE,
-        transaction_ref: uniqueOrderId,
-        amount: amount.toFixed(2),
-        currency: 'JMD',
-        customer_email: customerEmail,
-        customer_name: customerName || 'Customer',
-        description: description || `Payment for ${orderType}`,
-        webhook_url: postBackUrl,
-        return_url: returnUrl,
-        cancel_url: cancelUrl,
-      }),
+      body: formData.toString(),
     });
 
     let tokenData;
@@ -100,13 +101,17 @@ export default async function handler(req: any, res: any) {
       return res.status(500).json({ error: 'Invalid response from payment provider' });
     }
 
-    if (!tokenResponse.ok || !tokenData.token) {
+    // Check response - note the "result" wrapper
+    if (!tokenData.result || tokenData.result.status !== 1) {
       console.error('eZeePayments token error:', tokenData);
       return res.status(500).json({ 
-        error: 'Failed to create payment token', 
+        error: tokenData.result?.message || 'Failed to create payment token',
         details: tokenData 
       });
     }
+
+    // Token is inside result object
+    const token = tokenData.result.token;
 
     // Store transaction in database
     const { data: transaction, error: dbError } = await supabase
@@ -119,7 +124,7 @@ export default async function handler(req: any, res: any) {
         amount,
         currency: 'JMD',
         description: description || `Payment for ${orderType}`,
-        ezee_token: tokenData.token,
+        ezee_token: token,
         status: 'pending',
         customer_email: customerEmail,
         customer_name: customerName,
@@ -140,11 +145,17 @@ export default async function handler(req: any, res: any) {
 
     return res.status(200).json({
       success: true,
-      token: tokenData.token,
+      token: token,
       transactionId: transaction?.id,
       paymentUrl,
       paymentData: {
-        token: tokenData.token,
+        token: token,
+        amount: amount,
+        currency: 'JMD',
+        order_id: uniqueOrderId,
+        email_address: customerEmail,
+        customer_name: customerName || 'Customer',
+        description: description || `Payment for ${orderType}`,
       },
     });
   } catch (error: any) {

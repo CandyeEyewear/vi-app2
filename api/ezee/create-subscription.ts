@@ -2,6 +2,7 @@
  * Vercel API Route: /api/ezee/create-subscription.ts
  * Creates a subscription for recurring payments
  * WITH CORS SUPPORT
+ * Uses official eZeePayments API format with form data
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -26,13 +27,19 @@ const corsHeaders = {
 
 function mapFrequency(freq: string): string {
   const map: Record<string, string> = {
-    daily: 'DAILY',
-    weekly: 'WEEKLY',
-    monthly: 'MONTHLY',
-    quarterly: 'QUARTERLY',
-    annually: 'YEARLY',
+    daily: 'daily',
+    weekly: 'weekly',
+    monthly: 'monthly',
+    quarterly: 'quarterly',
+    annually: 'annually',
   };
-  return map[freq.toLowerCase()] || 'MONTHLY';
+  return map[freq.toLowerCase()] || 'monthly';
+}
+
+function formatDateForEzee(date: string): string {
+  // Convert YYYY-MM-DD to d/m/Y format
+  const d = new Date(date);
+  return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
 }
 
 function calculateNextBillingDate(frequency: string): string {
@@ -88,28 +95,27 @@ export default async function handler(req: any, res: any) {
     const returnUrl = `${APP_URL}/payment/success?type=subscription`;
     const cancelUrl = `${APP_URL}/payment/cancel?type=subscription`;
 
-    // Create subscription with eZeePayments
+    // Create subscription with eZeePayments using form data
+    const subscriptionFormData = new URLSearchParams();
+    subscriptionFormData.append('amount', amount.toString());
+    subscriptionFormData.append('currency', 'JMD');
+    subscriptionFormData.append('frequency', mapFrequency(frequency));
+    if (endDate) {
+      subscriptionFormData.append('end_date', formatDateForEzee(endDate));
+    }
+    if (description) {
+      subscriptionFormData.append('description', description);
+    }
+    subscriptionFormData.append('post_back_url', postBackUrl);
+
     const subscriptionResponse = await fetch(`${EZEE_API_URL}/v1/subscription/create/`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'licence_key': EZEE_LICENCE_KEY,
+        'site': EZEE_SITE,
       },
-      body: JSON.stringify({
-        licence_key: EZEE_LICENCE_KEY,
-        site: EZEE_SITE,
-        transaction_ref: subscriptionOrderId,
-        amount: amount.toFixed(2),
-        currency: 'JMD',
-        frequency: mapFrequency(frequency),
-        customer_email: customerEmail,
-        customer_name: customerName || 'Subscriber',
-        description: description || `${frequency} subscription`,
-        webhook_url: postBackUrl,
-        return_url: returnUrl,
-        cancel_url: cancelUrl,
-        start_date: new Date().toISOString().split('T')[0],
-        end_date: endDate || null,
-      }),
+      body: subscriptionFormData.toString(),
     });
 
     let subscriptionData;
@@ -122,13 +128,17 @@ export default async function handler(req: any, res: any) {
       return res.status(500).json({ error: 'Invalid response from payment provider' });
     }
 
-    if (!subscriptionResponse.ok) {
+    // Check response - note the "result" wrapper
+    if (!subscriptionData.result || subscriptionData.result.status !== 1) {
       console.error('eZeePayments subscription error:', subscriptionData);
       return res.status(500).json({ 
-        error: 'Failed to create subscription', 
+        error: subscriptionData.result?.message || 'Failed to create subscription',
         details: subscriptionData 
       });
     }
+
+    // Subscription ID is inside result object
+    const ezeeSubscriptionId = subscriptionData.result.subscription_id;
 
     // Store subscription in database
     const { data: subscription, error: dbError } = await supabase
@@ -141,7 +151,7 @@ export default async function handler(req: any, res: any) {
         currency: 'JMD',
         frequency,
         description: description || `${frequency} subscription`,
-        ezee_subscription_id: subscriptionData.subscription_id || subscriptionOrderId,
+        ezee_subscription_id: ezeeSubscriptionId,
         status: 'pending',
         start_date: new Date().toISOString().split('T')[0],
         end_date: endDate || null,
@@ -156,26 +166,24 @@ export default async function handler(req: any, res: any) {
       console.error('Database error:', dbError);
     }
 
-    // Get token for first payment
+    // Get token for first payment using form data
+    const tokenFormData = new URLSearchParams();
+    tokenFormData.append('amount', amount.toString());
+    tokenFormData.append('currency', 'JMD');
+    tokenFormData.append('order_id', subscriptionOrderId);
+    tokenFormData.append('post_back_url', postBackUrl);
+    tokenFormData.append('return_url', returnUrl);
+    tokenFormData.append('cancel_url', cancelUrl);
+    tokenFormData.append('subscription_id', ezeeSubscriptionId);
+
     const tokenResponse = await fetch(`${EZEE_API_URL}/v1/custom_token/`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'licence_key': EZEE_LICENCE_KEY,
+        'site': EZEE_SITE,
       },
-      body: JSON.stringify({
-        licence_key: EZEE_LICENCE_KEY,
-        site: EZEE_SITE,
-        transaction_ref: subscriptionOrderId,
-        amount: amount.toFixed(2),
-        currency: 'JMD',
-        customer_email: customerEmail,
-        customer_name: customerName || 'Subscriber',
-        description: `First payment: ${description || frequency + ' subscription'}`,
-        webhook_url: postBackUrl,
-        return_url: returnUrl,
-        cancel_url: cancelUrl,
-        subscription_id: subscriptionData.subscription_id,
-      }),
+      body: tokenFormData.toString(),
     });
 
     let tokenData;
@@ -188,6 +196,18 @@ export default async function handler(req: any, res: any) {
       return res.status(500).json({ error: 'Invalid response from payment provider' });
     }
 
+    // Check response - note the "result" wrapper
+    if (!tokenData.result || tokenData.result.status !== 1) {
+      console.error('eZeePayments token error:', tokenData);
+      return res.status(500).json({ 
+        error: tokenData.result?.message || 'Failed to create payment token',
+        details: tokenData 
+      });
+    }
+
+    // Token is inside result object
+    const token = tokenData.result.token;
+
     const paymentUrl = EZEE_API_URL.includes('test')
       ? 'https://secure-test.ezeepayments.com/pay'
       : 'https://secure.ezeepayments.com/pay';
@@ -195,11 +215,18 @@ export default async function handler(req: any, res: any) {
     return res.status(200).json({
       success: true,
       subscriptionId: subscription?.id,
-      ezeeSubscriptionId: subscriptionData.subscription_id,
-      token: tokenData.token,
+      ezeeSubscriptionId: ezeeSubscriptionId,
+      token: token,
       paymentUrl,
       paymentData: {
-        token: tokenData.token,
+        token: token,
+        amount: amount,
+        currency: 'JMD',
+        order_id: subscriptionOrderId,
+        email_address: customerEmail,
+        customer_name: customerName || 'Subscriber',
+        description: description || `${frequency} subscription`,
+        subscription_id: ezeeSubscriptionId,
       },
     });
   } catch (error: any) {
