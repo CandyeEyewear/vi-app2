@@ -6,6 +6,7 @@
 
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
+import { Platform } from 'react-native';
 import { supabase } from './supabase';
 
 // API Base URL - Update this to your Vercel deployment URL
@@ -240,16 +241,23 @@ export async function openPaymentPage(
   paymentData?: Record<string, string>
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // The paymentUrl from the API already includes all required parameters
-    // Just open it directly - it will auto-submit the form to eZeePayments
+    // On web, use window.location to redirect
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined') {
+        window.location.href = paymentUrl;
+        return { success: true };
+      }
+      return { success: false, error: 'Window not available' };
+    }
+    
+    // On mobile, use expo-web-browser
     const result = await WebBrowser.openBrowserAsync(paymentUrl, {
       showTitle: true,
       enableBarCollapsing: true,
     });
 
-    return {
-      success: result.type === 'dismiss' || result.type === 'cancel',
-    };
+    // On mobile, success means browser was opened (dismiss/cancel means user came back)
+    return { success: true };
   } catch (error) {
     console.error('Open payment page error:', error);
     return {
@@ -289,6 +297,14 @@ export async function processPayment(params: CreatePaymentParams): Promise<{
 
   // Open payment page
   const browserResult = await openPaymentPage(paymentResult.paymentUrl, paymentResult.paymentData);
+
+  // For web, the page redirects so we won't get a response
+  if (Platform.OS === 'web') {
+    return {
+      success: true,  // Assume success since we're redirecting
+      transactionId: paymentResult.transactionId,
+    };
+  }
 
   return {
     success: browserResult.success,
@@ -387,6 +403,14 @@ export async function processSubscription(params: CreateSubscriptionParams): Pro
 
   // Open payment page for first payment
   const browserResult = await openPaymentPage(subscriptionResult.paymentUrl, subscriptionResult.paymentData);
+
+  // For web, the page redirects so we won't get a response
+  if (Platform.OS === 'web') {
+    return {
+      success: true,  // Assume success since we're redirecting
+      subscriptionId: subscriptionResult.subscriptionId,
+    };
+  }
 
   return {
     success: browserResult.success,

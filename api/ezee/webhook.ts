@@ -91,7 +91,7 @@ export default async function handler(req: any, res: any) {
           completed_at: isSuccessful ? new Date().toISOString() : null,
     })
         .eq('order_id', customOrderId)  // Match by CustomOrderId (uniqueOrderId)
-    .select()
+    .select('*, metadata')
     .single();
 
       if (updateError) {
@@ -216,6 +216,68 @@ async function handleSuccessfulPayment(transaction: any) {
             is_premium: true 
           })
           .eq('id', transaction.user_id);
+      }
+      break;
+
+    case 'recurring_donation':
+      // Update payment_subscriptions status if linked via metadata
+      let causeId: string | null = null;
+      
+      if (transaction.metadata?.payment_subscriptions_id) {
+        // Update subscription status
+        await supabase
+          .from('payment_subscriptions')
+          .update({ 
+            status: 'active',
+            transaction_number: transaction.transaction_number,
+            last_billing_date: new Date().toISOString().split('T')[0],
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', transaction.metadata.payment_subscriptions_id);
+
+        // Get the payment_subscriptions record to find the donation/cause
+        const { data: paymentSub } = await supabase
+          .from('payment_subscriptions')
+          .select('reference_id')
+          .eq('id', transaction.metadata.payment_subscriptions_id)
+          .single();
+
+        if (paymentSub?.reference_id) {
+          // Look up the donation to get cause_id
+          const { data: donation } = await supabase
+            .from('donations')
+            .select('cause_id')
+            .eq('id', paymentSub.reference_id)
+            .single();
+
+          if (donation?.cause_id) {
+            causeId = donation.cause_id;
+          }
+        }
+      }
+
+      // Fallback: try to get cause_id from metadata or reference_id directly
+      if (!causeId) {
+        causeId = transaction.metadata?.reference_id || transaction.reference_id;
+      }
+      
+      if (causeId) {
+        // Create a donation record for this recurring payment
+        await supabase.from('donations').insert({
+          cause_id: causeId,
+          user_id: transaction.user_id,
+          amount: transaction.amount,
+          currency: 'JMD',
+          payment_status: 'completed',
+          transaction_number: transaction.transaction_number,
+          completed_at: new Date().toISOString(),
+        });
+
+        // Increment cause amount raised
+        await supabase.rpc('increment_cause_amount', {
+          p_cause_id: causeId,
+          p_amount: transaction.amount,
+        });
       }
       break;
   }

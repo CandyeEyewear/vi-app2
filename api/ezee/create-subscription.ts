@@ -178,6 +178,9 @@ export default async function handler(req: any, res: any) {
         next_billing_date: calculateNextBillingDate(frequency),
         customer_email: customerEmail,
         customer_name: customerName,
+        metadata: {
+          cause_id: referenceId || null,  // Store cause_id for recurring donations
+        },
       })
       .select()
       .single();
@@ -213,6 +216,7 @@ export default async function handler(req: any, res: any) {
           frequency: frequency,
           ezee_subscription_id: ezeeSubscriptionId,
           payment_subscriptions_id: subscription?.id,
+          cause_id: referenceId || null,  // Store cause_id for recurring donations
         },
       });
 
