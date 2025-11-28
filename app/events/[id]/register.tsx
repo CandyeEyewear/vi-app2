@@ -32,6 +32,8 @@ import {
   Shield,
   Users,
   Info,
+  Plus,
+  Minus,
 } from 'lucide-react-native';
 import { Colors } from '../../../constants/colors';
 import { Event } from '../../../types';
@@ -88,13 +90,13 @@ export default function EventRegisterScreen() {
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  // Only 1 ticket per purchase - users can register again for more tickets
-  const ticketCount = 1;
+  const [ticketCount, setTicketCount] = useState(1);
 
   // Calculate total
   const ticketPrice = event?.ticketPrice || 0;
-  const totalAmount = ticketPrice; // Always 1 ticket
+  const totalAmount = ticketPrice * ticketCount;
   const spotsLeft = event?.spotsRemaining ?? event?.capacity ?? 999;
+  const maxTickets = Math.min(spotsLeft, 10); // Allow up to 10 tickets or available spots, whichever is less
 
   // Fetch event
   useEffect(() => {
@@ -127,6 +129,7 @@ export default function EventRegisterScreen() {
     console.log('Event:', event?.title);
     console.log('User:', user?.email);
     console.log('Event ID:', id);
+    console.log('Ticket Count:', ticketCount);
 
     if (!event || !id) {
       console.log('ERROR: No event or id');
@@ -141,6 +144,17 @@ export default function EventRegisterScreen() {
         'Please sign in to purchase tickets',
         () => router.push('/login')
       );
+      return;
+    }
+
+    // Validate ticket count
+    if (ticketCount > spotsLeft) {
+      showAlert('Not Enough Spots', `Only ${spotsLeft} spot${spotsLeft !== 1 ? 's' : ''} available. Please reduce the quantity.`);
+      return;
+    }
+
+    if (ticketCount < 1) {
+      showAlert('Invalid Quantity', 'Please select at least 1 ticket.');
       return;
     }
 
@@ -199,7 +213,7 @@ export default function EventRegisterScreen() {
         userId: user.id,
         customerEmail: user.email || '',
         customerName: user.fullName,
-        description: `Event registration: ${event.title} - ${ticketCount} ticket(s)`,
+        description: `Event registration: ${event.title} - ${ticketCount} ticket${ticketCount !== 1 ? 's' : ''}`,
       });
 
       console.log('Payment result:', paymentResult);
@@ -221,7 +235,7 @@ export default function EventRegisterScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [event, id, user, router, totalAmount, ticketCount]);
+  }, [event, id, user, router, totalAmount, ticketCount, spotsLeft]);
 
   // Loading state
   if (loading || !event) {
@@ -335,16 +349,42 @@ export default function EventRegisterScreen() {
                   </Text>
                 </View>
               </View>
-              <View style={styles.ticketCountDisplay}>
-                <Text style={styles.ticketCountText}>1</Text>
+              {/* Quantity Selector */}
+              <View style={styles.quantitySelector}>
+                <TouchableOpacity
+                  style={[
+                    styles.quantityButton,
+                    { backgroundColor: colors.background, borderColor: colors.border },
+                    ticketCount <= 1 && styles.quantityButtonDisabled
+                  ]}
+                  onPress={() => setTicketCount(Math.max(1, ticketCount - 1))}
+                  disabled={ticketCount <= 1}
+                  activeOpacity={0.7}
+                >
+                  <Minus size={18} color={ticketCount <= 1 ? colors.textSecondary : colors.text} />
+                </TouchableOpacity>
+                <View style={[styles.quantityDisplay, { backgroundColor: 'rgba(56, 182, 255, 0.1)' }]}>
+                  <Text style={styles.quantityText}>{ticketCount}</Text>
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.quantityButton,
+                    { backgroundColor: colors.background, borderColor: colors.border },
+                    ticketCount >= maxTickets && styles.quantityButtonDisabled
+                  ]}
+                  onPress={() => setTicketCount(Math.min(maxTickets, ticketCount + 1))}
+                  disabled={ticketCount >= maxTickets}
+                  activeOpacity={0.7}
+                >
+                  <Plus size={18} color={ticketCount >= maxTickets ? colors.textSecondary : colors.text} />
+                </TouchableOpacity>
               </View>
             </View>
 
-            {!event.isFree && (
-              <View style={[styles.infoNote, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Info size={16} color={colors.textSecondary} />
-                <Text style={[styles.infoNoteText, { color: colors.textSecondary }]}>
-                  Only 1 ticket per purchase. Need more tickets? Complete this purchase and register again.
+            {spotsLeft > 0 && (
+              <View style={styles.spotsInfo}>
+                <Text style={[styles.spotsInfoText, { color: colors.textSecondary }]}>
+                  {spotsLeft - ticketCount} spot{spotsLeft - ticketCount !== 1 ? 's' : ''} will remain after this purchase
                 </Text>
               </View>
             )}
@@ -357,6 +397,15 @@ export default function EventRegisterScreen() {
                 </Text>
               </View>
             )}
+
+            {ticketCount > spotsLeft && (
+              <View style={styles.spotsWarning}>
+                <Info size={16} color="#F44336" />
+                <Text style={[styles.spotsWarningText, { color: '#F44336' }]}>
+                  Only {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} available. Please reduce quantity.
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Order Summary */}
@@ -366,10 +415,12 @@ export default function EventRegisterScreen() {
             <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.summaryRow}>
                 <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
-                  {event.isFree ? 'Registration' : '1 Ticket'}
+                  {event.isFree 
+                    ? `${ticketCount} Registration${ticketCount !== 1 ? 's' : ''}` 
+                    : `${ticketCount} Ticket${ticketCount !== 1 ? 's' : ''} @ ${formatCurrency(ticketPrice)}`}
                 </Text>
                 <Text style={[styles.summaryValue, { color: colors.text }]}>
-                  {event.isFree ? 'FREE' : formatCurrency(ticketPrice)}
+                  {event.isFree ? 'FREE' : formatCurrency(ticketPrice * ticketCount)}
                 </Text>
               </View>
 
@@ -416,9 +467,13 @@ export default function EventRegisterScreen() {
       {/* Bottom Button */}
       <View style={[styles.bottomBar, { backgroundColor: colors.background, paddingBottom: insets.bottom + 16, borderTopColor: colors.border }]}>
         <TouchableOpacity
-          style={[styles.purchaseButton, { backgroundColor: '#38B6FF' }, submitting && styles.purchaseButtonDisabled]}
+          style={[
+            styles.purchaseButton, 
+            { backgroundColor: '#38B6FF' }, 
+            (submitting || ticketCount > spotsLeft || ticketCount < 1) && styles.purchaseButtonDisabled
+          ]}
           onPress={handlePurchase}
-          disabled={submitting}
+          disabled={submitting || ticketCount > spotsLeft || ticketCount < 1}
           activeOpacity={0.8}
         >
           {submitting ? (
@@ -436,7 +491,7 @@ export default function EventRegisterScreen() {
                 <>
                   <CreditCard size={22} color="#FFFFFF" />
                   <Text style={styles.purchaseButtonText}>
-                    Pay {formatCurrency(ticketPrice)}
+                    Pay {formatCurrency(totalAmount)}
                   </Text>
                 </>
               )}
@@ -549,16 +604,40 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 2,
   },
-  ticketCountDisplay: {
-    paddingHorizontal: 16,
+  quantitySelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  quantityButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quantityButtonDisabled: {
+    opacity: 0.4,
+  },
+  quantityDisplay: {
+    minWidth: 50,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: 'rgba(56, 182, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  ticketCountText: {
+  quantityText: {
     fontSize: 18,
     fontWeight: '700',
     color: '#38B6FF',
+  },
+  spotsInfo: {
+    marginTop: 8,
+  },
+  spotsInfoText: {
+    fontSize: 13,
   },
   infoNote: {
     marginTop: 12,
