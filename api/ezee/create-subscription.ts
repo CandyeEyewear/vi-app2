@@ -17,6 +17,13 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// Helper function to validate UUID
+const isValidUUID = (str: string): boolean => {
+  if (!str || typeof str !== 'string') return false;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+};
+
 // CORS headers
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -145,12 +152,13 @@ export default async function handler(req: any, res: any) {
     const ezeeSubscriptionId = subscriptionData.result.subscription_id;
 
     // Store subscription in database
+    // Only use reference_id if it's a valid UUID (database column is UUID type)
     const { data: subscription, error: dbError } = await supabase
       .from('payment_subscriptions')
       .insert({
         user_id: userId,
         subscription_type: subscriptionType,
-        reference_id: referenceId || null,
+        reference_id: (referenceId && isValidUUID(referenceId)) ? referenceId : null,  // Only use if valid UUID
         amount,
         currency: 'JMD',
         frequency,

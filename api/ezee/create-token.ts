@@ -17,6 +17,13 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// Helper function to validate UUID
+const isValidUUID = (str: string): boolean => {
+  if (!str || typeof str !== 'string') return false;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+};
+
 // CORS headers
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -118,14 +125,14 @@ export default async function handler(req: any, res: any) {
 
     // Store transaction in database
     // Use uniqueOrderId as order_id (this is what eZeePayments will send back as CustomOrderId)
-    // Store original orderId in reference_id for reference
+    // Only use reference_id if it's a valid UUID (database column is UUID type)
     const { data: transaction, error: dbError } = await supabase
       .from('payment_transactions')
       .insert({
         user_id: userId || null,
         order_id: uniqueOrderId,  // Store the ID we sent to eZeePayments
         order_type: orderType,
-        reference_id: referenceId || orderId,  // Store original orderId here for reference
+        reference_id: (referenceId && isValidUUID(referenceId)) ? referenceId : null,  // Only use if valid UUID
         amount,
         currency: 'JMD',
         description: description || `Payment for ${orderType}`,
@@ -134,7 +141,7 @@ export default async function handler(req: any, res: any) {
         customer_email: customerEmail,
         customer_name: customerName,
         metadata: { 
-          original_order_id: orderId,  // Keep original for reference
+          original_order_id: orderId,  // Always store original orderId here
         },
       })
       .select()
