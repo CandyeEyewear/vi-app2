@@ -175,9 +175,9 @@ async function cancelSubscription(req: any, res: any) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Licence': EZEE_LICENCE_KEY,
         },
         body: JSON.stringify({
+          licence_key: EZEE_LICENCE_KEY,
           subscription_id: subscription.ezee_subscription_id,
         }),
       });
