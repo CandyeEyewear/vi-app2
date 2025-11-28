@@ -138,16 +138,23 @@ export default async function handler(req: any, res: any) {
       // Continue even if DB insert fails - we still return the token
     }
 
-    // Payment page URL
-    const paymentUrl = EZEE_API_URL.includes('test') 
-      ? 'https://secure-test.ezeepayments.com/pay'
-      : 'https://secure.ezeepayments.com/pay';
+    // Build the redirect URL to our payment form page
+    // This page will auto-submit a POST form to eZeePayments
+    const paymentRedirectUrl = `${APP_URL}/api/ezee/pay?` + new URLSearchParams({
+      token: token,
+      amount: amount.toString(),
+      currency: 'JMD',
+      order_id: uniqueOrderId,
+      email: customerEmail,
+      name: customerName || '',
+      description: description || `Payment for ${orderType}`,
+    }).toString();
 
     return res.status(200).json({
       success: true,
       token: token,
       transactionId: transaction?.id,
-      paymentUrl,
+      paymentUrl: paymentRedirectUrl,  // This URL will auto-POST to eZeePayments
       paymentData: {
         token: token,
         amount: amount,

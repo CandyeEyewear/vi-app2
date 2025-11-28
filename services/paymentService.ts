@@ -224,18 +224,17 @@ export async function createPayment(params: CreatePaymentParams): Promise<Paymen
 
 /**
  * Open the eZeePayments payment page in browser
+ * The paymentUrl returned from the API already includes all parameters
+ * and will auto-submit a POST form to eZeePayments
  */
 export async function openPaymentPage(
   paymentUrl: string,
-  paymentData: Record<string, string>
+  paymentData?: Record<string, string>
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // Build form URL with query params for the payment
-    const params = new URLSearchParams(paymentData);
-    const fullUrl = `${paymentUrl}?${params.toString()}`;
-
-    // Open in-app browser
-    const result = await WebBrowser.openBrowserAsync(fullUrl, {
+    // The paymentUrl from the API already includes all required parameters
+    // Just open it directly - it will auto-submit the form to eZeePayments
+    const result = await WebBrowser.openBrowserAsync(paymentUrl, {
       showTitle: true,
       enableBarCollapsing: true,
     });

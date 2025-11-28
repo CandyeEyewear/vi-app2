@@ -208,16 +208,26 @@ export default async function handler(req: any, res: any) {
     // Token is inside result object
     const token = tokenData.result.token;
 
-    const paymentUrl = EZEE_API_URL.includes('test')
-      ? 'https://secure-test.ezeepayments.com/pay'
-      : 'https://secure.ezeepayments.com/pay';
+    // Build the redirect URL to our payment form page
+    // This page will auto-submit a POST form to eZeePayments
+    const paymentRedirectUrl = `${APP_URL}/api/ezee/pay?` + new URLSearchParams({
+      token: token,
+      amount: amount.toString(),
+      currency: 'JMD',
+      order_id: subscriptionOrderId,
+      email: customerEmail,
+      name: customerName || '',
+      description: description || `${frequency} subscription`,
+      subscription_id: ezeeSubscriptionId,
+      recurring: 'true',
+    }).toString();
 
     return res.status(200).json({
       success: true,
       subscriptionId: subscription?.id,
       ezeeSubscriptionId: ezeeSubscriptionId,
       token: token,
-      paymentUrl,
+      paymentUrl: paymentRedirectUrl,  // This URL will auto-POST to eZeePayments
       paymentData: {
         token: token,
         amount: amount,
