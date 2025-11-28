@@ -26,6 +26,33 @@ import { AvatarWithBadge, UserNameWithBadge } from '../../components/index';
 import WebContainer from '../../components/WebContainer';
 import Head from 'expo-router/head';
 
+// ============================================
+// WEB-COMPATIBLE ALERT HELPERS
+// ============================================
+const showAlert = (title: string, message: string, onOk?: () => void) => {
+  if (Platform.OS === 'web') {
+    window.alert(`${title}\n\n${message}`);
+    if (onOk) onOk();
+  } else {
+    Alert.alert(title, message, [{ text: 'OK', onPress: onOk }]);
+  }
+};
+
+const showConfirm = (title: string, message: string, onConfirm: () => void, onCancel?: () => void) => {
+  if (Platform.OS === 'web') {
+    if (window.confirm(`${title}\n\n${message}`)) {
+      onConfirm();
+    } else if (onCancel) {
+      onCancel();
+    }
+  } else {
+    Alert.alert(title, message, [
+      { text: 'Cancel', style: 'cancel', onPress: onCancel },
+      { text: 'OK', onPress: onConfirm },
+    ]);
+  }
+};
+
 export default function ProfileScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
@@ -39,29 +66,21 @@ export default function ProfileScreen() {
   const hasProposeAccess = isOfficialMember;
 
   const handleLogout = () => {
-    Alert.alert(
+    showConfirm(
       'Logout',
       'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOut();
-              router.replace('/login');
-            } catch (error) {
-              console.error('Logout error:', error);
-              Alert.alert(
-                'Logout Error',
-                'Failed to logout. Please try again.',
-                [{ text: 'OK' }]
-              );
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          await signOut();
+          router.replace('/login');
+        } catch (error) {
+          console.error('Logout error:', error);
+          showAlert(
+            'Logout Error',
+            'Failed to logout. Please try again.'
+          );
+        }
+      }
     );
   };
 

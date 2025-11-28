@@ -48,8 +48,8 @@ export default async function handler(req: any, res: any) {
 
   // Determine payment URL based on environment
   const paymentUrl = EZEE_API_URL.includes('test')
-    ? 'https://secure-test.ezeepayments.com/pay'
-    : 'https://secure.ezeepayments.com/pay';
+    ? 'https://secure-test.ezeepayments.com'
+    : 'https://secure.ezeepayments.com';
 
   // Escape HTML to prevent XSS
   const escapeHtml = (str: string) => {
