@@ -48,10 +48,14 @@ export default async function handler(req: any, res: any) {
       ResponseCode,           // 1 = success, other = failure
       ResponseDescription,    // "Transaction is approved" or error message
       TransactionNumber,      // Reference for reconciliation
-      order_id,              // The order_id we sent
+      CustomOrderId,          // The uniqueOrderId we sent to eZeePayments
+      order_id,              // May also be present, but CustomOrderId is primary
       amount,
       subscription_id,        // For recurring payments
     } = body;
+
+    // Get order ID from webhook - eZeePayments sends it as CustomOrderId
+    const customOrderId = CustomOrderId || order_id;
 
     // Log webhook to database
     const { data: webhookRecord, error: logError } = await supabase
@@ -74,8 +78,8 @@ export default async function handler(req: any, res: any) {
     const isSuccessful = ResponseCode === 1 || ResponseCode === '1';
 
     // Handle one-time payment
-    if (order_id && TransactionNumber) {
-      // Find transaction by order_id (the order_id we sent to eZee)
+    if (customOrderId && TransactionNumber) {
+      // Find transaction by order_id (which is the uniqueOrderId we sent to eZeePayments)
       const { data: transaction, error: updateError } = await supabase
         .from('payment_transactions')
         .update({
@@ -86,12 +90,14 @@ export default async function handler(req: any, res: any) {
           updated_at: new Date().toISOString(),
           completed_at: isSuccessful ? new Date().toISOString() : null,
         })
-        .eq('order_id', order_id)
+        .eq('order_id', customOrderId)  // Match by CustomOrderId (uniqueOrderId)
         .select()
         .single();
 
       if (updateError) {
         console.error('Transaction update error:', updateError);
+        console.error('Looking for order_id:', customOrderId);
+        console.error('Webhook body:', JSON.stringify(body, null, 2));
       }
 
       if (transaction && isSuccessful) {

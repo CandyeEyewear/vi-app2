@@ -117,13 +117,15 @@ export default async function handler(req: any, res: any) {
     const token = tokenData.result.token;
 
     // Store transaction in database
+    // Use uniqueOrderId as order_id (this is what eZeePayments will send back as CustomOrderId)
+    // Store original orderId in reference_id for reference
     const { data: transaction, error: dbError } = await supabase
       .from('payment_transactions')
       .insert({
         user_id: userId || null,
-        order_id: orderId,
+        order_id: uniqueOrderId,  // Store the ID we sent to eZeePayments
         order_type: orderType,
-        reference_id: referenceId || null,
+        reference_id: referenceId || orderId,  // Store original orderId here for reference
         amount,
         currency: 'JMD',
         description: description || `Payment for ${orderType}`,
@@ -131,7 +133,9 @@ export default async function handler(req: any, res: any) {
         status: 'pending',
         customer_email: customerEmail,
         customer_name: customerName,
-        metadata: { unique_order_id: uniqueOrderId },
+        metadata: { 
+          original_order_id: orderId,  // Keep original for reference
+        },
       })
       .select()
       .single();
