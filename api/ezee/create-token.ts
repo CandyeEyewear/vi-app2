@@ -62,8 +62,11 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    // Generate unique order ID with timestamp for eZee
-    const uniqueOrderId = `${orderType}_${orderId}_${Date.now()}`;
+    // Generate short unique order ID (max 50 chars for eZeePayments)
+    // Format: ORD_timestamp_random (e.g., "ORD_1764299044_x7k9m2" ~28 chars)
+    const timestamp = Date.now().toString();
+    const randomStr = Math.random().toString(36).substring(2, 8);
+    const uniqueOrderId = `ORD_${timestamp}_${randomStr}`;
 
     // Callback URLs
     const postBackUrl = `${APP_URL}/api/ezee/webhook`;

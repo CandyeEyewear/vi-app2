@@ -90,7 +90,11 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    const subscriptionOrderId = `sub_${subscriptionType}_${userId}_${Date.now()}`;
+    // Generate short unique order ID (max 50 chars for eZeePayments)
+    // Format: SUB_timestamp_random (e.g., "SUB_1764299044_x7k9m2" ~28 chars)
+    const timestamp = Date.now().toString();
+    const randomStr = Math.random().toString(36).substring(2, 8);
+    const subscriptionOrderId = `SUB_${timestamp}_${randomStr}`;
     const postBackUrl = `${APP_URL}/api/ezee/webhook`;
     const returnUrl = `${APP_URL}/payment/success?type=subscription`;
     const cancelUrl = `${APP_URL}/payment/cancel?type=subscription`;
