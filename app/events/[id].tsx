@@ -60,7 +60,6 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { showToast } from '../../utils/toast';
 import ErrorBoundary from '../../components/ErrorBoundary';
-import LoadingSpinner from '../../components/LoadingSpinner';
 import Card from '../../components/Card';
 import Button from '../../components/Button';
 
@@ -561,7 +560,9 @@ export default function EventDetailScreen() {
           onShare={() => {}} 
           colors={colors} 
         />
-        <LoadingSpinner />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#38B6FF" />
+        </View>
       </SafeAreaView>
     );
   }
@@ -1010,5 +1011,10 @@ const styles = StyleSheet.create({
   },
   retryButton: {
     minWidth: 120,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
