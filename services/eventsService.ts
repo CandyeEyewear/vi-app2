@@ -378,6 +378,52 @@ export async function registerForEvent(data: {
   ticketCount?: number;
 }): Promise<ApiResponse<EventRegistration>> {
   try {
+    const ticketCount = data.ticketCount ?? 1;
+
+    // Fetch event to validate status and capacity
+    const { data: eventRecord, error: eventError } = await supabase
+      .from('events')
+      .select('id, status, event_date, registration_deadline, capacity')
+      .eq('id', data.eventId)
+      .single();
+
+    if (eventError || !eventRecord) {
+      console.error('Error fetching event before registration:', eventError);
+      return { success: false, error: 'Event not found' };
+    }
+
+    const now = new Date();
+    const eventDate = eventRecord.event_date ? new Date(eventRecord.event_date) : null;
+
+    if (['cancelled', 'completed'].includes(eventRecord.status)) {
+      return { success: false, error: 'Registration is closed for this event' };
+    }
+
+    if (eventDate && eventDate < now) {
+      return { success: false, error: 'This event has already ended' };
+    }
+
+    if (eventRecord.registration_deadline) {
+      const deadline = new Date(eventRecord.registration_deadline);
+      if (deadline < now) {
+        return { success: false, error: 'Registration deadline has passed' };
+      }
+    }
+
+    // Capacity check
+    if (eventRecord.capacity) {
+      const spotsRemaining = await getSpotsRemainingForEvent(data.eventId, eventRecord.capacity);
+      if (spotsRemaining <= 0) {
+        return { success: false, error: 'This event is sold out' };
+      }
+      if (ticketCount > spotsRemaining) {
+        return {
+          success: false,
+          error: `Only ${spotsRemaining} spot${spotsRemaining === 1 ? '' : 's'} left`,
+        };
+      }
+    }
+
     // Check if already registered
     const { data: existing } = await supabase
       .from('event_registrations')
@@ -396,7 +442,7 @@ export async function registerForEvent(data: {
         .from('event_registrations')
         .update({
           status: 'registered',
-          ticket_count: data.ticketCount || 1,
+          ticket_count: ticketCount,
           registered_at: new Date().toISOString(),
           cancelled_at: null,
         })
@@ -405,6 +451,8 @@ export async function registerForEvent(data: {
         .single();
 
       if (error) throw error;
+
+      await syncEventSpotsRemaining(data.eventId, eventRecord.capacity);
       return { success: true, data: transformRegistration(updated) };
     }
 
@@ -414,7 +462,7 @@ export async function registerForEvent(data: {
       .insert({
         event_id: data.eventId,
         user_id: data.userId,
-        ticket_count: data.ticketCount || 1,
+        ticket_count: ticketCount,
         status: 'registered',
       })
       .select()
@@ -422,6 +470,7 @@ export async function registerForEvent(data: {
 
     if (error) throw error;
 
+    await syncEventSpotsRemaining(data.eventId, eventRecord.capacity);
     return { success: true, data: transformRegistration(registration) };
   } catch (error) {
     console.error('Error registering for event:', error);
@@ -436,6 +485,20 @@ export async function cancelEventRegistration(
   registrationId: string
 ): Promise<ApiResponse<void>> {
   try {
+    const { data: registration, error: registrationError } = await supabase
+      .from('event_registrations')
+      .select('event_id, ticket_count, status')
+      .eq('id', registrationId)
+      .single();
+
+    if (registrationError || !registration) {
+      throw registrationError || new Error('Registration not found');
+    }
+
+    if (registration.status === 'cancelled') {
+      return { success: true };
+    }
+
     const { error } = await supabase
       .from('event_registrations')
       .update({
@@ -445,6 +508,16 @@ export async function cancelEventRegistration(
       .eq('id', registrationId);
 
     if (error) throw error;
+
+    if (registration.event_id) {
+      const { data: eventRecord } = await supabase
+        .from('events')
+        .select('capacity')
+        .eq('id', registration.event_id)
+        .single();
+
+      await syncEventSpotsRemaining(registration.event_id, eventRecord?.capacity);
+    }
 
     return { success: true };
   } catch (error) {
@@ -572,6 +645,28 @@ export async function getEventRegistrations(
 }
 
 /**
+ * Get registration count for an event (non-admin safe)
+ */
+export async function getEventRegistrationCount(
+  eventId: string
+): Promise<ApiResponse<{ count: number }>> {
+  try {
+    const { count, error } = await supabase
+      .from('event_registrations')
+      .select('id', { count: 'exact', head: true })
+      .eq('event_id', eventId)
+      .neq('status', 'cancelled');
+
+    if (error) throw error;
+
+    return { success: true, data: { count: count || 0 } };
+  } catch (error) {
+    console.error('Error fetching registration count:', error);
+    return { success: false, error: 'Failed to fetch registration count' };
+  }
+}
+
+/**
  * Deregister a user from an event (Admin)
  * Cancels the registration and optionally processes refund
  */
@@ -661,6 +756,39 @@ export async function deregisterUser(
   } catch (error) {
     console.error('Error deregistering user:', error);
     return { success: false, error: 'Failed to deregister user' };
+  }
+}
+
+async function getSpotsRemainingForEvent(eventId: string, capacity: number): Promise<number> {
+  const { data, error } = await supabase
+    .from('event_registrations')
+    .select('ticket_count')
+    .eq('event_id', eventId)
+    .neq('status', 'cancelled');
+
+  if (error) throw error;
+
+  const usedTickets =
+    data?.reduce((total, registration) => total + (registration.ticket_count || 1), 0) ?? 0;
+
+  return Math.max(capacity - usedTickets, 0);
+}
+
+async function syncEventSpotsRemaining(eventId: string, capacity?: number | null): Promise<void> {
+  if (!capacity) return;
+
+  try {
+    const remaining = await getSpotsRemainingForEvent(eventId, capacity);
+    const { error } = await supabase
+      .from('events')
+      .update({ spots_remaining: remaining })
+      .eq('id', eventId);
+
+    if (error) {
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error syncing event capacity:', error);
   }
 }
 

@@ -51,6 +51,7 @@ import {
   registerForEvent,
   cancelEventRegistration,
   getEventRegistrations,
+  getEventRegistrationCount,
   formatEventDate,
   formatEventTime,
   getDaysUntilEvent,
@@ -105,6 +106,7 @@ function useEventDetails(eventId: string | undefined) {
   const [event, setEvent] = useState<Event | null>(null);
   const [registration, setRegistration] = useState<EventRegistration | null>(null);
   const [registrations, setRegistrations] = useState<EventRegistration[]>([]);
+  const [registrationCount, setRegistrationCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { user, isAdmin } = useAuth();
@@ -116,9 +118,14 @@ function useEventDetails(eventId: string | undefined) {
       setLoading(true);
       setError(null);
 
-      const [eventResponse, registrationResponse] = await Promise.all([
+      const registrationCountPromise = isAdmin
+        ? Promise.resolve(null)
+        : getEventRegistrationCount(eventId);
+
+      const [eventResponse, registrationResponse, registrationCountResponse] = await Promise.all([
         getEventById(eventId),
         user ? checkUserRegistration(eventId, user.id) : Promise.resolve({ success: true, data: null }),
+        registrationCountPromise,
       ]);
 
       if (eventResponse.success && eventResponse.data) {
@@ -131,6 +138,10 @@ function useEventDetails(eventId: string | undefined) {
         setRegistration(registrationResponse.data);
       }
 
+      if (!isAdmin && registrationCountResponse?.success && registrationCountResponse.data) {
+        setRegistrationCount(registrationCountResponse.data.count);
+      }
+
       // Load registrations for admin
       if (isAdmin && eventResponse.data) {
         const registrationsResponse = await getEventRegistrations(eventId);
@@ -139,6 +150,7 @@ function useEventDetails(eventId: string | undefined) {
             (reg) => reg.status !== 'cancelled'
           );
           setRegistrations(activeRegistrations);
+          setRegistrationCount(activeRegistrations.length);
         }
       }
     } catch (err) {
@@ -158,6 +170,7 @@ function useEventDetails(eventId: string | undefined) {
     event,
     registration,
     registrations,
+    registrationCount,
     loading,
     error,
     refetch: fetchEventData,
@@ -383,6 +396,7 @@ export default function EventDetailScreen() {
     event,
     registration,
     registrations,
+    registrationCount,
     loading,
     error,
     refetch,
@@ -659,7 +673,7 @@ export default function EventDetailScreen() {
               <Card style={styles.statCard}>
                 <Users size={20} color="#38B6FF" />
                 <Text style={[styles.statValue, { color: colors.text }]}>
-                  {registrations.length}
+                  {registrationCount}
                 </Text>
                 <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
                   Registered

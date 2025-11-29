@@ -43,6 +43,7 @@ import { Event } from '../../../types';
 import {
   getEventById,
   registerForEvent,
+  cancelEventRegistration,
   formatEventDate,
   formatEventTime,
   formatCurrency,
@@ -584,6 +585,14 @@ export default function EventRegisterScreen() {
       const registration = registrationResponse.data;
       const orderId = `EVT_${registration.id}_${Date.now()}`;
 
+      const rollbackRegistration = async () => {
+        try {
+          await cancelEventRegistration(registration.id);
+        } catch (cleanupError) {
+          console.error('Failed to rollback registration:', cleanupError);
+        }
+      };
+
       // Process payment through eZeePayments
       const paymentResult = await processPayment({
         amount: totalAmount,
@@ -594,9 +603,13 @@ export default function EventRegisterScreen() {
         customerEmail: user.email || '',
         customerName: user.fullName,
         description: `${event.title} - ${ticketCount} ticket${ticketCount !== 1 ? 's' : ''}`,
+      }).catch(async (paymentError) => {
+        await rollbackRegistration();
+        throw paymentError;
       });
 
       if (!paymentResult.success) {
+        await rollbackRegistration();
         throw new Error(paymentResult.error || 'Payment processing failed');
       }
 

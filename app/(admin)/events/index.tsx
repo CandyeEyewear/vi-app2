@@ -284,7 +284,7 @@ export default function AdminEventsScreen() {
         </Text>
         <TouchableOpacity
           style={[styles.createButtonEmpty, { backgroundColor: '#38B6FF' }]}
-          onPress={() => router.push('/events/create')}
+          onPress={() => router.push('/(admin)/events/create')}
         >
           <Plus size={20} color="#FFFFFF" />
           <Text style={styles.createButtonEmptyText}>Create Event</Text>
@@ -305,7 +305,7 @@ export default function AdminEventsScreen() {
         <Text style={[styles.headerTitle, { color: colors.text }]}>Manage Events</Text>
         <TouchableOpacity
           style={[styles.addButton, { backgroundColor: '#38B6FF' }]}
-          onPress={() => router.push('/events/create')}
+          onPress={() => router.push('/(admin)/events/create')}
         >
           <Plus size={20} color="#FFFFFF" />
         </TouchableOpacity>
