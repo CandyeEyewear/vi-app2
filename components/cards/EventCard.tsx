@@ -311,6 +311,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 2,
   },
   categoryBadgeText: {
     color: '#FFFFFF',
@@ -320,13 +321,14 @@ const styles = StyleSheet.create({
   featuredBadge: {
     position: 'absolute',
     top: 12,
-    right: 12,
+    right: 60,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
     gap: 4,
+    zIndex: 1,
   },
   featuredBadgeText: {
     color: '#000',
