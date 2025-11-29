@@ -110,9 +110,9 @@ export default async function handler(req: any, res: any) {
       </div>
       <form id="paymentForm" method="POST" action="${escapeHtml(paymentUrl)}">
         <input type="hidden" name="platform" value="custom" />
+        <input type="hidden" name="currency" value="JMD" />
         <input type="hidden" name="token" value="${escapeHtml(token)}" />
         <input type="hidden" name="amount" value="${escapeHtml(amount)}" />
-        <input type="hidden" name="currency" value="${escapeHtml(currency || 'JMD')}" />
         <input type="hidden" name="order_id" value="${escapeHtml(order_id)}" />
         <input type="hidden" name="email_address" value="${escapeHtml(email)}" />
         <input type="hidden" name="customer_name" value="${escapeHtml(name || '')}" />
