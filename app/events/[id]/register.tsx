@@ -21,7 +21,6 @@ import {
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
 import {
   ArrowLeft,
   Calendar,
@@ -43,6 +42,7 @@ import { Event } from '../../../types';
 import {
   getEventById,
   registerForEvent,
+  cancelEventRegistration,
   formatEventDate,
   formatEventTime,
   formatCurrency,
@@ -138,7 +138,7 @@ function RegistrationHeader({
       <TouchableOpacity
         style={styles.backButton}
         onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           onBack();
         }}
         accessibilityRole="button"
@@ -225,14 +225,14 @@ function TicketSelector({
 
   const handleDecrease = useCallback(() => {
     if (canDecrease) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setTicketCount(ticketCount - 1);
     }
   }, [canDecrease, ticketCount, setTicketCount]);
 
   const handleIncrease = useCallback(() => {
     if (canIncrease) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setTicketCount(ticketCount + 1);
     }
   }, [canIncrease, ticketCount, setTicketCount]);
@@ -543,7 +543,7 @@ export default function EventRegisterScreen() {
       return;
     }
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
 
     try {
@@ -556,7 +556,7 @@ export default function EventRegisterScreen() {
         });
 
         if (response.success) {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          // Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setShowSuccess(true);
           showToast('Successfully registered! 🎉', 'success');
           
@@ -584,6 +584,14 @@ export default function EventRegisterScreen() {
       const registration = registrationResponse.data;
       const orderId = `EVT_${registration.id}_${Date.now()}`;
 
+      const rollbackRegistration = async () => {
+        try {
+          await cancelEventRegistration(registration.id);
+        } catch (cleanupError) {
+          console.error('Failed to rollback registration:', cleanupError);
+        }
+      };
+
       // Process payment through eZeePayments
       const paymentResult = await processPayment({
         amount: totalAmount,
@@ -594,19 +602,23 @@ export default function EventRegisterScreen() {
         customerEmail: user.email || '',
         customerName: user.fullName,
         description: `${event.title} - ${ticketCount} ticket${ticketCount !== 1 ? 's' : ''}`,
+      }).catch(async (paymentError) => {
+        await rollbackRegistration();
+        throw paymentError;
       });
 
       if (!paymentResult.success) {
+        await rollbackRegistration();
         throw new Error(paymentResult.error || 'Payment processing failed');
       }
 
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast('Payment processing! You\'ll receive confirmation soon.', 'success');
       router.back();
 
     } catch (error) {
       console.error('Registration/Purchase error:', error);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      // Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       
       const errorMessage = error instanceof Error ? error.message : 'Something went wrong';
       showToast(errorMessage, 'error');
