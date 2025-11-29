@@ -23,7 +23,6 @@ import {
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
 import {
   ArrowLeft,
   Share2,
@@ -201,7 +200,7 @@ function EventHeader({
       <TouchableOpacity
         style={[styles.headerButton, { backgroundColor: colors.card }]}
         onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           onBack();
         }}
         accessibilityRole="button"
@@ -214,7 +213,7 @@ function EventHeader({
       <TouchableOpacity
         style={[styles.headerButton, { backgroundColor: colors.card }]}
         onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           onShare();
         }}
         accessibilityRole="button"
@@ -303,7 +302,7 @@ function EventInfoCard({
       <Component
         style={styles.infoCardContent}
         onPress={onPress ? () => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           onPress();
         } : undefined}
         accessibilityRole={onPress ? "button" : undefined}
@@ -424,7 +423,7 @@ export default function EventDetailScreen() {
     if (!event) return;
 
     try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       
       const message = `Join me at "${event.title}"!\n\n📅 ${formatEventDate(event.eventDate)}\n⏰ ${formatEventTime(event.startTime)}\n📍 ${event.isVirtual ? 'Virtual Event' : event.location}\n\nRegister on Volunteers Inc!`;
 
@@ -447,7 +446,7 @@ export default function EventDetailScreen() {
       return;
     }
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     // If already registered, handle cancellation
     if (registration) {
@@ -490,15 +489,15 @@ export default function EventDetailScreen() {
       });
 
       if (response.success && response.data) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         showToast('Successfully registered! 🎉', 'success');
         refetch();
       } else {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        // Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         showToast(response.error || 'Failed to register', 'error');
       }
     } catch (error) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      // Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       showToast('Something went wrong', 'error');
     } finally {
       setRegistering(false);
@@ -507,7 +506,7 @@ export default function EventDetailScreen() {
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await refetch();
     setRefreshing(false);
   }, [refetch]);
@@ -516,7 +515,7 @@ export default function EventDetailScreen() {
   const handleOpenMap = useCallback(() => {
     if (!event) return;
     
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     let url: string;
     if (event.mapLink) {
@@ -538,7 +537,7 @@ export default function EventDetailScreen() {
   const handleOpenVirtual = useCallback(() => {
     if (!event?.virtualLink) return;
     
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
     Linking.openURL(event.virtualLink).catch(() => {
       showToast('Could not open virtual meeting', 'error');
@@ -549,7 +548,7 @@ export default function EventDetailScreen() {
   const handleCall = useCallback(() => {
     if (!event?.contactPhone) return;
     
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
     Linking.openURL(`tel:${event.contactPhone}`).catch(() => {
       showToast('Could not make call', 'error');
@@ -559,7 +558,7 @@ export default function EventDetailScreen() {
   const handleEmail = useCallback(() => {
     if (!event?.contactEmail) return;
     
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
     Linking.openURL(`mailto:${event.contactEmail}`).catch(() => {
       showToast('Could not open email', 'error');
