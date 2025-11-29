@@ -761,6 +761,8 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
             })) || [],
             shares: post.shares || 0,
             opportunityId: post.opportunity_id,
+            causeId: post.cause_id,
+            eventId: post.event_id,
             isAnnouncement: post.is_announcement || false,
             isPinned: post.is_pinned || false,
             reactions, // ✅ Add reactions
@@ -812,9 +814,84 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
         })
       );
 
+      // Fetch causes for posts that reference them
+      const postsWithCauses = await Promise.all(
+        postsWithOpportunities.map(async (post) => {
+          if (post.causeId) {
+            console.log('[FEED] 💙 Loading cause data for post:', post.id);
+            const { data: causeData } = await supabase
+              .from('causes')
+              .select('*')
+              .eq('id', post.causeId)
+              .single();
+
+            if (causeData) {
+              const cause: any = {
+                id: causeData.id,
+                title: causeData.title,
+                description: causeData.description,
+                organizationName: causeData.organization_name,
+                organizationVerified: causeData.organization_verified,
+                category: causeData.category,
+                location: causeData.location,
+                latitude: causeData.latitude,
+                longitude: causeData.longitude,
+                goalAmount: causeData.goal_amount,
+                currentAmount: causeData.current_amount,
+                imageUrl: causeData.image_url,
+                status: causeData.status,
+                createdAt: causeData.created_at,
+                updatedAt: causeData.updated_at,
+              };
+              return { ...post, cause };
+            }
+          }
+          return post;
+        })
+      );
+
+      // Fetch events for posts that reference them
+      const postsWithEvents = await Promise.all(
+        postsWithCauses.map(async (post) => {
+          if (post.eventId) {
+            console.log('[FEED] 🎉 Loading event data for post:', post.id);
+            const { data: eventData } = await supabase
+              .from('events')
+              .select('*')
+              .eq('id', post.eventId)
+              .single();
+
+            if (eventData) {
+              const event: any = {
+                id: eventData.id,
+                title: eventData.title,
+                description: eventData.description,
+                organizationName: eventData.organization_name,
+                organizationVerified: eventData.organization_verified,
+                category: eventData.category,
+                location: eventData.location,
+                latitude: eventData.latitude,
+                longitude: eventData.longitude,
+                date: eventData.date || eventData.date_start,
+                dateStart: eventData.date_start,
+                dateEnd: eventData.date_end,
+                timeStart: eventData.time_start,
+                timeEnd: eventData.time_end,
+                imageUrl: eventData.image_url,
+                status: eventData.status,
+                createdAt: eventData.created_at,
+                updatedAt: eventData.updated_at,
+              };
+              return { ...post, event };
+            }
+          }
+          return post;
+        })
+      );
+
       // Fetch original posts for shared posts
       const postsWithSharedData = await Promise.all(
-        postsWithOpportunities.map(async (post) => {
+        postsWithEvents.map(async (post) => {
           if (post.sharedPostId) {
             console.log('[FEED] 📎 Loading shared post data for:', post.id);
             // Fetch the original post

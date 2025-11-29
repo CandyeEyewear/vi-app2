@@ -300,8 +300,18 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
         <SharedOpportunityCard opportunity={post.opportunity} />
       )}
 
+      {/* NEW: Render Shared Cause if this post references a cause */}
+      {post.cause && !post.sharedPost && !post.opportunity && (
+        <SharedCauseCard cause={post.cause} />
+      )}
+
+      {/* NEW: Render Shared Event if this post references an event */}
+      {post.event && !post.sharedPost && !post.opportunity && !post.cause && (
+        <SharedEventCard event={post.event} />
+      )}
+
       {/* Media - Videos and Images */}
-      {!post.sharedPost && !post.opportunity && post.mediaUrls && post.mediaUrls.length > 0 && (
+      {!post.sharedPost && !post.opportunity && !post.cause && !post.event && post.mediaUrls && post.mediaUrls.length > 0 && (
         <View style={styles.mediaContainer}>
           {post.mediaUrls.map((url, index) => {
             const mediaType = post.mediaTypes?.[index] || 'image';
