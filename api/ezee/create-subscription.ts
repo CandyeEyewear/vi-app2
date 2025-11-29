@@ -127,7 +127,7 @@ export default async function handler(req: any, res: any) {
     }
     subscriptionFormData.append('post_back_url', postBackUrl);
 
-    const subscriptionResponse = await fetch(`${EZEE_API_URL}/v1/subscription/create/`, {
+    const subscriptionResponse = await fetch(`${EZEE_API_URL}/v1.1/subscription/create/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
