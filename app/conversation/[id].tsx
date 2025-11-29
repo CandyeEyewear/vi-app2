@@ -40,7 +40,7 @@ import MessageStatus from '../../components/MessageStatus';
 import TypingIndicator from '../../components/TypingIndicator';
 import OnlineStatusDot from '../../components/OnlineStatusDot';
 import SwipeableMessage from '../../components/SwipeableMessage';
-import { AvatarWithBadge, UserNameWithBadge } from '../../components/index';
+import { UserAvatar, UserNameWithBadge } from '../../components/index';
 
 export default function ConversationScreen() {
   const router = useRouter();
@@ -973,12 +973,13 @@ export default function ConversationScreen() {
           activeOpacity={0.7}
         >
           <View style={styles.avatarWithStatus}>
-            <AvatarWithBadge
-              uri={otherUser.avatarUrl || null}
-              name={otherUser.fullName}
-              size={40}
+            <UserAvatar
+              avatarUrl={otherUser.avatarUrl || null}
+              fullName={otherUser.fullName}
+              size="md"
               role={otherUser.role || 'volunteer'}
               membershipTier={otherUser.membershipTier || 'free'}
+              membershipStatus={otherUser.membershipStatus || 'inactive'}
             />
             {otherUserOnline && (
               <View style={{ position: 'absolute', bottom: -2, right: -2 }}>

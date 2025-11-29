@@ -46,7 +46,7 @@ import { useAlert, showErrorAlert } from '../../hooks/useAlert';
 import { sendNotificationToUser } from '../../services/pushNotifications';
 import { cache, CacheKeys } from '../../services/cache';
 import FeedPostCard from '../../components/cards/FeedPostCard';
-import { AvatarWithBadge, UserNameWithBadge } from '../../components';
+import { UserAvatar, UserNameWithBadge } from '../../components';
 
 type TabType = 'posts' | 'checkins' | 'about';
 
@@ -801,9 +801,9 @@ export default function ViewProfileScreen() {
         {/* Profile Header - Scrolls away */}
         <View style={[styles.profileHeader, { borderBottomColor: colors.border }]}>
           <View style={styles.avatarSection}>
-            <AvatarWithBadge
-              uri={profileUser.avatarUrl || null}
-              name={profileUser.fullName}
+            <UserAvatar
+              avatarUrl={profileUser.avatarUrl || null}
+              fullName={profileUser.fullName}
               size={100}
               role={profileUser.role || 'volunteer'}
               membershipTier={profileUser.membershipTier || 'free'}

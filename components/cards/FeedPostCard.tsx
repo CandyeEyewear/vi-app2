@@ -37,7 +37,7 @@ import SharedOpportunityCard from '../SharedOpportunityCard';
 import ImageCollage from '../ImageCollage';
 import VideoPlayer from '../VideoPlayer';
 import LinkText from '../LinkText';
-import { AvatarWithBadge, UserNameWithBadge } from '../index';
+import { UserAvatar, UserNameWithBadge } from '../index';
 
 const { width } = Dimensions.get('window');
 
@@ -240,10 +240,10 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
           onPress={() => handleUserTap(post.user.id, post.user.fullName)}
           activeOpacity={0.7}
         >
-          <AvatarWithBadge
-            uri={post.user.avatarUrl || null}
-            name={post.user.fullName}
-            size={40}
+          <UserAvatar
+            avatarUrl={post.user.avatarUrl || null}
+            fullName={post.user.fullName}
+            size="md"
             role={post.user.role || 'volunteer'}
             membershipTier={post.user.membershipTier || 'free'}
             membershipStatus={post.user.membershipStatus || 'inactive'}

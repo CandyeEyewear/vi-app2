@@ -22,7 +22,7 @@ import { useAuth } from '../contexts/AuthContext';
 import CustomAlert from '../components/CustomAlert';
 import { NotificationsSkeleton } from '../components/SkeletonLayouts';
 import { cache, CacheKeys } from '../services/cache';
-import { AvatarWithBadge } from '../components/index';
+import { UserAvatar } from '../components/index';
 
 interface Notification {
   id: string;
@@ -325,10 +325,10 @@ export default function NotificationsScreen() {
             const senderInfo = getNotificationAvatar(item);
             return (
               <View style={styles.avatarContainer}>
-                <AvatarWithBadge
-                  uri={senderInfo?.avatarUrl || null}
-                  name={senderInfo?.fullName || 'User'}
-                  size={40}
+                <UserAvatar
+                  avatarUrl={senderInfo?.avatarUrl || null}
+                  fullName={senderInfo?.fullName || 'User'}
+                  size="md"
                   role={senderInfo?.role || 'volunteer'}
                   membershipTier={senderInfo?.membershipTier || 'free'}
                   membershipStatus={senderInfo?.membershipStatus || 'inactive'}

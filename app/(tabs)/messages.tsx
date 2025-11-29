@@ -28,7 +28,7 @@ import { useAlert, showErrorAlert } from '../../hooks/useAlert';
 import OnlineStatusDot from '../../components/OnlineStatusDot';
 import { ConversationsSkeleton } from '../../components/SkeletonLayouts';
 import { supabase } from '../../services/supabase';
-import { AvatarWithBadge, UserNameWithBadge } from '../../components/index';
+import { UserAvatar, UserNameWithBadge } from '../../components/index';
 import WebContainer from '../../components/WebContainer';
 import Head from 'expo-router/head';
 
@@ -224,12 +224,13 @@ export default function MessagesScreen() {
         activeOpacity={0.7}
       >
         <View style={styles.avatarContainer}>
-          <AvatarWithBadge
-            uri={otherUser.avatarUrl || null}
-            name={otherUser.fullName}
+          <UserAvatar
+            avatarUrl={otherUser.avatarUrl || null}
+            fullName={otherUser.fullName}
             size={50}
             role={otherUser.role || 'volunteer'}
             membershipTier={otherUser.membershipTier || 'free'}
+            membershipStatus={otherUser.membershipStatus || 'inactive'}
           />
           {isOnline && (
             <View style={{ position: 'absolute', bottom: -2, right: -2 }}>

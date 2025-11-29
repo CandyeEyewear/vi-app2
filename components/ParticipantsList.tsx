@@ -14,7 +14,7 @@ import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
 import CustomAlert from './CustomAlert';
-import { AvatarWithBadge, UserNameWithBadge } from './index';
+import { UserAvatar, UserNameWithBadge } from './index';
 import type { OpportunitySignupWithCheckIn, CheckInStats } from '../types';
 
 interface ParticipantsListProps {
@@ -272,9 +272,9 @@ export default function ParticipantsList({
       <View style={styles.participantCard}>
         <View style={styles.participantHeader}>
           <View style={styles.participantInfo}>
-            <AvatarWithBadge
-              uri={user.avatar_url || null}
-              name={user.full_name}
+            <UserAvatar
+              avatarUrl={user.avatar_url || null}
+              fullName={user.full_name}
               size={50}
               role={user.role || 'volunteer'}
               membershipTier={user.membership_tier || 'free'}

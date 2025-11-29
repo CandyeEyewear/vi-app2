@@ -5,7 +5,6 @@
  */
 
 import * as Linking from 'expo-linking';
-import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 
@@ -250,14 +249,33 @@ export async function openPaymentPage(
       return { success: false, error: 'Window not available' };
     }
     
-    // On mobile, use expo-web-browser
-    const result = await WebBrowser.openBrowserAsync(paymentUrl, {
-      showTitle: true,
-      enableBarCollapsing: true,
-    });
-
-    // On mobile, success means browser was opened (dismiss/cancel means user came back)
-    return { success: true };
+    // On mobile, try to use expo-web-browser first, fallback to Linking if it fails
+    try {
+      // Dynamically import expo-web-browser
+      const WebBrowser = await import('expo-web-browser');
+      
+      // Check if openBrowserAsync exists and is a function
+      if (WebBrowser && typeof WebBrowser.openBrowserAsync === 'function') {
+        const result = await WebBrowser.openBrowserAsync(paymentUrl, {
+          showTitle: true,
+          enableBarCollapsing: true,
+        });
+        // On mobile, success means browser was opened (dismiss/cancel means user came back)
+        return { success: true };
+      }
+    } catch (webBrowserError) {
+      // If expo-web-browser fails (native module not available), fallback to Linking
+      console.warn('expo-web-browser not available, falling back to Linking:', webBrowserError);
+    }
+    
+    // Fallback: Use Linking.openURL if expo-web-browser is not available
+    const canOpen = await Linking.canOpenURL(paymentUrl);
+    if (canOpen) {
+      await Linking.openURL(paymentUrl);
+      return { success: true };
+    } else {
+      return { success: false, error: 'Cannot open payment URL' };
+    }
   } catch (error) {
     console.error('Open payment page error:', error);
     return {

@@ -18,7 +18,7 @@ import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
 import CustomAlert from './CustomAlert';
-import { AvatarWithBadge, UserNameWithBadge } from './index';
+import { UserAvatar, UserNameWithBadge } from './index';
 import type { OpportunityChatMessage, TypingIndicator } from '../types';
 
 interface OpportunityGroupChatProps {
@@ -310,10 +310,10 @@ export default function OpportunityGroupChat({ opportunityId, onMessageCountChan
       >
         {!isOwnMessage && (
           <View style={styles.avatarContainer}>
-            <AvatarWithBadge
-              uri={messageUser?.avatarUrl || null}
-              name={messageUser?.fullName || 'Unknown'}
-              size={32}
+            <UserAvatar
+              avatarUrl={messageUser?.avatarUrl || null}
+              fullName={messageUser?.fullName || 'Unknown'}
+              size="sm"
               role={messageUser?.role || 'volunteer'}
               membershipTier={messageUser?.membershipTier || 'free'}
               membershipStatus={messageUser?.membershipStatus || 'inactive'}

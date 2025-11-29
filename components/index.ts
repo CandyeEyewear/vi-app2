@@ -1,5 +1,10 @@
-// Export all badge-related components
+// Export all badge-related components (legacy - for backward compatibility)
 export { VerifiedBadge } from './VerifiedBadge';
 export { AvatarWithBadge } from './AvatarWithBadge';
-export { UserNameWithBadge } from './UserNameWithBadge';
+
+// Export new centralized components
+export { default as UserAvatar } from './UserAvatar';
+export type { UserAvatarProps } from './UserAvatar';
+export { default as UserNameWithBadge } from './UserNameWithBadge';
+export type { UserNameWithBadgeProps } from './UserNameWithBadge';
 

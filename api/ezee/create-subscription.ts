@@ -232,7 +232,7 @@ export default async function handler(req: any, res: any) {
     tokenFormData.append('post_back_url', postBackUrl);
     tokenFormData.append('return_url', returnUrl);
     tokenFormData.append('cancel_url', cancelUrl);
-    tokenFormData.append('subscription_id', ezeeSubscriptionId);
+    // subscription_id is passed in paymentData for the final POST, not here
 
     const tokenResponse = await fetch(`${EZEE_API_URL}/v1/custom_token/`, {
       method: 'POST',

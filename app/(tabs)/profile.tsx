@@ -22,7 +22,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Colors } from '../../constants/colors';
 import { Shield, ShoppingBag, Plus, Edit, Settings, Calendar, Crown, Heart, ChevronRight } from 'lucide-react-native';
 import StreakBadge from '../../components/StreakBadge';
-import { AvatarWithBadge, UserNameWithBadge } from '../../components/index';
+import { UserAvatar, UserNameWithBadge } from '../../components/index';
 import WebContainer from '../../components/WebContainer';
 import Head from 'expo-router/head';
 
@@ -132,9 +132,9 @@ export default function ProfileScreen() {
       {!isDesktop && (
         <View style={[styles.header, { paddingTop: insets.top + 32, backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         <View style={styles.avatarSection}>
-          <AvatarWithBadge
-            uri={user.avatarUrl || null}
-            name={user.fullName}
+          <UserAvatar
+            avatarUrl={user.avatarUrl || null}
+            fullName={user.fullName}
             size={100}
             role={user.role || 'volunteer'}
             membershipTier={user.membershipTier || 'free'}
