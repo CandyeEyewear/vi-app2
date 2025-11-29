@@ -35,6 +35,7 @@ import {
 } from '../../services/eventsService';
 import { useFeed } from '../../contexts/FeedContext';
 import ShareEventModal from '../ShareEventModal';
+import { showToast } from '../../utils/toast';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
@@ -79,13 +80,21 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
     setShowShareModal(true);
   };
 
-  const handleShare = async (comment?: string, visibility?: 'public' | 'circle') => {
-    setSharing(true);
-    const response = await shareEventToFeed(event.id, comment, visibility);
-    setSharing(false);
-    
-    if (response.success) {
-      setShowShareModal(false);
+  const handleShare = async (comment?: string, visibility: 'public' | 'circle' = 'public') => {
+    try {
+      setSharing(true);
+      const response = await shareEventToFeed(event.id, comment, visibility);
+
+      if (response.success) {
+        showToast(`Shared to ${visibility === 'circle' ? 'Circle' : 'Feed'}! 🎉`, 'success');
+        setShowShareModal(false);
+      } else {
+        showToast(response.error || 'Failed to share event', 'error');
+      }
+    } catch (error) {
+      showToast('Something went wrong while sharing', 'error');
+    } finally {
+      setSharing(false);
     }
   };
 

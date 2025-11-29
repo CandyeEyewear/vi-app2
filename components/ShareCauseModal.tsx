@@ -3,7 +3,7 @@
  * Allows users to add an optional comment and choose visibility when sharing a cause to their feed
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -43,6 +43,18 @@ export default function ShareCauseModal({
     setComment('');
     setVisibility('public');
   };
+
+  const { buttonText, buttonIcon } = useMemo(() => {
+    const isCircle = visibility === 'circle';
+    return {
+      buttonText: isCircle ? 'Share to Circle' : 'Share to Feed',
+      buttonIcon: isCircle ? (
+        <Users size={20} color="#FFFFFF" />
+      ) : (
+        <Globe size={20} color="#FFFFFF" />
+      ),
+    };
+  }, [visibility]);
 
   const handleClose = () => {
     setComment('');
@@ -155,10 +167,17 @@ export default function ShareCauseModal({
               disabled={sharing}
               activeOpacity={0.7}
             >
-              <Send size={20} color="#FFFFFF" />
-              <Text style={styles.shareButtonText}>
-                {sharing ? 'Sharing...' : 'Share to Feed'}
-              </Text>
+              {sharing ? (
+                <>
+                  <Send size={20} color="#FFFFFF" />
+                  <Text style={styles.shareButtonText}>Sharing...</Text>
+                </>
+              ) : (
+                <>
+                  {buttonIcon}
+                  <Text style={styles.shareButtonText}>{buttonText}</Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         </View>

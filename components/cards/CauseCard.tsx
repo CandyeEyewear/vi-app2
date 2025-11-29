@@ -21,6 +21,7 @@ import { Colors } from '../../constants/colors';
 import { getCauseProgress, getCauseDaysRemaining, formatCurrency } from '../../services/causesService';
 import { useFeed } from '../../contexts/FeedContext';
 import ShareCauseModal from '../ShareCauseModal';
+import { showToast } from '../../utils/toast';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
@@ -63,13 +64,21 @@ export function CauseCard({ cause, onPress, onDonatePress }: CauseCardProps) {
     setShowShareModal(true);
   };
 
-  const handleShare = async (comment?: string, visibility?: 'public' | 'circle') => {
-    setSharing(true);
-    const response = await shareCauseToFeed(cause.id, comment, visibility);
-    setSharing(false);
-    
-    if (response.success) {
-      setShowShareModal(false);
+  const handleShare = async (comment?: string, visibility: 'public' | 'circle' = 'public') => {
+    try {
+      setSharing(true);
+      const response = await shareCauseToFeed(cause.id, comment, visibility);
+
+      if (response.success) {
+        showToast(`Shared to ${visibility === 'circle' ? 'Circle' : 'Feed'}! 🎉`, 'success');
+        setShowShareModal(false);
+      } else {
+        showToast(response.error || 'Failed to share cause', 'error');
+      }
+    } catch (error) {
+      showToast('Something went wrong while sharing', 'error');
+    } finally {
+      setSharing(false);
     }
   };
 
