@@ -222,6 +222,14 @@ export interface Post {
   opportunityId?: string;
   opportunity?: Opportunity;
   
+  // Optional linked cause
+  causeId?: string;
+  cause?: Cause;
+  
+  // Optional linked event
+  eventId?: string;
+  event?: Event;
+  
   // Announcement fields
   isAnnouncement?: boolean;
   isPinned?: boolean;

@@ -34,6 +34,8 @@ import ShareModal from '../ShareModal';
 import ShareCommentModal from '../ShareCommentModal';
 import SharedPostCard from '../SharedPostCard';
 import SharedOpportunityCard from '../SharedOpportunityCard';
+import SharedCauseCard from '../SharedCauseCard';
+import SharedEventCard from '../SharedEventCard';
 import ImageCollage from '../ImageCollage';
 import VideoPlayer from '../VideoPlayer';
 import LinkText from '../LinkText';

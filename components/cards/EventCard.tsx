@@ -4,7 +4,7 @@
  * File: components/cards/EventCard.tsx
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import {
   Video,
   Ticket,
   Star,
+  Share2,
 } from 'lucide-react-native';
 import { Event, EventCategory } from '../../types';
 import { Colors } from '../../constants/colors';
@@ -32,6 +33,8 @@ import {
   isEventToday,
   formatCurrency,
 } from '../../services/eventsService';
+import { useFeed } from '../../contexts/FeedContext';
+import ShareEventModal from '../ShareEventModal';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
@@ -56,6 +59,9 @@ const CATEGORY_CONFIG: Record<EventCategory, { label: string; color: string; emo
 export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const { shareEventToFeed } = useFeed();
 
   const categoryConfig = CATEGORY_CONFIG[event.category] || CATEGORY_CONFIG.other;
   const daysUntil = getDaysUntilEvent(event.eventDate);
@@ -68,7 +74,23 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
     onRegisterPress?.();
   };
 
+  const handleSharePress = (e: any) => {
+    e.stopPropagation();
+    setShowShareModal(true);
+  };
+
+  const handleShare = async (comment?: string, visibility?: 'public' | 'circle') => {
+    setSharing(true);
+    const response = await shareEventToFeed(event.id, comment, visibility);
+    setSharing(false);
+    
+    if (response.success) {
+      setShowShareModal(false);
+    }
+  };
+
   return (
+    <>
     <TouchableOpacity
       style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
       onPress={onPress}
@@ -96,6 +118,15 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
             {categoryConfig.emoji} {categoryConfig.label}
           </Text>
         </View>
+
+        {/* Share Button */}
+        <TouchableOpacity
+          onPress={handleSharePress}
+          style={styles.shareButton}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Share2 size={18} color="#FFFFFF" />
+        </TouchableOpacity>
 
         {/* Featured Badge */}
         {event.isFeatured && (
@@ -222,6 +253,14 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
         )}
       </View>
     </TouchableOpacity>
+    <ShareEventModal
+      visible={showShareModal}
+      onClose={() => setShowShareModal(false)}
+      onShare={handleShare}
+      event={event}
+      sharing={sharing}
+    />
+    </>
   );
 }
 
@@ -261,6 +300,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
+  },
+  shareButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   categoryBadgeText: {
     color: '#FFFFFF',

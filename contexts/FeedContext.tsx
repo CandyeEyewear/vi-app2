@@ -19,6 +19,8 @@ interface FeedContextType {
   sharePost: (postId: string) => Promise<void>;
   shareToFeed: (postId: string, customMessage?: string) => Promise<ApiResponse<Post>>;
   shareOpportunityToFeed: (opportunityId: string, customMessage?: string, visibility?: 'public' | 'circle') => Promise<ApiResponse<Post>>;
+  shareCauseToFeed: (causeId: string, customMessage?: string, visibility?: 'public' | 'circle') => Promise<ApiResponse<Post>>;
+  shareEventToFeed: (eventId: string, customMessage?: string, visibility?: 'public' | 'circle') => Promise<ApiResponse<Post>>;
   deletePost: (postId: string) => Promise<ApiResponse<void>>;
   refreshFeed: () => Promise<void>;
   addReaction: (postId: string, reactionType: ReactionType) => Promise<ApiResponse<void>>;
@@ -1372,6 +1374,210 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const shareCauseToFeed = async (
+    causeId: string,
+    customMessage?: string,
+    visibility: 'public' | 'circle' = 'public'
+  ): Promise<ApiResponse<Post>> => {
+    if (!user) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    try {
+      console.log('[FEED] 📤 Sharing cause to feed:', causeId);
+      console.log('[FEED] Custom message:', customMessage || '(none)');
+      console.log('[FEED] Visibility:', visibility);
+
+      // Fetch cause details
+      const { data: causeData, error: causeError } = await supabase
+        .from('causes')
+        .select('*')
+        .eq('id', causeId)
+        .single();
+
+      if (causeError || !causeData) {
+        return { success: false, error: 'Cause not found' };
+      }
+
+      console.log('[FEED] Creating post with cause reference...');
+
+      // Create post with cause reference
+      const { data, error } = await supabase
+        .from('posts')
+        .insert({
+          user_id: user.id,
+          text: customMessage || '', // User's optional message
+          cause_id: causeId, // Reference to cause
+          media_urls: causeData.image_url ? [causeData.image_url] : [],
+          media_types: causeData.image_url ? ['image'] : [],
+          visibility: visibility,
+          likes: [],
+          shares: 0,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Transform cause data to Cause type
+      const cause: any = {
+        id: causeData.id,
+        title: causeData.title,
+        description: causeData.description,
+        category: causeData.category,
+        goalAmount: causeData.goal_amount,
+        amountRaised: causeData.amount_raised || 0,
+        donorCount: causeData.donor_count || 0,
+        imageUrl: causeData.image_url,
+        endDate: causeData.end_date,
+        isFeatured: causeData.is_featured,
+        isDonationsPublic: causeData.is_donations_public,
+        status: causeData.status,
+      };
+
+      const newPost: Post = {
+        id: data.id,
+        userId: user.id,
+        user: user,
+        text: data.text,
+        mediaUrls: data.media_urls || [],
+        mediaTypes: data.media_types || [],
+        visibility: data.visibility || visibility,
+        likes: [],
+        comments: [],
+        shares: 0,
+        reactions: [],
+        reactionSummary: {
+          heart: 0,
+          thumbsup: 0,
+          clap: 0,
+          fire: 0,
+          star: 0,
+          total: 0,
+        },
+        isAnnouncement: false,
+        isPinned: false,
+        causeId: causeId,
+        cause: cause,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      };
+
+      console.log('[FEED] ✅ Cause shared to feed, adding optimistically');
+      setPosts((prev) => [newPost, ...prev]);
+
+      return { success: true, data: newPost };
+    } catch (error: any) {
+      console.error('[FEED] ❌ Error sharing cause to feed:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  const shareEventToFeed = async (
+    eventId: string,
+    customMessage?: string,
+    visibility: 'public' | 'circle' = 'public'
+  ): Promise<ApiResponse<Post>> => {
+    if (!user) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    try {
+      console.log('[FEED] 📤 Sharing event to feed:', eventId);
+      console.log('[FEED] Custom message:', customMessage || '(none)');
+      console.log('[FEED] Visibility:', visibility);
+
+      // Fetch event details
+      const { data: eventData, error: eventError } = await supabase
+        .from('events')
+        .select('*')
+        .eq('id', eventId)
+        .single();
+
+      if (eventError || !eventData) {
+        return { success: false, error: 'Event not found' };
+      }
+
+      console.log('[FEED] Creating post with event reference...');
+
+      // Create post with event reference
+      const { data, error } = await supabase
+        .from('posts')
+        .insert({
+          user_id: user.id,
+          text: customMessage || '', // User's optional message
+          event_id: eventId, // Reference to event
+          media_urls: eventData.image_url ? [eventData.image_url] : [],
+          media_types: eventData.image_url ? ['image'] : [],
+          visibility: visibility,
+          likes: [],
+          shares: 0,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Transform event data to Event type
+      const event: any = {
+        id: eventData.id,
+        title: eventData.title,
+        description: eventData.description,
+        category: eventData.category,
+        eventDate: eventData.event_date,
+        startTime: eventData.start_time,
+        endTime: eventData.end_time,
+        location: eventData.location,
+        isVirtual: eventData.is_virtual,
+        virtualLink: eventData.virtual_link,
+        ticketPrice: eventData.ticket_price,
+        isFree: eventData.is_free,
+        capacity: eventData.capacity,
+        spotsRemaining: eventData.spots_remaining,
+        registrationRequired: eventData.registration_required,
+        imageUrl: eventData.image_url,
+        isFeatured: eventData.is_featured,
+        status: eventData.status,
+      };
+
+      const newPost: Post = {
+        id: data.id,
+        userId: user.id,
+        user: user,
+        text: data.text,
+        mediaUrls: data.media_urls || [],
+        mediaTypes: data.media_types || [],
+        visibility: data.visibility || visibility,
+        likes: [],
+        comments: [],
+        shares: 0,
+        reactions: [],
+        reactionSummary: {
+          heart: 0,
+          thumbsup: 0,
+          clap: 0,
+          fire: 0,
+          star: 0,
+          total: 0,
+        },
+        isAnnouncement: false,
+        isPinned: false,
+        eventId: eventId,
+        event: event,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      };
+
+      console.log('[FEED] ✅ Event shared to feed, adding optimistically');
+      setPosts((prev) => [newPost, ...prev]);
+
+      return { success: true, data: newPost };
+    } catch (error: any) {
+      console.error('[FEED] ❌ Error sharing event to feed:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
   const deletePost = async (postId: string): Promise<ApiResponse<void>> => {
   if (!user) {
     return { success: false, error: 'Not authenticated' };
@@ -1609,6 +1815,8 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
         sharePost,
         shareToFeed,
         shareOpportunityToFeed,
+        shareCauseToFeed,
+        shareEventToFeed,
         deletePost,
         refreshFeed,
         addReaction,

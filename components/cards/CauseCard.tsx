@@ -4,7 +4,7 @@
  * File: components/cards/CauseCard.tsx
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -15,10 +15,12 @@ import {
   useColorScheme,
   Dimensions,
 } from 'react-native';
-import { Heart, Users, Clock, TrendingUp } from 'lucide-react-native';
+import { Heart, Users, Clock, TrendingUp, Share2 } from 'lucide-react-native';
 import { Cause, CauseCategory } from '../../types';
 import { Colors } from '../../constants/colors';
 import { getCauseProgress, getCauseDaysRemaining, formatCurrency } from '../../services/causesService';
+import { useFeed } from '../../contexts/FeedContext';
+import ShareCauseModal from '../ShareCauseModal';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
@@ -43,6 +45,9 @@ const CATEGORY_CONFIG: Record<CauseCategory, { label: string; color: string; emo
 export function CauseCard({ cause, onPress, onDonatePress }: CauseCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const { shareCauseToFeed } = useFeed();
   
   const progress = getCauseProgress(cause);
   const daysRemaining = getCauseDaysRemaining(cause);
@@ -53,7 +58,23 @@ export function CauseCard({ cause, onPress, onDonatePress }: CauseCardProps) {
     onDonatePress?.();
   };
 
+  const handleSharePress = (e: any) => {
+    e.stopPropagation();
+    setShowShareModal(true);
+  };
+
+  const handleShare = async (comment?: string, visibility?: 'public' | 'circle') => {
+    setSharing(true);
+    const response = await shareCauseToFeed(cause.id, comment, visibility);
+    setSharing(false);
+    
+    if (response.success) {
+      setShowShareModal(false);
+    }
+  };
+
   return (
+    <>
     <Pressable
       style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
       onPress={onPress}
@@ -80,6 +101,15 @@ export function CauseCard({ cause, onPress, onDonatePress }: CauseCardProps) {
             {categoryConfig.emoji} {categoryConfig.label}
           </Text>
         </View>
+
+        {/* Share Button */}
+        <TouchableOpacity
+          onPress={handleSharePress}
+          style={styles.shareButton}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Share2 size={18} color="#FFFFFF" />
+        </TouchableOpacity>
 
         {/* Featured Badge */}
         {cause.isFeatured && (
@@ -165,6 +195,14 @@ export function CauseCard({ cause, onPress, onDonatePress }: CauseCardProps) {
         </TouchableOpacity>
       </View>
     </Pressable>
+    <ShareCauseModal
+      visible={showShareModal}
+      onClose={() => setShowShareModal(false)}
+      onShare={handleShare}
+      cause={cause}
+      sharing={sharing}
+    />
+    </>
   );
 }
 
@@ -201,6 +239,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
+  },
+  shareButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   categoryBadgeText: {
     color: '#FFFFFF',
