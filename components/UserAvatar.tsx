@@ -53,8 +53,8 @@ const SIZES = {
 
 // Ring colors
 const RING_COLORS = {
-  admin: '#FFD700',      // Gold for admin
-  premium: '#2196F3',    // Blue for premium (your brand color)
+  admin: '#000000',      // Black for admin
+  premium: '#2196F3',    // Blue for premium/paid members
   none: 'transparent',
 };
 
@@ -93,10 +93,11 @@ export default function UserAvatar({
   ) ?? isVerified;
   
   // Determine ring color based on status hierarchy
+  // Admin gets black ring, premium (non-admin) gets blue ring
   const getRingColor = (): string => {
     if (!showRing) return RING_COLORS.none;
     if (userIsAdmin) return RING_COLORS.admin;
-    if (userIsPremium) return RING_COLORS.premium;
+    if (userIsPremium && !userIsAdmin) return RING_COLORS.premium; // Only blue if not admin
     return RING_COLORS.none;
   };
   

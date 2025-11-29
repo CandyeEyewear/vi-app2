@@ -9,7 +9,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet, useColorScheme, TextStyle, ViewStyle } from 'react-native';
-import { CheckCircle, Shield } from 'lucide-react-native';
+import { Check } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
 import { 
   UserRole, 
@@ -86,8 +86,12 @@ export default function UserNameWithBadge({
   );
   
   const textColor = color || colors.text;
-  const shouldShowTick = showVerifiedTick && (userIsVerified || userIsPremium);
-  const shouldShowAdmin = showAdminBadge && userIsAdmin;
+  
+  // Show tick for premium (non-admin) or admin
+  // Premium gets blue tick, admin gets black tick
+  const shouldShowTick = showVerifiedTick && ((userIsPremium && !userIsAdmin) || userIsAdmin);
+  const isPremiumTick = userIsPremium && !userIsAdmin; // Blue tick for premium
+  const isAdminTick = userIsAdmin; // Black tick for admin
   
   // Icon size proportional to font
   const iconSize = Math.round(fontSize * 0.85);
@@ -106,19 +110,22 @@ export default function UserNameWithBadge({
       </Text>
       
       {shouldShowTick && (
-        <CheckCircle
-          size={iconSize}
-          color={colors.primary}
-          fill={colors.primary}
-          strokeWidth={0}
-          style={styles.tickIcon}
-        />
-      )}
-      
-      {shouldShowAdmin && (
-        <View style={[styles.adminBadge, { backgroundColor: '#FFD700' }]}>
-          <Shield size={10} color="#000000" />
-          <Text style={styles.adminText}>Admin</Text>
+        <View
+          style={[
+            styles.tickContainer,
+            {
+              width: iconSize,
+              height: iconSize,
+              borderRadius: iconSize / 2,
+              backgroundColor: isAdminTick ? '#000000' : colors.primary, // Black for admin, blue for premium
+            },
+          ]}
+        >
+          <Check
+            size={iconSize * 0.6}
+            color="#FFFFFF"
+            strokeWidth={3}
+          />
         </View>
       )}
     </View>
@@ -134,21 +141,9 @@ const styles = StyleSheet.create({
   name: {
     flexShrink: 1,
   },
-  tickIcon: {
+  tickContainer: {
     marginLeft: 4,
-  },
-  adminBadge: {
-    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    gap: 2,
-  },
-  adminText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#000000',
   },
 });

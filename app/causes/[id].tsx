@@ -51,6 +51,7 @@ import {
 } from '../../services/causesService';
 import { useAuth } from '../../contexts/AuthContext';
 import WebContainer from '../../components/WebContainer';
+import { UserAvatar } from '../../components';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
@@ -90,13 +91,20 @@ function DonorItem({ donation, colors }: { donation: Donation; colors: any }) {
 
   return (
     <View style={[styles.donorItem, { borderBottomColor: colors.border }]}>
-      <View style={[styles.donorAvatar, { backgroundColor: colors.border }]}>
-        {donation.user?.avatarUrl ? (
-          <Image source={{ uri: donation.user.avatarUrl }} style={styles.donorAvatarImage} />
-        ) : (
+      {!donation.isAnonymous && donation.user ? (
+        <UserAvatar
+          avatarUrl={donation.user.avatarUrl || null}
+          fullName={donation.user.fullName || displayName}
+          size={44}
+          role={donation.user.role || 'volunteer'}
+          membershipTier={donation.user.membershipTier || 'free'}
+          membershipStatus={donation.user.membershipStatus || 'inactive'}
+        />
+      ) : (
+        <View style={[styles.donorAvatar, { backgroundColor: colors.border }]}>
           <User size={20} color={colors.textSecondary} />
-        )}
-      </View>
+        </View>
+      )}
       <View style={styles.donorInfo}>
         <Text style={[styles.donorName, { color: colors.text }]}>
           {displayName}
