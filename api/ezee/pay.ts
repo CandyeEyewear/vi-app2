@@ -118,7 +118,7 @@ export default async function handler(req: any, res: any) {
         <input type="hidden" name="customer_name" value="${escapeHtml(name || '')}" />
         <input type="hidden" name="description" value="${escapeHtml(description || 'Payment')}" />
         ${subscription_id ? `<input type="hidden" name="subscription_id" value="${escapeHtml(subscription_id)}" />` : ''}
-        ${recurring ? `<input type="hidden" name="recurring" value="${escapeHtml(recurring)}" />` : ''}
+        ${recurring ? `<input type="hidden" name="recurring" value="true" />` : ''}
       </form>
     </body>
     </html>
