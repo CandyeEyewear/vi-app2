@@ -1,6 +1,6 @@
 import { Alert, Platform, ToastAndroid } from 'react-native';
 
-type ToastType = 'success' | 'error' | 'warning' | 'info';
+export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
 const TITLE_MAP: Record<ToastType, string> = {
   success: 'Success',
@@ -26,7 +26,12 @@ export function showToast(message: string, type: ToastType = 'info') {
   }
 
   if (Platform.OS === 'web') {
-    console.log(`[${title}] ${message}`);
+    const prefix = `[${title}]`;
+    if (type === 'error' || type === 'warning') {
+      console.warn(`${prefix} ${message}`);
+    } else {
+      console.log(`${prefix} ${message}`);
+    }
     return;
   }
 
