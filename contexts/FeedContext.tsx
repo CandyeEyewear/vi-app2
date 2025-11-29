@@ -155,6 +155,8 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
             isPinned: newPostData.is_pinned || false,
             sharedPostId: newPostData.shared_post_id || null,
             opportunityId: newPostData.opportunity_id || undefined,
+            causeId: newPostData.cause_id || undefined,
+            eventId: newPostData.event_id || undefined,
             createdAt: newPostData.created_at,
             updatedAt: newPostData.updated_at,
           };
@@ -191,6 +193,68 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
                 status: opportunityData.status,
               };
               newPost.opportunity = opportunity;
+            }
+          }
+
+          // Fetch cause data if post references a cause
+          if (newPostData.cause_id) {
+            console.log('[FEED] 💝 New post with cause, fetching cause data...');
+            const { data: causeData } = await supabase
+              .from('causes')
+              .select('*')
+              .eq('id', newPostData.cause_id)
+              .single();
+
+            if (causeData) {
+              const cause: any = {
+                id: causeData.id,
+                title: causeData.title,
+                description: causeData.description,
+                category: causeData.category,
+                goalAmount: causeData.goal_amount,
+                amountRaised: causeData.amount_raised || 0,
+                donorCount: causeData.donor_count || 0,
+                imageUrl: causeData.image_url,
+                endDate: causeData.end_date,
+                isFeatured: causeData.is_featured,
+                isDonationsPublic: causeData.is_donations_public,
+                status: causeData.status,
+              };
+              newPost.cause = cause;
+            }
+          }
+
+          // Fetch event data if post references an event
+          if (newPostData.event_id) {
+            console.log('[FEED] 🎉 New post with event, fetching event data...');
+            const { data: eventData } = await supabase
+              .from('events')
+              .select('*')
+              .eq('id', newPostData.event_id)
+              .single();
+
+            if (eventData) {
+              const event: any = {
+                id: eventData.id,
+                title: eventData.title,
+                description: eventData.description,
+                category: eventData.category,
+                eventDate: eventData.event_date,
+                startTime: eventData.start_time,
+                endTime: eventData.end_time,
+                location: eventData.location,
+                isVirtual: eventData.is_virtual,
+                virtualLink: eventData.virtual_link,
+                ticketPrice: eventData.ticket_price,
+                isFree: eventData.is_free,
+                capacity: eventData.capacity,
+                spotsRemaining: eventData.spots_remaining,
+                registrationRequired: eventData.registration_required,
+                imageUrl: eventData.image_url,
+                isFeatured: eventData.is_featured,
+                status: eventData.status,
+              };
+              newPost.event = event;
             }
           }
 
@@ -761,6 +825,8 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
             })) || [],
             shares: post.shares || 0,
             opportunityId: post.opportunity_id,
+            causeId: post.cause_id,
+            eventId: post.event_id,
             isAnnouncement: post.is_announcement || false,
             isPinned: post.is_pinned || false,
             reactions, // ✅ Add reactions
@@ -812,9 +878,81 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
         })
       );
 
+      // Fetch causes for posts that reference them
+      const postsWithCauses = await Promise.all(
+        postsWithOpportunities.map(async (post) => {
+          if (post.causeId) {
+            console.log('[FEED] 💝 Loading cause data for post:', post.id);
+            const { data: causeData } = await supabase
+              .from('causes')
+              .select('*')
+              .eq('id', post.causeId)
+              .single();
+
+            if (causeData) {
+              const cause: any = {
+                id: causeData.id,
+                title: causeData.title,
+                description: causeData.description,
+                category: causeData.category,
+                goalAmount: causeData.goal_amount,
+                amountRaised: causeData.amount_raised || 0,
+                donorCount: causeData.donor_count || 0,
+                imageUrl: causeData.image_url,
+                endDate: causeData.end_date,
+                isFeatured: causeData.is_featured,
+                isDonationsPublic: causeData.is_donations_public,
+                status: causeData.status,
+              };
+              return { ...post, cause };
+            }
+          }
+          return post;
+        })
+      );
+
+      // Fetch events for posts that reference them
+      const postsWithEvents = await Promise.all(
+        postsWithCauses.map(async (post) => {
+          if (post.eventId) {
+            console.log('[FEED] 🎉 Loading event data for post:', post.id);
+            const { data: eventData } = await supabase
+              .from('events')
+              .select('*')
+              .eq('id', post.eventId)
+              .single();
+
+            if (eventData) {
+              const event: any = {
+                id: eventData.id,
+                title: eventData.title,
+                description: eventData.description,
+                category: eventData.category,
+                eventDate: eventData.event_date,
+                startTime: eventData.start_time,
+                endTime: eventData.end_time,
+                location: eventData.location,
+                isVirtual: eventData.is_virtual,
+                virtualLink: eventData.virtual_link,
+                ticketPrice: eventData.ticket_price,
+                isFree: eventData.is_free,
+                capacity: eventData.capacity,
+                spotsRemaining: eventData.spots_remaining,
+                registrationRequired: eventData.registration_required,
+                imageUrl: eventData.image_url,
+                isFeatured: eventData.is_featured,
+                status: eventData.status,
+              };
+              return { ...post, event };
+            }
+          }
+          return post;
+        })
+      );
+
       // Fetch original posts for shared posts
       const postsWithSharedData = await Promise.all(
-        postsWithOpportunities.map(async (post) => {
+        postsWithEvents.map(async (post) => {
           if (post.sharedPostId) {
             console.log('[FEED] 📎 Loading shared post data for:', post.id);
             // Fetch the original post
