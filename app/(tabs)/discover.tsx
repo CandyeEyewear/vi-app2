@@ -790,16 +790,18 @@ export default function DiscoverScreen() {
         setLoadingMore(true);
       }
 
-      // Check if user is premium member
+      // Check if user is premium member or admin
       let isPremiumMember = false;
+      let isAdmin = false;
       if (user?.id) {
         const { data: userData } = await supabase
           .from('users')
-          .select('membership_tier, membership_status')
+          .select('membership_tier, membership_status, role')
           .eq('id', user.id)
           .single();
         
         isPremiumMember = userData?.membership_tier === 'premium' && userData?.membership_status === 'active';
+        isAdmin = userData?.role === 'admin';
       }
 
       // Build Supabase query with server-side filtering where possible
@@ -810,10 +812,11 @@ export default function DiscoverScreen() {
         .or('proposal_status.is.null,proposal_status.eq.approved');
 
       // Filter visibility: non-premium users only see public items
-      if (!isPremiumMember) {
+      // Admins see everything (no filter)
+      if (!isAdmin && !isPremiumMember) {
         query = query.or('visibility.is.null,visibility.eq.public');
       }
-      // Premium members see all (public + members_only), so no filter needed
+      // Premium members and admins see all (public + members_only), so no filter needed
 
       // Server-side category filter
       if (selectedCategory !== 'all' && selectedCategory !== 'nearMe') {

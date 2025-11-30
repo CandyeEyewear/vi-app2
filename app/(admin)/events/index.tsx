@@ -194,6 +194,7 @@ export default function AdminEventsScreen() {
       const response = await getEvents({
         status: selectedStatus === 'all' ? undefined : selectedStatus,
         limit: 50,
+        userId: user?.id, // Pass userId so admin can see all events
       });
 
       if (response.success && response.data) {
@@ -205,7 +206,7 @@ export default function AdminEventsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedStatus]);
+  }, [selectedStatus, user?.id]);
 
   useEffect(() => {
     setLoading(true);

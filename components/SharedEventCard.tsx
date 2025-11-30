@@ -97,12 +97,12 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
         </View>
 
         <View style={styles.infoRow}>
-  <Clock size={14} color={colors.textSecondary} />
-  <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-    {event.startTime ? formatEventTime(event.startTime) : 'TBA'}
-    {event.endTime && ` - ${formatEventTime(event.endTime)}`}
-  </Text>
-</View>
+          <Clock size={14} color={colors.textSecondary} />
+          <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+            {event.startTime ? formatEventTime(event.startTime) : 'TBA'}
+            {event.endTime && ` - ${formatEventTime(event.endTime)}`}
+          </Text>
+        </View>
 
         {/* Location */}
         <View style={styles.infoRow}>

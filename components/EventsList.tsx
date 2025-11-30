@@ -120,6 +120,7 @@ export function EventsList({
         offset: currentOffset,
         searchQuery: searchQuery.trim() || undefined,
         upcoming: true,
+        userId: user?.id,
       });
 
       if (response.success && response.data) {
@@ -138,7 +139,7 @@ export function EventsList({
       setRefreshing(false);
       setLoadingMore(false);
     }
-  }, [selectedCategory, featured, searchQuery, offset, PAGE_SIZE]);
+  }, [selectedCategory, featured, searchQuery, offset, PAGE_SIZE, user?.id]);
 
   // Initial load and filter changes
   useEffect(() => {

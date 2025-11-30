@@ -34,8 +34,8 @@ function transformEvent(row: any): Event {
     isVirtual: row.is_virtual ?? false,
     virtualLink: row.virtual_link,
     eventDate: row.event_date,
-    startTime: row.start_time,
-    endTime: row.end_time,
+    startTime: row.start_time && typeof row.start_time === 'string' ? row.start_time : undefined,
+    endTime: row.end_time && typeof row.end_time === 'string' ? row.end_time : undefined,
     timezone: row.timezone || 'America/Jamaica',
     capacity: row.capacity,
     spotsRemaining: row.spots_remaining,
@@ -112,16 +112,18 @@ export async function getEvents(options?: {
   userId?: string; // Optional: if provided, will filter based on user's membership
 }): Promise<ApiResponse<Event[]>> {
   try {
-    // Check if user is premium member (if userId provided)
+    // Check if user is premium member or admin (if userId provided)
     let isPremiumMember = false;
+    let isAdmin = false;
     if (options?.userId) {
       const { data: userData } = await supabase
         .from('users')
-        .select('membership_tier, membership_status')
+        .select('membership_tier, membership_status, role')
         .eq('id', options.userId)
         .single();
       
       isPremiumMember = userData?.membership_tier === 'premium' && userData?.membership_status === 'active';
+      isAdmin = userData?.role === 'admin';
     }
 
     let query = supabase
@@ -143,10 +145,11 @@ export async function getEvents(options?: {
     }
 
     // Filter visibility: non-premium users only see public items
-    if (!isPremiumMember) {
+    // Admins see everything (no filter)
+    if (!isAdmin && !isPremiumMember) {
       query = query.or('visibility.is.null,visibility.eq.public');
     }
-    // Premium members see all (public + members_only), so no filter needed
+    // Premium members and admins see all (public + members_only), so no filter needed
 
     if (options?.category && options.category !== 'all') {
       query = query.eq('category', options.category);
@@ -710,7 +713,7 @@ export function formatEventDate(dateString: string): string {
  * Returns empty string if time is not provided
  */
 export function formatEventTime(timeString: string | null | undefined): string {
-  if (!timeString) {
+  if (!timeString || typeof timeString !== 'string') {
     return '';
   }
   
@@ -728,7 +731,7 @@ export function formatEventTime(timeString: string | null | undefined): string {
     const displayHour = hour % 12 || 12;
     return `${displayHour}:${minutes} ${ampm}`;
   } catch (error) {
-    console.warn('[eventsService] formatEventTime error:', error);
+    console.warn('[eventsService] formatEventTime error:', error, 'timeString:', timeString);
     return '';
   }
 }

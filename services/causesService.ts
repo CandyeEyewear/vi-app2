@@ -141,16 +141,18 @@ export async function getCauses(options?: {
   userId?: string; // Optional: if provided, will filter based on user's membership
 }): Promise<ApiResponse<Cause[]>> {
   try {
-    // Check if user is premium member (if userId provided)
+    // Check if user is premium member or admin (if userId provided)
     let isPremiumMember = false;
+    let isAdmin = false;
     if (options?.userId) {
       const { data: userData } = await supabase
         .from('users')
-        .select('membership_tier, membership_status')
+        .select('membership_tier, membership_status, role')
         .eq('id', options.userId)
         .single();
       
       isPremiumMember = userData?.membership_tier === 'premium' && userData?.membership_status === 'active';
+      isAdmin = userData?.role === 'admin';
     }
 
     let query = supabase
@@ -170,10 +172,11 @@ export async function getCauses(options?: {
     }
 
     // Filter visibility: non-premium users only see public items
-    if (!isPremiumMember) {
+    // Admins see everything (no filter)
+    if (!isAdmin && !isPremiumMember) {
       query = query.or('visibility.is.null,visibility.eq.public');
     }
-    // Premium members see all (public + members_only), so no filter needed
+    // Premium members and admins see all (public + members_only), so no filter needed
 
     if (options?.category && options.category !== 'all') {
       query = query.eq('category', options.category);
