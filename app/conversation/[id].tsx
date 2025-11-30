@@ -980,6 +980,7 @@ export default function ConversationScreen() {
               role={otherUser.role || 'volunteer'}
               membershipTier={otherUser.membershipTier || 'free'}
               membershipStatus={otherUser.membershipStatus || 'inactive'}
+              isPartnerOrganization={otherUser.is_partner_organization}
             />
             {otherUserOnline && (
               <View style={{ position: 'absolute', bottom: -2, right: -2 }}>

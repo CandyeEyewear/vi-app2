@@ -37,7 +37,15 @@ export default function OpportunityGroupChat({ opportunityId, onMessageCountChan
   const [typingUsers, setTypingUsers] = useState<TypingIndicator[]>([]);
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const userCacheRef = useRef<Map<string, { id: string; fullName: string; avatarUrl: string | null }>>(
+  const userCacheRef = useRef<Map<string, { 
+    id: string; 
+    fullName: string; 
+    avatarUrl: string | null;
+    role?: string;
+    membershipTier?: string;
+    membershipStatus?: string;
+    is_partner_organization?: boolean;
+  }>>(
     new Map()
   );
   const keyboardAnim = useRef(new Animated.Value(0)).current;
@@ -136,7 +144,7 @@ export default function OpportunityGroupChat({ opportunityId, onMessageCountChan
           if (!userData) {
             const { data } = await supabase
               .from('users')
-              .select('id, full_name, avatar_url')
+              .select('id, full_name, avatar_url, role, membership_tier, membership_status, is_partner_organization')
               .eq('id', payload.new.user_id)
               .single();
 
@@ -145,6 +153,10 @@ export default function OpportunityGroupChat({ opportunityId, onMessageCountChan
                 id: data.id,
                 fullName: data.full_name,
                 avatarUrl: data.avatar_url,
+                role: data.role || 'volunteer',
+                membershipTier: data.membership_tier || 'free',
+                membershipStatus: data.membership_status || 'inactive',
+                is_partner_organization: data.is_partner_organization || false,
               };
               userCacheRef.current.set(payload.new.user_id, userData);
             }
@@ -214,7 +226,8 @@ export default function OpportunityGroupChat({ opportunityId, onMessageCountChan
             avatar_url,
             role,
             membership_tier,
-            membership_status
+            membership_status,
+            is_partner_organization
           )
         `)
         .eq('opportunity_id', opportunityId)
@@ -237,6 +250,7 @@ export default function OpportunityGroupChat({ opportunityId, onMessageCountChan
           role: msg.user.role || 'volunteer',
           membershipTier: msg.user.membership_tier || 'free',
           membershipStatus: msg.user.membership_status || 'inactive',
+          is_partner_organization: msg.user.is_partner_organization || false,
         } : undefined,
       }));
 
@@ -317,6 +331,7 @@ export default function OpportunityGroupChat({ opportunityId, onMessageCountChan
               role={messageUser?.role || 'volunteer'}
               membershipTier={messageUser?.membershipTier || 'free'}
               membershipStatus={messageUser?.membershipStatus || 'inactive'}
+              isPartnerOrganization={messageUser?.is_partner_organization}
             />
           </View>
         )}
@@ -328,6 +343,7 @@ export default function OpportunityGroupChat({ opportunityId, onMessageCountChan
               role={messageUser?.role || 'volunteer'}
               membershipTier={messageUser?.membershipTier || 'free'}
               membershipStatus={messageUser?.membershipStatus || 'inactive'}
+              isPartnerOrganization={messageUser?.is_partner_organization}
               style={styles.senderName}
               badgeSize={14}
             />

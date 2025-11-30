@@ -231,6 +231,7 @@ export default function MessagesScreen() {
             role={otherUser.role || 'volunteer'}
             membershipTier={otherUser.membershipTier || 'free'}
             membershipStatus={otherUser.membershipStatus || 'inactive'}
+            isPartnerOrganization={otherUser.is_partner_organization}
           />
           {isOnline && (
             <View style={{ position: 'absolute', bottom: -2, right: -2 }}>
@@ -251,6 +252,8 @@ export default function MessagesScreen() {
                 name={otherUser.fullName}
                 role={otherUser.role || 'volunteer'}
                 membershipTier={otherUser.membershipTier || 'free'}
+                membershipStatus={otherUser.membershipStatus || 'inactive'}
+                isPartnerOrganization={otherUser.is_partner_organization}
                 style={[styles.userName, { color: colors.text }]}
               />
             </View>
