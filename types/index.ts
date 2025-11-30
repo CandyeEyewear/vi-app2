@@ -4,6 +4,8 @@
 
 export * from './reactions';
 
+export type VisibilityType = 'public' | 'members_only';
+
 // ==================== USER TYPES ====================
 
 export type UserRole = 'volunteer' | 'admin';
@@ -118,6 +120,7 @@ contactPersonPhone?: string;
 
   // Status
   status: OpportunityStatus;
+  visibility: VisibilityType;
   
   // Admin info
   createdBy: string; // Admin user ID
@@ -493,6 +496,7 @@ export interface Cause {
   
   // Status
   status: CauseStatus;
+  visibility: VisibilityType;
   isFeatured: boolean;
   
   // Stats
@@ -745,6 +749,7 @@ export interface Event {
   
   // Status
   status: EventStatus;
+  visibility: VisibilityType;
   isFeatured: boolean;
   
   // Admin
