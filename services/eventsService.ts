@@ -55,6 +55,7 @@ function transformEvent(row: any): Event {
     contactEmail: row.contact_email,
     contactPhone: row.contact_phone,
     status: row.status,
+    visibility: row.visibility || 'public',
     isFeatured: row.is_featured ?? false,
     createdBy: row.created_by,
     creator: row.creator ? {
@@ -216,6 +217,7 @@ export async function createEvent(eventData: {
   contactEmail?: string;
   contactPhone?: string;
   imageUrl?: string;
+  visibility?: 'public' | 'members_only';
   createdBy: string;
 }): Promise<ApiResponse<Event>> {
   try {
@@ -247,6 +249,7 @@ export async function createEvent(eventData: {
         contact_email: eventData.contactEmail,
         contact_phone: eventData.contactPhone,
         image_url: eventData.imageUrl,
+        visibility: eventData.visibility || 'public',
         created_by: eventData.createdBy,
         status: 'upcoming',
       })
@@ -295,6 +298,7 @@ export async function updateEvent(
     contactPhone: string;
     imageUrl: string;
     status: EventStatus;
+    visibility: 'public' | 'members_only';
     isFeatured: boolean;
   }>
 ): Promise<ApiResponse<Event>> {
@@ -326,6 +330,7 @@ export async function updateEvent(
     if (updates.contactPhone !== undefined) updateData.contact_phone = updates.contactPhone;
     if (updates.imageUrl !== undefined) updateData.image_url = updates.imageUrl;
     if (updates.status !== undefined) updateData.status = updates.status;
+    if (updates.visibility !== undefined) updateData.visibility = updates.visibility;
     if (updates.isFeatured !== undefined) updateData.is_featured = updates.isFeatured;
 
     const { data, error } = await supabase

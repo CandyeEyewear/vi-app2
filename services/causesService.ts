@@ -37,6 +37,7 @@ function transformCause(row: any): Cause {
     allowRecurring: row.allow_recurring ?? true,
     minimumDonation: parseFloat(row.minimum_donation) || 0,
     status: row.status,
+    visibility: row.visibility || 'public',
     isFeatured: row.is_featured ?? false,
     donorCount: row.donor_count || 0,
     createdBy: row.created_by,
@@ -227,6 +228,7 @@ export async function createCause(causeData: {
   isDonationsPublic?: boolean;
   allowRecurring?: boolean;
   minimumDonation?: number;
+  visibility?: 'public' | 'members_only';
   createdBy: string;
 }): Promise<ApiResponse<Cause>> {
   try {
@@ -242,6 +244,7 @@ export async function createCause(causeData: {
         is_donations_public: causeData.isDonationsPublic ?? true,
         allow_recurring: causeData.allowRecurring ?? true,
         minimum_donation: causeData.minimumDonation ?? 0,
+        visibility: causeData.visibility || 'public',
         created_by: causeData.createdBy,
         status: 'active',
       })
@@ -276,6 +279,7 @@ export async function updateCause(
     allowRecurring: boolean;
     minimumDonation: number;
     status: CauseStatus;
+    visibility: 'public' | 'members_only';
     isFeatured: boolean;
   }>
 ): Promise<ApiResponse<Cause>> {
@@ -292,6 +296,7 @@ export async function updateCause(
     if (updates.allowRecurring !== undefined) updateData.allow_recurring = updates.allowRecurring;
     if (updates.minimumDonation !== undefined) updateData.minimum_donation = updates.minimumDonation;
     if (updates.status !== undefined) updateData.status = updates.status;
+    if (updates.visibility !== undefined) updateData.visibility = updates.visibility;
     if (updates.isFeatured !== undefined) updateData.is_featured = updates.isFeatured;
 
     const { data, error } = await supabase
