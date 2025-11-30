@@ -142,22 +142,25 @@ function EventItem({ event, colors, onView, onEdit, onDelete, onRegistrations }:
         )}
       </View>
 
-      {/* Action Buttons (when expanded) */}
+      {/* Actions Dropdown */}
       {showActions && (
-        <View style={[styles.actionsRow, { borderTopColor: colors.border }]}>
-          <TouchableOpacity style={styles.actionButton} onPress={onView}>
-            <Eye size={18} color="#38B6FF" />
-            <Text style={[styles.actionText, { color: '#38B6FF' }]}>View</Text>
+        <View style={[styles.actionsDropdown, { backgroundColor: colors.background, borderColor: colors.border }]}>
+          <TouchableOpacity style={styles.actionItem} onPress={onView}>
+            <Eye size={18} color={colors.text} />
+            <Text style={[styles.actionText, { color: colors.text }]}>View</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={onRegistrations}>
+          
+          <TouchableOpacity style={styles.actionItem} onPress={onRegistrations}>
             <List size={18} color="#9C27B0" />
             <Text style={[styles.actionText, { color: '#9C27B0' }]}>Registrations</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={onEdit}>
-            <Edit3 size={18} color="#FF9800" />
-            <Text style={[styles.actionText, { color: '#FF9800' }]}>Edit</Text>
+          
+          <TouchableOpacity style={styles.actionItem} onPress={onEdit}>
+            <Edit3 size={18} color="#38B6FF" />
+            <Text style={[styles.actionText, { color: '#38B6FF' }]}>Edit</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={onDelete}>
+          
+          <TouchableOpacity style={styles.actionItem} onPress={onDelete}>
             <Trash2 size={18} color="#F44336" />
             <Text style={[styles.actionText, { color: '#F44336' }]}>Delete</Text>
           </TouchableOpacity>
@@ -494,23 +497,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     flex: 1,
   },
-  actionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingTop: 12,
+  actionsDropdown: {
     marginTop: 12,
-    borderTopWidth: 1,
+    borderRadius: 8,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
-  actionButton: {
+  actionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    padding: 12,
+    gap: 12,
   },
   actionText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   emptyContainer: {
     flex: 1,
