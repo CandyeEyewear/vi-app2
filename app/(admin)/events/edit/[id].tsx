@@ -47,9 +47,11 @@ import {
   Trash2,
   Upload,
   X,
+  Globe,
+  Lock,
 } from 'lucide-react-native';
 import { Colors } from '../../../../constants/colors';
-import { Event, EventCategory, EventStatus } from '../../../../types';
+import { Event, EventCategory, EventStatus, VisibilityType } from '../../../../types';
 import { getEventById, updateEvent, deleteEvent } from '../../../../services/eventsService';
 import { useAuth } from '../../../../contexts/AuthContext';
 import WebContainer from '../../../../components/WebContainer';
@@ -99,6 +101,8 @@ export default function EditEventScreen() {
   const [status, setStatus] = useState<EventStatus>('upcoming');
   const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [isFeatured, setIsFeatured] = useState(false);
+  const [visibility, setVisibility] = useState<VisibilityType>('public');
+  const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -176,6 +180,7 @@ export default function EditEventScreen() {
           setCategory(event.category);
           setStatus(event.status);
           setIsFeatured(event.isFeatured);
+          setVisibility(event.visibility || 'public');
           setImageUrl(event.imageUrl || '');
           setImageUri(event.imageUrl ? null : null); // Don't set imageUri from existing URL
           setIsVirtual(event.isVirtual);
@@ -391,6 +396,7 @@ export default function EditEventScreen() {
         category,
         status,
         isFeatured,
+        visibility,
         imageUrl: imageUri ? finalImageUrl : (imageUrl ? imageUrl.trim() : null),
         location: isVirtual ? 'Virtual Event' : location.trim(),
         locationAddress: locationAddress.trim() || undefined,
@@ -541,6 +547,33 @@ export default function EditEventScreen() {
                   ))}
                 </View>
               )}
+            </View>
+
+            {/* Visibility */}
+            <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.toggleInfo}>
+                {visibility === 'public' ? (
+                  <Globe size={20} color="#4CAF50" />
+                ) : (
+                  <Lock size={20} color="#FF9800" />
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.toggleLabel, { color: colors.text }]}>
+                    {visibility === 'public' ? 'Public' : 'Members Only'}
+                  </Text>
+                  <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
+                    {visibility === 'public' 
+                      ? 'Visible to everyone, including visitors' 
+                      : 'Only visible to logged-in members'}
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={visibility === 'members_only'}
+                onValueChange={(value) => setVisibility(value ? 'members_only' : 'public')}
+                trackColor={{ false: colors.border, true: '#FF9800' }}
+                thumbColor="#FFFFFF"
+              />
             </View>
 
             {/* Featured Toggle */}

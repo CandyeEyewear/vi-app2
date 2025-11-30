@@ -24,6 +24,7 @@ import { Event, EventCategory } from '../types';
 import { Colors } from '../constants/colors';
 import { getEvents } from '../services/eventsService';
 import { EventCard } from './cards/EventCard';
+import { useAuth } from '../contexts/AuthContext';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
@@ -89,6 +90,7 @@ export function EventsList({
   const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
+  const { user } = useAuth();
 
   // State
   const [events, setEvents] = useState<Event[]>([]);

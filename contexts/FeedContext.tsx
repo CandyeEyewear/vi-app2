@@ -851,43 +851,52 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
       );
 
       // Fetch events for posts that reference them
-      const postsWithEvents = await Promise.all(
-        postsWithCauses.map(async (post) => {
-          if (post.eventId) {
-            console.log('[FEED] 🎉 Loading event data for post:', post.id);
-            const { data: eventData } = await supabase
-              .from('events')
-              .select('*')
-              .eq('id', post.eventId)
-              .single();
+const postsWithEvents = await Promise.all(
+  postsWithCauses.map(async (post) => {
+    if (post.eventId) {
+      console.log('[FEED] 🎉 Loading event data for post:', post.id);
+      const { data: eventData } = await supabase
+        .from('events')
+        .select('*')
+        .eq('id', post.eventId)
+        .single();
 
-            if (eventData) {
-              const event: any = {
-                id: eventData.id,
-                title: eventData.title,
-                description: eventData.description,
-                organizationName: eventData.organization_name,
-                organizationVerified: eventData.organization_verified,
-                category: eventData.category,
-                location: eventData.location,
-                latitude: eventData.latitude,
-                longitude: eventData.longitude,
-                date: eventData.date || eventData.date_start,
-                dateStart: eventData.date_start,
-                dateEnd: eventData.date_end,
-                timeStart: eventData.time_start,
-                timeEnd: eventData.time_end,
-                imageUrl: eventData.image_url,
-                status: eventData.status,
-                createdAt: eventData.created_at,
-                updatedAt: eventData.updated_at,
-              };
-              return { ...post, event };
-            }
-          }
-          return post;
-        })
-      );
+      if (eventData) {
+        const event: any = {
+          id: eventData.id,
+          title: eventData.title,
+          description: eventData.description,
+          category: eventData.category,
+          location: eventData.location,
+          locationAddress: eventData.location_address,
+          latitude: eventData.latitude,
+          longitude: eventData.longitude,
+          mapLink: eventData.map_link,
+          isVirtual: eventData.is_virtual ?? false,
+          virtualLink: eventData.virtual_link,
+          eventDate: eventData.event_date,
+          startTime: eventData.start_time,
+          endTime: eventData.end_time,
+          timezone: eventData.timezone || 'America/Jamaica',
+          capacity: eventData.capacity,
+          spotsRemaining: eventData.spots_remaining,
+          registrationRequired: eventData.registration_required ?? false,
+          isFree: eventData.is_free ?? true,
+          ticketPrice: eventData.ticket_price ? parseFloat(eventData.ticket_price) : undefined,
+          currency: eventData.currency || 'JMD',
+          imageUrl: eventData.image_url,
+          status: eventData.status,
+          isFeatured: eventData.is_featured ?? false,
+          visibility: eventData.visibility || 'public',
+          createdAt: eventData.created_at,
+          updatedAt: eventData.updated_at,
+        };
+        return { ...post, event };
+      }
+    }
+    return post;
+  })
+);
 
       // Fetch original posts for shared posts
       const postsWithSharedData = await Promise.all(

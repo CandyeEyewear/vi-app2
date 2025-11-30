@@ -56,6 +56,7 @@ function transformEvent(row: any): Event {
     contactPhone: row.contact_phone,
     status: row.status,
     isFeatured: row.is_featured ?? false,
+    visibility: row.visibility || 'public',
     createdBy: row.created_by,
     creator: row.creator ? {
       id: row.creator.id,
@@ -98,6 +99,7 @@ function transformRegistration(row: any): EventRegistration {
 
 /**
  * Fetch all events with optional filters
+ * Filters visibility based on user's premium membership status
  */
 export async function getEvents(options?: {
   category?: EventCategory | 'all';
@@ -107,8 +109,21 @@ export async function getEvents(options?: {
   offset?: number;
   searchQuery?: string;
   upcoming?: boolean;
+  userId?: string; // Optional: if provided, will filter based on user's membership
 }): Promise<ApiResponse<Event[]>> {
   try {
+    // Check if user is premium member (if userId provided)
+    let isPremiumMember = false;
+    if (options?.userId) {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('membership_tier, membership_status')
+        .eq('id', options.userId)
+        .single();
+      
+      isPremiumMember = userData?.membership_tier === 'premium' && userData?.membership_status === 'active';
+    }
+
     let query = supabase
       .from('events')
       .select(`
@@ -126,6 +141,12 @@ export async function getEvents(options?: {
     } else {
       query = query.neq('status', 'draft');
     }
+
+    // Filter visibility: non-premium users only see public items
+    if (!isPremiumMember) {
+      query = query.or('visibility.is.null,visibility.eq.public');
+    }
+    // Premium members see all (public + members_only), so no filter needed
 
     if (options?.category && options.category !== 'all') {
       query = query.eq('category', options.category);
@@ -217,6 +238,7 @@ export async function createEvent(eventData: {
   contactPhone?: string;
   imageUrl?: string;
   createdBy: string;
+  visibility?: 'public' | 'members_only';
 }): Promise<ApiResponse<Event>> {
   try {
     const { data, error } = await supabase
@@ -248,6 +270,7 @@ export async function createEvent(eventData: {
         contact_phone: eventData.contactPhone,
         image_url: eventData.imageUrl,
         created_by: eventData.createdBy,
+        visibility: eventData.visibility || 'public',
         status: 'upcoming',
       })
       .select(`
@@ -296,6 +319,7 @@ export async function updateEvent(
     imageUrl: string;
     status: EventStatus;
     isFeatured: boolean;
+    visibility?: 'public' | 'members_only';
   }>
 ): Promise<ApiResponse<Event>> {
   try {
@@ -327,6 +351,7 @@ export async function updateEvent(
     if (updates.imageUrl !== undefined) updateData.image_url = updates.imageUrl;
     if (updates.status !== undefined) updateData.status = updates.status;
     if (updates.isFeatured !== undefined) updateData.is_featured = updates.isFeatured;
+    if (updates.visibility !== undefined) updateData.visibility = updates.visibility;
 
     const { data, error } = await supabase
       .from('events')
@@ -682,14 +707,30 @@ export function formatEventDate(dateString: string): string {
 
 /**
  * Format event time for display
+ * Returns empty string if time is not provided
  */
-export function formatEventTime(timeString: string): string {
-  // Assuming time is in HH:MM:SS or HH:MM format
-  const [hours, minutes] = timeString.split(':');
-  const hour = parseInt(hours, 10);
-  const ampm = hour >= 12 ? 'PM' : 'AM';
-  const displayHour = hour % 12 || 12;
-  return `${displayHour}:${minutes} ${ampm}`;
+export function formatEventTime(timeString: string | null | undefined): string {
+  if (!timeString) {
+    return '';
+  }
+  
+  try {
+    // Assuming time is in HH:MM:SS or HH:MM format
+    const [hours, minutes] = timeString.split(':');
+    if (!hours || !minutes) {
+      return '';
+    }
+    const hour = parseInt(hours, 10);
+    if (isNaN(hour)) {
+      return '';
+    }
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+    return `${displayHour}:${minutes} ${ampm}`;
+  } catch (error) {
+    console.warn('[eventsService] formatEventTime error:', error);
+    return '';
+  }
 }
 
 /**

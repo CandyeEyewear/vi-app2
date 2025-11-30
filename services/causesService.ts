@@ -38,6 +38,7 @@ function transformCause(row: any): Cause {
     minimumDonation: parseFloat(row.minimum_donation) || 0,
     status: row.status,
     isFeatured: row.is_featured ?? false,
+    visibility: row.visibility || 'public',
     donorCount: row.donor_count || 0,
     createdBy: row.created_by,
     creator: row.creator ? {
@@ -128,6 +129,7 @@ function transformDonorBadge(row: any): DonorBadge {
 
 /**
  * Fetch all causes with optional filters
+ * Filters visibility based on user's premium membership status
  */
 export async function getCauses(options?: {
   category?: CauseCategory | 'all';
@@ -136,8 +138,21 @@ export async function getCauses(options?: {
   limit?: number;
   offset?: number;
   searchQuery?: string;
+  userId?: string; // Optional: if provided, will filter based on user's membership
 }): Promise<ApiResponse<Cause[]>> {
   try {
+    // Check if user is premium member (if userId provided)
+    let isPremiumMember = false;
+    if (options?.userId) {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('membership_tier, membership_status')
+        .eq('id', options.userId)
+        .single();
+      
+      isPremiumMember = userData?.membership_tier === 'premium' && userData?.membership_status === 'active';
+    }
+
     let query = supabase
       .from('causes')
       .select(`
@@ -153,6 +168,12 @@ export async function getCauses(options?: {
       // Default to active causes
       query = query.eq('status', 'active');
     }
+
+    // Filter visibility: non-premium users only see public items
+    if (!isPremiumMember) {
+      query = query.or('visibility.is.null,visibility.eq.public');
+    }
+    // Premium members see all (public + members_only), so no filter needed
 
     if (options?.category && options.category !== 'all') {
       query = query.eq('category', options.category);
@@ -228,6 +249,7 @@ export async function createCause(causeData: {
   allowRecurring?: boolean;
   minimumDonation?: number;
   createdBy: string;
+  visibility?: 'public' | 'members_only';
 }): Promise<ApiResponse<Cause>> {
   try {
     const { data, error } = await supabase
@@ -243,6 +265,7 @@ export async function createCause(causeData: {
         allow_recurring: causeData.allowRecurring ?? true,
         minimum_donation: causeData.minimumDonation ?? 0,
         created_by: causeData.createdBy,
+        visibility: causeData.visibility || 'public',
         status: 'active',
       })
       .select(`
@@ -293,6 +316,7 @@ export async function updateCause(
     if (updates.minimumDonation !== undefined) updateData.minimum_donation = updates.minimumDonation;
     if (updates.status !== undefined) updateData.status = updates.status;
     if (updates.isFeatured !== undefined) updateData.is_featured = updates.isFeatured;
+    if (updates.visibility !== undefined) updateData.visibility = updates.visibility;
 
     const { data, error } = await supabase
       .from('causes')

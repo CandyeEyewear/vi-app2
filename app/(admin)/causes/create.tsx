@@ -42,9 +42,11 @@ import {
   AlertCircle,
   Upload,
   X,
+  Globe,
+  Lock,
 } from 'lucide-react-native';
 import { Colors } from '../../../constants/colors';
-import { CauseCategory } from '../../../types';
+import { CauseCategory, VisibilityType } from '../../../types';
 import { createCause } from '../../../services/causesService';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../services/supabase';
@@ -88,6 +90,8 @@ export default function CreateCauseScreen() {
   const [allowRecurring, setAllowRecurring] = useState(true);
   const [minimumDonation, setMinimumDonation] = useState('');
   const [isFeatured, setIsFeatured] = useState(false);
+  const [visibility, setVisibility] = useState<VisibilityType>('public');
+  const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
   
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -265,6 +269,7 @@ export default function CreateCauseScreen() {
         allowRecurring,
         minimumDonation: minimumDonation ? parseFloat(minimumDonation) : 0,
         createdBy: user.id,
+        visibility,
       });
 
       if (response.success && response.data) {
@@ -717,6 +722,33 @@ export default function CreateCauseScreen() {
                 value={allowRecurring}
                 onValueChange={setAllowRecurring}
                 trackColor={{ false: colors.border, true: '#38B6FF' }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+
+            {/* Visibility */}
+            <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.toggleInfo}>
+                {visibility === 'public' ? (
+                  <Globe size={20} color="#4CAF50" />
+                ) : (
+                  <Lock size={20} color="#FF9800" />
+                )}
+                <View style={styles.toggleTextContainer}>
+                  <Text style={[styles.toggleLabel, { color: colors.text }]}>
+                    {visibility === 'public' ? 'Public' : 'Members Only'}
+                  </Text>
+                  <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
+                    {visibility === 'public' 
+                      ? 'Visible to everyone, including visitors' 
+                      : 'Only visible to logged-in members'}
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={visibility === 'members_only'}
+                onValueChange={(value) => setVisibility(value ? 'members_only' : 'public')}
+                trackColor={{ false: colors.border, true: '#FF9800' }}
                 thumbColor="#FFFFFF"
               />
             </View>

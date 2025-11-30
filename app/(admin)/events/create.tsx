@@ -44,9 +44,11 @@ import {
   Link,
   Upload,
   X,
+  Globe,
+  Lock,
 } from 'lucide-react-native';
 import { Colors } from '../../../constants/colors';
-import { EventCategory } from '../../../types';
+import { EventCategory, VisibilityType } from '../../../types';
 import { createEvent } from '../../../services/eventsService';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../services/supabase';
@@ -144,6 +146,8 @@ export default function CreateEventScreen() {
   
   // UI state
   const [submitting, setSubmitting] = useState(false);
+  const [visibility, setVisibility] = useState<VisibilityType>('public');
+  const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
 
   // Handle image picker
   const handlePickImage = useCallback(async () => {
@@ -336,6 +340,7 @@ export default function CreateEventScreen() {
         contactEmail: contactEmail.trim() || undefined,
         contactPhone: contactPhone.trim() || undefined,
         createdBy: user.id,
+        visibility,
       });
 
       if (response.success && response.data) {
@@ -1018,6 +1023,35 @@ export default function CreateEventScreen() {
                   keyboardType="phone-pad"
                 />
               </View>
+            </View>
+          </View>
+
+          {/* Visibility */}
+          <View style={styles.inputGroup}>
+            <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.toggleInfo}>
+                {visibility === 'public' ? (
+                  <Globe size={20} color="#4CAF50" />
+                ) : (
+                  <Lock size={20} color="#FF9800" />
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.toggleLabel, { color: colors.text }]}>
+                    {visibility === 'public' ? 'Public' : 'Members Only'}
+                  </Text>
+                  <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
+                    {visibility === 'public' 
+                      ? 'Visible to everyone, including visitors' 
+                      : 'Only visible to logged-in members'}
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={visibility === 'members_only'}
+                onValueChange={(value) => setVisibility(value ? 'members_only' : 'public')}
+                trackColor={{ false: colors.border, true: '#FF9800' }}
+                thumbColor="#FFFFFF"
+              />
             </View>
           </View>
 

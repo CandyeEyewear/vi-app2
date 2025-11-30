@@ -16,6 +16,7 @@ import {
   Platform,
   Image,
   ActivityIndicator,
+  Switch,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -32,6 +33,8 @@ import {
   X,
   Plus,
   Link as LinkIcon,
+  Globe,
+  Lock,
 } from 'lucide-react-native';
 import { supabase } from '../../services/supabase';
 import { geocodeLocation, GeocodeResult } from '../../services/geocoding';
@@ -40,6 +43,7 @@ import * as FileSystem from 'expo-file-system';
 import { File } from 'expo-file-system';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import CustomAlert from '../../components/CustomAlert';
+import { VisibilityType } from '../../types';
 
 const CATEGORIES = [
   { value: 'environment', label: 'Environment' },
@@ -111,6 +115,8 @@ export default function EditOpportunityScreen() {
     message: '',
     type: 'success' as 'success' | 'error' | 'warning',
   });
+  const [visibility, setVisibility] = useState<VisibilityType>('public');
+  const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
 
   // Geocoding state
   const [geocodingLocation, setGeocodingLocation] = useState<GeocodeResult | null>(null);
@@ -253,6 +259,7 @@ export default function EditOpportunityScreen() {
       setRequirements(data.requirements || []);
       setSkillsNeeded(data.skills_needed || []);
       setLinks(data.links || []);
+      setVisibility(data.visibility || 'public');
     } catch (error) {
       console.error('Error loading opportunity:', error);
       showAlert('Error', 'Failed to load opportunity data', 'error');
@@ -457,6 +464,7 @@ export default function EditOpportunityScreen() {
           impact_statement: impactStatement.trim() || null,
           links: links.length > 0 ? links : null,
           image_url: imageUrl,
+          visibility,
           updated_at: new Date().toISOString(),
         })
         .eq('id', opportunityId)
@@ -1071,6 +1079,35 @@ export default function EditOpportunityScreen() {
           )}
         </View>
 
+        {/* Visibility */}
+        <View style={[styles.field, { marginTop: 16 }]}>
+          <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.toggleInfo}>
+              {visibility === 'public' ? (
+                <Globe size={20} color="#4CAF50" />
+              ) : (
+                <Lock size={20} color="#FF9800" />
+              )}
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.toggleLabel, { color: colors.text }]}>
+                  {visibility === 'public' ? 'Public' : 'Members Only'}
+                </Text>
+                <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
+                  {visibility === 'public' 
+                    ? 'Visible to everyone, including visitors' 
+                    : 'Only visible to logged-in members'}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={visibility === 'members_only'}
+              onValueChange={(value) => setVisibility(value ? 'members_only' : 'public')}
+              trackColor={{ false: colors.border, true: '#FF9800' }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        </View>
+
         {/* Update Button */}
         <TouchableOpacity
           style={[styles.createButton, { backgroundColor: colors.primary }, loading && styles.createButtonDisabled]}
@@ -1315,6 +1352,29 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 12,
+  },
+  toggleInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  toggleLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  toggleDescription: {
+    fontSize: 13,
+    marginTop: 2,
   },
   dateRangeRow: {
     flexDirection: 'row',

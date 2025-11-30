@@ -26,6 +26,7 @@ import { Colors } from '../constants/colors';
 import { getCauses } from '../services/causesService';
 import { CauseCard } from './cards/CauseCard';
 import { EmptyState } from './EmptyState';
+import { useAuth } from '../contexts/AuthContext';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
@@ -96,6 +97,7 @@ export function CausesList({
   const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
+  const { user } = useAuth();
 
   // State
   const [causes, setCauses] = useState<Cause[]>([]);
@@ -137,6 +139,7 @@ export function CausesList({
         offset: currentOffset,
         searchQuery: searchQuery.trim() || undefined,
         status: 'active',
+        userId: user?.id,
       });
 
       if (response.success && response.data) {

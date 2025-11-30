@@ -790,12 +790,30 @@ export default function DiscoverScreen() {
         setLoadingMore(true);
       }
 
+      // Check if user is premium member
+      let isPremiumMember = false;
+      if (user?.id) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('membership_tier, membership_status')
+          .eq('id', user.id)
+          .single();
+        
+        isPremiumMember = userData?.membership_tier === 'premium' && userData?.membership_status === 'active';
+      }
+
       // Build Supabase query with server-side filtering where possible
       let query = supabase
         .from('opportunities')
         .select('*')
         .eq('status', 'active')
         .or('proposal_status.is.null,proposal_status.eq.approved');
+
+      // Filter visibility: non-premium users only see public items
+      if (!isPremiumMember) {
+        query = query.or('visibility.is.null,visibility.eq.public');
+      }
+      // Premium members see all (public + members_only), so no filter needed
 
       // Server-side category filter
       if (selectedCategory !== 'all' && selectedCategory !== 'nearMe') {
@@ -853,6 +871,7 @@ export default function DiscoverScreen() {
           impactStatement: opp.impact_statement,
           imageUrl: opp.image_url,
           status: opp.status,
+          visibility: opp.visibility || 'public',
           createdBy: opp.created_by,
           createdAt: opp.created_at,
           updatedAt: opp.updated_at,

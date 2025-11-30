@@ -451,7 +451,10 @@ export default function CauseDetailScreen() {
                   Recent Donors
                 </Text>
                 {donations.length > 0 && (
-                  <TouchableOpacity style={styles.viewAllButton}>
+                  <TouchableOpacity 
+                    style={styles.viewAllButton}
+                    onPress={() => router.push(`/causes/${id}/donors`)}
+                  >
                     <Text style={[styles.viewAllText, { color: '#38B6FF' }]}>
                       View All
                     </Text>
