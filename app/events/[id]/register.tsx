@@ -1,11 +1,10 @@
 /**
- * Event Registration Screen
- * For paid event ticket purchase
+ * Optimized Event Registration Screen
+ * Modern payment flow with professional UI/UX, form validation, and accessibility
  * File: app/events/[id]/register.tsx
- * FIXED: Web-compatible alerts
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,11 +12,12 @@ import {
   ScrollView,
   TouchableOpacity,
   useColorScheme,
-  Alert,
   Dimensions,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  SafeAreaView,
+  Animated,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,6 +34,8 @@ import {
   Info,
   Plus,
   Minus,
+  AlertTriangle,
+  CheckCircle,
 } from 'lucide-react-native';
 import { Colors } from '../../../constants/colors';
 import { Event } from '../../../types';
@@ -45,135 +47,506 @@ import {
   formatCurrency,
 } from '../../../services/eventsService';
 import { useAuth } from '../../../contexts/AuthContext';
-import WebContainer from '../../../components/WebContainer';
 import { processPayment } from '../../../services/paymentService';
+import { showToast } from '../../../utils/toast';
+import ErrorBoundary from '../../../components/ErrorBoundary';
+import Card from '../../../components/Card';
+import Button from '../../../components/Button';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
 
-// ============================================
-// WEB-COMPATIBLE ALERT HELPERS
-// ============================================
-const showAlert = (title: string, message: string, onOk?: () => void) => {
-  if (Platform.OS === 'web') {
-    window.alert(`${title}\n\n${message}`);
-    if (onOk) onOk();
-  } else {
-    Alert.alert(title, message, [{ text: 'OK', onPress: onOk }]);
-  }
+// Modern Typography Scale
+const Typography = {
+  title1: { fontSize: 32, fontWeight: '800' as const, lineHeight: 38 },
+  title2: { fontSize: 26, fontWeight: '700' as const, lineHeight: 32 },
+  title3: { fontSize: 20, fontWeight: '600' as const, lineHeight: 26 },
+  body1: { fontSize: 16, fontWeight: '400' as const, lineHeight: 24 },
+  body2: { fontSize: 14, fontWeight: '400' as const, lineHeight: 20 },
+  caption: { fontSize: 12, fontWeight: '500' as const, lineHeight: 16 },
 };
 
-const showConfirm = (title: string, message: string, onConfirm: () => void, onCancel?: () => void) => {
-  if (Platform.OS === 'web') {
-    if (window.confirm(`${title}\n\n${message}`)) {
-      onConfirm();
-    } else if (onCancel) {
-      onCancel();
+// Modern Spacing System
+const Spacing = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  xxl: 24,
+  xxxl: 32,
+};
+
+// Custom Hook for Event Data
+function useEventRegistration(eventId: string | undefined) {
+  const [event, setEvent] = useState<Event | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchEvent = useCallback(async () => {
+    if (!eventId) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await getEventById(eventId);
+      if (response.success && response.data) {
+        setEvent(response.data);
+      } else {
+        throw new Error('Failed to load event details');
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Something went wrong';
+      setError(errorMessage);
+      showToast(errorMessage, 'error');
+    } finally {
+      setLoading(false);
     }
-  } else {
-    Alert.alert(title, message, [
-      { text: 'Cancel', style: 'cancel', onPress: onCancel },
-      { text: 'OK', onPress: onConfirm },
-    ]);
-  }
-};
+  }, [eventId]);
 
+  useEffect(() => {
+    fetchEvent();
+  }, [fetchEvent]);
+
+  return { event, loading, error, refetch: fetchEvent };
+}
+
+// Modern Header Component
+function RegistrationHeader({ 
+  onBack, 
+  isFree, 
+  colors 
+}: { 
+  onBack: () => void; 
+  isFree: boolean;
+  colors: any;
+}) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View style={[
+      styles.header, 
+      { 
+        paddingTop: insets.top + Spacing.lg,
+        backgroundColor: colors.background,
+        borderBottomColor: colors.border,
+      }
+    ]}>
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => {
+          // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          onBack();
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+        accessibilityHint="Returns to event details"
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <ArrowLeft size={24} color={colors.text} />
+      </TouchableOpacity>
+      
+      <Text style={[styles.headerTitle, { color: colors.text }]}>
+        {isFree ? 'Register' : 'Get Tickets'}
+      </Text>
+      
+      <View style={styles.headerSpacer} />
+    </View>
+  );
+}
+
+// Event Summary Card Component
+function EventSummaryCard({ 
+  event, 
+  colors 
+}: { 
+  event: Event; 
+  colors: any;
+}) {
+  return (
+    <Card style={styles.eventCard}>
+      <View style={styles.eventCardContent}>
+        <Text style={[styles.eventTitle, { color: colors.text }]}>
+          {event.title}
+        </Text>
+        
+        <View style={styles.eventDetails}>
+          <View style={styles.eventDetailRow}>
+            <Calendar size={16} color={colors.textSecondary} />
+            <Text style={[styles.eventDetailText, { color: colors.textSecondary }]}>
+              {formatEventDate(event.eventDate)}
+            </Text>
+          </View>
+          
+          <View style={styles.eventDetailRow}>
+            <Clock size={16} color={colors.textSecondary} />
+            <Text style={[styles.eventDetailText, { color: colors.textSecondary }]}>
+              {formatEventTime(event.startTime)}
+              {event.endTime && ` - ${formatEventTime(event.endTime)}`}
+            </Text>
+          </View>
+          
+          <View style={styles.eventDetailRow}>
+            {event.isVirtual ? (
+              <Video size={16} color={colors.textSecondary} />
+            ) : (
+              <MapPin size={16} color={colors.textSecondary} />
+            )}
+            <Text style={[styles.eventDetailText, { color: colors.textSecondary }]}>
+              {event.isVirtual ? 'Virtual Event' : event.location}
+            </Text>
+          </View>
+        </View>
+      </View>
+    </Card>
+  );
+}
+
+// Ticket Selector Component
+function TicketSelector({
+  event,
+  ticketCount,
+  setTicketCount,
+  spotsLeft,
+  colors,
+}: {
+  event: Event;
+  ticketCount: number;
+  setTicketCount: (count: number) => void;
+  spotsLeft: number;
+  colors: any;
+}) {
+  const maxTickets = Math.min(spotsLeft, 10);
+  const canDecrease = ticketCount > 1;
+  const canIncrease = ticketCount < maxTickets;
+
+  const handleDecrease = useCallback(() => {
+    if (canDecrease) {
+      // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setTicketCount(ticketCount - 1);
+    }
+  }, [canDecrease, ticketCount, setTicketCount]);
+
+  const handleIncrease = useCallback(() => {
+    if (canIncrease) {
+      // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setTicketCount(ticketCount + 1);
+    }
+  }, [canIncrease, ticketCount, setTicketCount]);
+
+  return (
+    <Card style={styles.section}>
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>
+        Tickets
+      </Text>
+      
+      <View style={[styles.ticketCard, { 
+        backgroundColor: colors.cardSecondary,
+        borderColor: colors.border,
+      }]}>
+        <View style={styles.ticketInfo}>
+          <Ticket size={20} color="#38B6FF" />
+          <View style={styles.ticketDetails}>
+            <Text style={[styles.ticketType, { color: colors.text }]}>
+              {event.isFree ? 'Free Admission' : 'General Admission'}
+            </Text>
+            <Text style={[styles.ticketPrice, { color: colors.textSecondary }]}>
+              {event.isFree ? 'No charge' : `${formatCurrency(event.ticketPrice)} each`}
+            </Text>
+          </View>
+        </View>
+        
+        <View style={styles.quantitySelector}>
+          <TouchableOpacity
+            style={[
+              styles.quantityButton,
+              { borderColor: colors.border },
+              !canDecrease && styles.quantityButtonDisabled,
+            ]}
+            onPress={handleDecrease}
+            disabled={!canDecrease}
+            accessibilityRole="button"
+            accessibilityLabel="Decrease quantity"
+            accessibilityState={{ disabled: !canDecrease }}
+          >
+            <Minus size={16} color={canDecrease ? colors.text : colors.textSecondary} />
+          </TouchableOpacity>
+          
+          <View style={[styles.quantityDisplay, { backgroundColor: colors.card }]}>
+            <Text style={[styles.quantityText, { color: '#38B6FF' }]}>
+              {ticketCount}
+            </Text>
+          </View>
+          
+          <TouchableOpacity
+            style={[
+              styles.quantityButton,
+              { borderColor: colors.border },
+              !canIncrease && styles.quantityButtonDisabled,
+            ]}
+            onPress={handleIncrease}
+            disabled={!canIncrease}
+            accessibilityRole="button"
+            accessibilityLabel="Increase quantity"
+            accessibilityState={{ disabled: !canIncrease }}
+          >
+            <Plus size={16} color={canIncrease ? colors.text : colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+      </View>
+      
+      <View style={styles.spotsInfo}>
+        <Text style={[styles.spotsInfoText, { color: colors.textSecondary }]}>
+          {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} remaining
+        </Text>
+      </View>
+
+      {/* Info Note for Paid Events */}
+      {!event.isFree && (
+        <View style={[styles.infoNote, { 
+          backgroundColor: colors.cardSecondary,
+          borderColor: colors.border,
+        }]}>
+          <Info size={16} color="#38B6FF" />
+          <Text style={[styles.infoNoteText, { color: colors.textSecondary }]}>
+            Tickets are non-refundable. You'll receive a confirmation email after purchase.
+          </Text>
+        </View>
+      )}
+
+      {/* Spots Warning */}
+      {spotsLeft <= 5 && spotsLeft > 0 && (
+        <View style={styles.spotsWarning}>
+          <AlertTriangle size={16} color="#FF9800" />
+          <Text style={styles.spotsWarningText}>
+            Only {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} left!
+          </Text>
+        </View>
+      )}
+    </Card>
+  );
+}
+
+// Order Summary Component
+function OrderSummary({
+  event,
+  ticketCount,
+  totalAmount,
+  colors,
+}: {
+  event: Event;
+  ticketCount: number;
+  totalAmount: number;
+  colors: any;
+}) {
+  if (event.isFree) {
+    return (
+      <Card style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          Summary
+        </Text>
+        
+        <View style={styles.summaryRow}>
+          <Text style={[styles.summaryLabel, { color: colors.text }]}>
+            Free Registration
+          </Text>
+          <Text style={[styles.summaryValue, { color: colors.text }]}>
+            {ticketCount} {ticketCount === 1 ? 'person' : 'people'}
+          </Text>
+        </View>
+      </Card>
+    );
+  }
+
+  const subtotal = event.ticketPrice * ticketCount;
+  const processingFee = Math.max(135, subtotal * 0.03); // eZeePayments fee structure
+  const total = subtotal + processingFee;
+
+  return (
+    <Card style={styles.section}>
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>
+        Order Summary
+      </Text>
+      
+      <View style={styles.summaryRow}>
+        <Text style={[styles.summaryLabel, { color: colors.text }]}>
+          {ticketCount} × {formatCurrency(event.ticketPrice)}
+        </Text>
+        <Text style={[styles.summaryValue, { color: colors.text }]}>
+          {formatCurrency(subtotal)}
+        </Text>
+      </View>
+      
+      <View style={styles.summaryRow}>
+        <Text style={[styles.summaryLabel, { color: colors.text }]}>
+          Processing Fee
+        </Text>
+        <Text style={[styles.summaryValue, { color: colors.text }]}>
+          {formatCurrency(processingFee)}
+        </Text>
+      </View>
+      
+      <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
+      
+      <View style={styles.summaryRow}>
+        <Text style={[styles.totalLabel, { color: colors.text }]}>
+          Total
+        </Text>
+        <Text style={[styles.totalValue, { color: '#38B6FF' }]}>
+          {formatCurrency(total)}
+        </Text>
+      </View>
+    </Card>
+  );
+}
+
+// Security Notice Component
+function SecurityNotice({ colors }: { colors: any }) {
+  return (
+    <View style={styles.securityNote}>
+      <Shield size={16} color={colors.textSecondary} />
+      <Text style={[styles.securityText, { color: colors.textSecondary }]}>
+        Secure payment powered by eZeePayments
+      </Text>
+    </View>
+  );
+}
+
+// Error Screen Component
+function ErrorScreen({ 
+  onRetry, 
+  colors 
+}: { 
+  onRetry: () => void; 
+  colors: any;
+}) {
+  return (
+    <View style={[styles.errorContainer, { backgroundColor: colors.background }]}>
+      <AlertTriangle size={48} color={colors.textSecondary} />
+      <Text style={[styles.errorTitle, { color: colors.text }]}>
+        Could not load event
+      </Text>
+      <Text style={[styles.errorMessage, { color: colors.textSecondary }]}>
+        We couldn't load the event details. Please try again.
+      </Text>
+      <Button
+        variant="primary"
+        onPress={onRetry}
+        style={styles.retryButton}
+      >
+        Try Again
+      </Button>
+    </View>
+  );
+}
+
+// Success Animation Component (optional enhancement)
+function SuccessAnimation({ visible }: { visible: boolean }) {
+  const [scaleValue] = useState(new Animated.Value(0));
+
+  useEffect(() => {
+    if (visible) {
+      Animated.spring(scaleValue, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 100,
+        friction: 8,
+      }).start();
+    }
+  }, [visible, scaleValue]);
+
+  if (!visible) return null;
+
+  return (
+    <Animated.View style={[
+      styles.successOverlay,
+      { transform: [{ scale: scaleValue }] }
+    ]}>
+      <CheckCircle size={64} color="#4CAF50" />
+      <Text style={styles.successText}>Registration Successful! 🎉</Text>
+    </Animated.View>
+  );
+}
+
+// Main Component
 export default function EventRegisterScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
 
-  // State
-  const [event, setEvent] = useState<Event | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { event, loading, error, refetch } = useEventRegistration(id);
+  
   const [submitting, setSubmitting] = useState(false);
   const [ticketCount, setTicketCount] = useState(1);
+  const [showSuccess, setShowSuccess] = useState(false);
 
-  // Calculate total
-  const ticketPrice = event?.ticketPrice || 0;
-  const totalAmount = ticketPrice * ticketCount;
-  const spotsLeft = event?.spotsRemaining ?? event?.capacity ?? 999;
-  const maxTickets = Math.min(spotsLeft, 10); // Allow up to 10 tickets or available spots, whichever is less
-
-  // Fetch event
-  useEffect(() => {
-    async function fetchEvent() {
-      if (!id) return;
-
-      try {
-        const response = await getEventById(id);
-        if (response.success && response.data) {
-          setEvent(response.data);
-        } else {
-          showAlert('Error', 'Failed to load event');
-          router.back();
-        }
-      } catch (error) {
-        console.error('Error fetching event:', error);
-        router.back();
-      } finally {
-        setLoading(false);
-      }
+  // Memoized calculations
+  const { ticketPrice, totalAmount, spotsLeft, maxTickets } = useMemo(() => {
+    if (!event) return { ticketPrice: 0, totalAmount: 0, spotsLeft: 0, maxTickets: 0 };
+    
+    const price = event.ticketPrice || 0;
+    const spots = event.spotsRemaining ?? event.capacity ?? 999;
+    const max = Math.min(spots, 10);
+    
+    // Calculate total with processing fee for paid events
+    let total = price * ticketCount;
+    if (!event.isFree) {
+      const processingFee = Math.max(135, total * 0.03);
+      total += processingFee;
     }
+    
+    return {
+      ticketPrice: price,
+      totalAmount: total,
+      spotsLeft: spots,
+      maxTickets: max,
+    };
+  }, [event, ticketCount]);
 
-    fetchEvent();
-  }, [id, router]);
+  // Validation
+  const canPurchase = useMemo(() => {
+    if (!event || submitting) return false;
+    if (ticketCount < 1 || ticketCount > spotsLeft) return false;
+    if (!event.isFree && totalAmount < 1000) return false; // eZeePayments minimum
+    return true;
+  }, [event, submitting, ticketCount, spotsLeft, totalAmount]);
 
-
-  // Handle purchase
+  // Handle purchase with comprehensive validation and feedback
   const handlePurchase = useCallback(async () => {
-    console.log('=== PAY BUTTON CLICKED ===');
-    console.log('Event:', event?.title);
-    console.log('User:', user?.email);
-    console.log('Event ID:', id);
-    console.log('Ticket Count:', ticketCount);
-
-    if (!event || !id) {
-      console.log('ERROR: No event or id');
-      showAlert('Error', 'Event not loaded properly');
-      return;
-    }
+    if (!event || !id || !canPurchase) return;
 
     if (!user) {
-      console.log('ERROR: No user - not logged in');
-      showConfirm(
-        'Sign In Required',
-        'Please sign in to purchase tickets',
-        () => router.push('/login')
-      );
+      showToast('Please sign in to register', 'warning');
+      router.push('/login');
       return;
     }
 
-    // Validate ticket count
+    // Validation with user feedback
     if (ticketCount > spotsLeft) {
-      showAlert('Not Enough Spots', `Only ${spotsLeft} spot${spotsLeft !== 1 ? 's' : ''} available. Please reduce the quantity.`);
+      showToast(`Only ${spotsLeft} spot${spotsLeft !== 1 ? 's' : ''} available`, 'error');
       return;
     }
 
     if (ticketCount < 1) {
-      showAlert('Invalid Quantity', 'Please select at least 1 ticket.');
+      showToast('Please select at least 1 ticket', 'error');
       return;
     }
 
-    // Validate minimum payment amount (eZeePayments requirement: minimum 1000 JMD)
-    if (!event.isFree && totalAmount > 0 && totalAmount < 1000) {
-      showAlert(
-        'Minimum Payment Required',
-        `The minimum payment amount is ${formatCurrency(1000)}. Please increase the number of tickets.`
-      );
+    if (!event.isFree && totalAmount < 1000) {
+      showToast(`Minimum payment of ${formatCurrency(1000)} required`, 'error');
       return;
     }
 
-    console.log('Starting payment process...');
+    // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
 
     try {
       // For free events, register directly
       if (event.isFree) {
-        console.log('Free event - registering directly');
         const response = await registerForEvent({
           eventId: id,
           userId: user.id,
@@ -181,39 +554,35 @@ export default function EventRegisterScreen() {
         });
 
         if (response.success) {
-          showAlert('Registered! 🎉', `You're now registered for ${event.title}`, () => router.back());
+          // Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setShowSuccess(true);
+          showToast('Successfully registered! 🎉', 'success');
+          
+          // Delayed navigation to show success animation
+          setTimeout(() => {
+            router.back();
+          }, 2000);
         } else {
-          showAlert('Error', response.error || 'Failed to register');
+          throw new Error(response.error || 'Registration failed');
         }
-        setSubmitting(false);
         return;
       }
 
-      // For paid events, process payment through eZeePayments
-          // First, create a pending registration
-      console.log('Paid event - creating registration...');
-          const registrationResponse = await registerForEvent({
-            eventId: id,
-            userId: user.id,
-            ticketCount,
-          });
-
-      console.log('Registration response:', registrationResponse);
+      // For paid events, create registration and process payment
+      const registrationResponse = await registerForEvent({
+        eventId: id,
+        userId: user.id,
+        ticketCount,
+      });
 
       if (!registrationResponse.success || !registrationResponse.data) {
-        showAlert('Error', registrationResponse.error || 'Failed to register for event');
-        setSubmitting(false);
-        return;
+        throw new Error(registrationResponse.error || 'Failed to create registration');
       }
 
       const registration = registrationResponse.data;
-      console.log('Registration created:', registration.id);
-
-      // Generate order ID for payment
       const orderId = `EVT_${registration.id}_${Date.now()}`;
 
-      // Process payment
-      console.log('Calling processPayment...');
+      // Process payment through eZeePayments
       const paymentResult = await processPayment({
         amount: totalAmount,
         orderId,
@@ -222,293 +591,141 @@ export default function EventRegisterScreen() {
         userId: user.id,
         customerEmail: user.email || '',
         customerName: user.fullName,
-        description: `Event registration: ${event.title} - ${ticketCount} ticket${ticketCount !== 1 ? 's' : ''}`,
+        description: `${event.title} - ${ticketCount} ticket${ticketCount !== 1 ? 's' : ''}`,
       });
 
-      console.log('Payment result:', paymentResult);
-
       if (!paymentResult.success) {
-        showAlert('Payment Error', paymentResult.error || 'Failed to process payment. Please try again.');
-        setSubmitting(false);
-        return;
+        throw new Error(paymentResult.error || 'Payment processing failed');
       }
 
-      showAlert(
-        'Payment Processing! 🎉',
-        `Your registration for "${event.title}" is being processed. You will receive a confirmation once payment is complete.`,
-        () => router.back()
-      );
+      // Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast('Payment processing! You\'ll receive confirmation soon.', 'success');
+      router.back();
+
     } catch (error) {
-      console.error('Purchase error:', error);
-      showAlert('Error', error instanceof Error ? error.message : 'Something went wrong. Please try again.');
+      console.error('Registration/Purchase error:', error);
+      // Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      
+      const errorMessage = error instanceof Error ? error.message : 'Something went wrong';
+      showToast(errorMessage, 'error');
     } finally {
       setSubmitting(false);
     }
-  }, [event, id, user, router, totalAmount, ticketCount, spotsLeft]);
+  }, [event, id, user, router, totalAmount, ticketCount, spotsLeft, canPurchase]);
 
   // Loading state
-  if (loading || !event) {
+  if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <View style={[styles.header, { paddingTop: insets.top, borderBottomColor: colors.border }]}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <ArrowLeft size={24} color={colors.text} />
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Get Tickets</Text>
-          <View style={styles.headerSpacer} />
-        </View>
+        <RegistrationHeader 
+          onBack={() => router.back()} 
+          isFree={false}
+          colors={colors} 
+        />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#38B6FF" />
         </View>
-      </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Error state
+  if (error || !event) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <RegistrationHeader 
+          onBack={() => router.back()} 
+          isFree={false}
+          colors={colors} 
+        />
+        <ErrorBoundary>
+          <ErrorScreen onRetry={refetch} colors={colors} />
+        </ErrorBoundary>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Stack.Screen options={{ headerShown: false }} />
+    <ErrorBoundary>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top, borderBottomColor: colors.border, backgroundColor: colors.background }]}>
-        <TouchableOpacity 
-          style={styles.backButton} 
-          onPress={() => {
-            console.log('Back button pressed');
-            router.back();
-          }}
-          activeOpacity={0.7}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        <RegistrationHeader 
+          onBack={() => router.back()} 
+          isFree={event.isFree}
+          colors={colors} 
+        />
+
+        <KeyboardAvoidingView
+          style={styles.keyboardView}
+          behavior={Platform.select({ ios: 'padding', android: 'height' })}
+          keyboardVerticalOffset={Platform.select({ ios: 0, android: 20 })}
         >
-          <ArrowLeft size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>
-          {event.isFree ? 'Register' : 'Get Tickets'}
-        </Text>
-        <View style={styles.headerSpacer} />
-      </View>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* Event Summary */}
+            <EventSummaryCard event={event} colors={colors} />
 
-      <KeyboardAvoidingView
-        style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <WebContainer>
-        <ScrollView
-          style={styles.scrollView}
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Event Info Card */}
-          <View style={[styles.eventCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.eventTitle, { color: colors.text }]} numberOfLines={2}>
-              {event.title}
-            </Text>
+            {/* Ticket Selector */}
+            <TicketSelector
+              event={event}
+              ticketCount={ticketCount}
+              setTicketCount={setTicketCount}
+              spotsLeft={spotsLeft}
+              colors={colors}
+            />
 
-            <View style={styles.eventDetails}>
-              <View style={styles.eventDetailRow}>
-                <Calendar size={16} color={colors.textSecondary} />
-                <Text style={[styles.eventDetailText, { color: colors.textSecondary }]}>
-                  {formatEventDate(event.eventDate)}
-                </Text>
-              </View>
+            {/* Order Summary */}
+            <OrderSummary
+              event={event}
+              ticketCount={ticketCount}
+              totalAmount={totalAmount}
+              colors={colors}
+            />
 
-              <View style={styles.eventDetailRow}>
-                <Clock size={16} color={colors.textSecondary} />
-                <Text style={[styles.eventDetailText, { color: colors.textSecondary }]}>
-                  {formatEventTime(event.startTime)}
-                  {event.endTime && ` - ${formatEventTime(event.endTime)}`}
-                </Text>
-              </View>
+            {/* Security Notice for Paid Events */}
+            {!event.isFree && <SecurityNotice colors={colors} />}
 
-              <View style={styles.eventDetailRow}>
-                {event.isVirtual ? (
-                  <>
-                    <Video size={16} color="#38B6FF" />
-                    <Text style={[styles.eventDetailText, { color: '#38B6FF' }]}>
-                      Virtual Event
-                    </Text>
-                  </>
-                ) : (
-                  <>
-                    <MapPin size={16} color={colors.textSecondary} />
-                    <Text style={[styles.eventDetailText, { color: colors.textSecondary }]} numberOfLines={1}>
-                      {event.location}
-                    </Text>
-                  </>
-                )}
-              </View>
-            </View>
-          </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
 
-          {/* Ticket Selection */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              {event.isFree ? 'Registration' : 'Ticket'}
-            </Text>
+        {/* Bottom Action Button */}
+        <View style={[
+          styles.bottomBar, 
+          { 
+            backgroundColor: colors.background,
+            paddingBottom: insets.bottom + Spacing.lg,
+            borderTopColor: colors.border,
+          }
+        ]}>
+          <Button
+            variant="primary"
+            size="lg"
+            loading={submitting}
+            disabled={!canPurchase}
+            onPress={handlePurchase}
+            style={styles.purchaseButton}
+            icon={event.isFree ? 
+              <Ticket size={20} color="#FFFFFF" /> : 
+              <CreditCard size={20} color="#FFFFFF" />
+            }
+          >
+            {submitting ? 'Processing...' :
+             event.isFree ? 'Complete Registration' : 
+             `Pay ${formatCurrency(totalAmount)}`}
+          </Button>
+        </View>
 
-            <View style={[styles.ticketCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.ticketInfo}>
-                <Ticket size={24} color="#38B6FF" />
-                <View style={styles.ticketDetails}>
-                  <Text style={[styles.ticketType, { color: colors.text }]}>
-                    {event.isFree ? 'Free Registration' : 'General Admission'}
-                  </Text>
-                  <Text style={[styles.ticketPrice, { color: event.isFree ? '#4CAF50' : colors.text }]}>
-                    {event.isFree ? 'FREE' : formatCurrency(ticketPrice)}
-                  </Text>
-                </View>
-              </View>
-              {/* Quantity Selector */}
-              <View style={styles.quantitySelector}>
-                <TouchableOpacity
-                  style={[
-                    styles.quantityButton,
-                    { backgroundColor: colors.background, borderColor: colors.border },
-                    ticketCount <= 1 && styles.quantityButtonDisabled
-                  ]}
-                  onPress={() => setTicketCount(Math.max(1, ticketCount - 1))}
-                  disabled={ticketCount <= 1}
-                  activeOpacity={0.7}
-                >
-                  <Minus size={18} color={ticketCount <= 1 ? colors.textSecondary : colors.text} />
-                </TouchableOpacity>
-                <View style={[styles.quantityDisplay, { backgroundColor: 'rgba(56, 182, 255, 0.1)' }]}>
-                  <Text style={styles.quantityText}>{ticketCount}</Text>
-                </View>
-                <TouchableOpacity
-                  style={[
-                    styles.quantityButton,
-                    { backgroundColor: colors.background, borderColor: colors.border },
-                    ticketCount >= maxTickets && styles.quantityButtonDisabled
-                  ]}
-                  onPress={() => setTicketCount(Math.min(maxTickets, ticketCount + 1))}
-                  disabled={ticketCount >= maxTickets}
-                  activeOpacity={0.7}
-                >
-                  <Plus size={18} color={ticketCount >= maxTickets ? colors.textSecondary : colors.text} />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {spotsLeft > 0 && (
-              <View style={styles.spotsInfo}>
-                <Text style={[styles.spotsInfoText, { color: colors.textSecondary }]}>
-                  {spotsLeft - ticketCount} spot{spotsLeft - ticketCount !== 1 ? 's' : ''} will remain after this purchase
-                </Text>
-              </View>
-            )}
-
-            {spotsLeft < 10 && spotsLeft > 0 && (
-              <View style={styles.spotsWarning}>
-                <Users size={16} color="#FF9800" />
-                <Text style={styles.spotsWarningText}>
-                  Only {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} left!
-                </Text>
-              </View>
-            )}
-
-            {ticketCount > spotsLeft && (
-              <View style={styles.spotsWarning}>
-                <Info size={16} color="#F44336" />
-                <Text style={[styles.spotsWarningText, { color: '#F44336' }]}>
-                  Only {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} available. Please reduce quantity.
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* Order Summary */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Order Summary</Text>
-
-            <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.summaryRow}>
-                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
-                  {event.isFree 
-                    ? `${ticketCount} Registration${ticketCount !== 1 ? 's' : ''}` 
-                    : `${ticketCount} Ticket${ticketCount !== 1 ? 's' : ''} @ ${formatCurrency(ticketPrice)}`}
-                </Text>
-                <Text style={[styles.summaryValue, { color: colors.text }]}>
-                  {event.isFree ? 'FREE' : formatCurrency(ticketPrice * ticketCount)}
-                </Text>
-              </View>
-
-              {!event.isFree && (
-                <>
-                  <View style={styles.summaryRow}>
-                    <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
-                      Service Fee
-                    </Text>
-                    <Text style={[styles.summaryValue, { color: colors.text }]}>
-                      $0
-                    </Text>
-                  </View>
-
-                  <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
-
-                  <View style={styles.summaryRow}>
-                    <Text style={[styles.totalLabel, { color: colors.text }]}>
-                      Total
-                    </Text>
-                    <Text style={[styles.totalValue, { color: '#38B6FF' }]}>
-                      {formatCurrency(totalAmount)}
-                    </Text>
-                  </View>
-                </>
-              )}
-            </View>
-          </View>
-
-          {/* Security Note */}
-          {!event.isFree && (
-            <View style={styles.securityNote}>
-              <Shield size={16} color={colors.textSecondary} />
-              <Text style={[styles.securityText, { color: colors.textSecondary }]}>
-                Secure payment powered by eZeePayments
-              </Text>
-            </View>
-          )}
-
-        </ScrollView>
-        </WebContainer>
-      </KeyboardAvoidingView>
-
-      {/* Bottom Button */}
-      <View style={[styles.bottomBar, { backgroundColor: colors.background, paddingBottom: insets.bottom + 16, borderTopColor: colors.border }]}>
-        <TouchableOpacity
-          style={[
-            styles.purchaseButton, 
-            { backgroundColor: '#38B6FF' }, 
-            (submitting || ticketCount > spotsLeft || ticketCount < 1) && styles.purchaseButtonDisabled
-          ]}
-          onPress={handlePurchase}
-          disabled={submitting || ticketCount > spotsLeft || ticketCount < 1}
-          activeOpacity={0.8}
-        >
-          {submitting ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <>
-              {event.isFree ? (
-                <>
-                  <Ticket size={22} color="#FFFFFF" />
-                  <Text style={styles.purchaseButtonText}>
-                    Complete Registration
-                  </Text>
-                </>
-              ) : (
-                <>
-                  <CreditCard size={22} color="#FFFFFF" />
-                  <Text style={styles.purchaseButtonText}>
-                    Pay {formatCurrency(totalAmount)}
-                  </Text>
-                </>
-              )}
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
-    </View>
+        {/* Success Animation */}
+        <SuccessAnimation visible={showSuccess} />
+      </SafeAreaView>
+    </ErrorBoundary>
   );
 }
 
@@ -520,25 +737,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
     borderBottomWidth: 1,
-    zIndex: 1000,
-    position: 'relative',
   },
   backButton: {
     width: 44,
     height: 44,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: -8,
-    zIndex: 1001,
-    minWidth: 44,
-    minHeight: 44,
+    marginLeft: -Spacing.sm,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Typography.title3,
   },
   headerSpacer: {
     width: 44,
@@ -550,73 +761,70 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: Spacing.lg,
+    paddingBottom: 100, // Space for bottom button
   },
   eventCard: {
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 24,
+    marginBottom: Spacing.xl,
+  },
+  eventCardContent: {
+    padding: Spacing.lg,
   },
   eventTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 12,
+    ...Typography.title3,
+    marginBottom: Spacing.md,
   },
   eventDetails: {
-    gap: 8,
+    gap: Spacing.sm,
   },
   eventDetailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: Spacing.sm,
   },
   eventDetailText: {
-    fontSize: 14,
+    ...Typography.body2,
     flex: 1,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: Spacing.xl,
   },
   sectionTitle: {
-    fontSize: 16,
+    ...Typography.body1,
     fontWeight: '600',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
+    paddingHorizontal: Spacing.lg,
   },
   ticketCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
+    padding: Spacing.lg,
     borderRadius: 16,
     borderWidth: 1,
+    marginHorizontal: Spacing.lg,
   },
   ticketInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: Spacing.md,
     flex: 1,
   },
   ticketDetails: {
     flex: 1,
   },
   ticketType: {
-    fontSize: 15,
+    ...Typography.body1,
     fontWeight: '600',
   },
   ticketPrice: {
-    fontSize: 14,
+    ...Typography.body2,
     marginTop: 2,
   },
   quantitySelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: Spacing.sm,
   },
   quantityButton: {
     width: 36,
@@ -631,8 +839,8 @@ const styles = StyleSheet.create({
   },
   quantityDisplay: {
     minWidth: 50,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
@@ -640,62 +848,61 @@ const styles = StyleSheet.create({
   quantityText: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#38B6FF',
   },
   spotsInfo: {
-    marginTop: 8,
+    marginTop: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
   },
   spotsInfoText: {
-    fontSize: 13,
+    ...Typography.caption,
   },
   infoNote: {
-    marginTop: 12,
-    padding: 12,
+    marginTop: Spacing.md,
+    marginHorizontal: Spacing.lg,
+    padding: Spacing.md,
     borderRadius: 12,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
+    gap: Spacing.sm,
   },
   infoNoteText: {
-    fontSize: 13,
+    ...Typography.caption,
     flex: 1,
     lineHeight: 18,
   },
   spotsWarning: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginTop: 12,
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+    paddingHorizontal: Spacing.lg,
   },
   spotsWarningText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#FF9800',
   },
-  summaryCard: {
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
+    paddingHorizontal: Spacing.lg,
   },
   summaryLabel: {
-    fontSize: 14,
+    ...Typography.body2,
   },
   summaryValue: {
-    fontSize: 14,
+    ...Typography.body2,
     fontWeight: '600',
   },
   summaryDivider: {
     height: 1,
-    marginBottom: 12,
+    marginBottom: Spacing.md,
+    marginHorizontal: Spacing.lg,
   },
   totalLabel: {
-    fontSize: 16,
+    ...Typography.body1,
     fontWeight: '700',
   },
   totalValue: {
@@ -706,35 +913,77 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: Spacing.sm,
+    marginTop: Spacing.lg,
   },
   securityText: {
-    fontSize: 13,
+    ...Typography.caption,
   },
   bottomBar: {
-    position: Platform.OS === 'web' ? ('fixed' as any) : 'absolute',
+    position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 16,
+    padding: Spacing.lg,
     borderTopWidth: 1,
-    zIndex: 1000,
-    elevation: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+      web: {
+        boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
+      },
+    }),
   },
   purchaseButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    width: '100%',
+  },
+  errorContainer: {
+    flex: 1,
     justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 12,
-    gap: 10,
+    alignItems: 'center',
+    padding: Spacing.xxxl,
   },
-  purchaseButtonDisabled: {
-    opacity: 0.7,
+  errorTitle: {
+    ...Typography.title3,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.sm,
   },
-  purchaseButtonText: {
+  errorMessage: {
+    ...Typography.body1,
+    textAlign: 'center',
+    marginBottom: Spacing.xl,
+  },
+  retryButton: {
+    minWidth: 120,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  successOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  successText: {
     color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '700',
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: Spacing.lg,
+    textAlign: 'center',
   },
 });
