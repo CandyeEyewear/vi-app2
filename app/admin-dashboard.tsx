@@ -42,6 +42,7 @@ interface DashboardStats {
   pendingOpportunityProposals: number;
   totalCauses: number;
   totalRaised: number;
+  pendingOrganizations: number; // NEW
 }
 
 export default function AdminDashboardScreen() {
@@ -104,6 +105,13 @@ export default function AdminDashboardScreen() {
 
       const totalRaised = causesData?.reduce((sum, cause) => sum + (parseFloat(cause.amount_raised) || 0), 0) || 0;
 
+      // Get pending organization applications
+      const { count: pendingOrgsCount } = await supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true })
+        .eq('account_type', 'organization')
+        .eq('approval_status', 'pending');
+
       setStats({
         totalVolunteers: volunteersCount || 0,
         activeOpportunities: opportunitiesCount || 0,
@@ -113,6 +121,7 @@ export default function AdminDashboardScreen() {
         pendingOpportunityProposals: pendingProposalsCount || 0,
         totalCauses: causesCount || 0,
         totalRaised: totalRaised,
+        pendingOrganizations: pendingOrgsCount || 0, // NEW
       });
     } catch (error) {
       console.error('Error loading dashboard stats:', error);
@@ -258,6 +267,19 @@ export default function AdminDashboardScreen() {
               </Text>
               <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
                 Total Raised
+              </Text>
+            </View>
+
+            {/* Pending Organizations */}
+            <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={[styles.statIconContainer, { backgroundColor: '#FFC107' + '15' }]}>
+                <Users size={24} color="#FFC107" />
+              </View>
+              <Text style={[styles.statValue, { color: colors.text }]}>
+                {stats?.pendingOrganizations || 0}
+              </Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                Pending Organizations
               </Text>
             </View>
           </View>
@@ -418,8 +440,8 @@ export default function AdminDashboardScreen() {
   style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border }]}
   onPress={() => router.push('/user-management')}
 >
-  <View style={[styles.actionIcon, { backgroundColor: colors.primary + '15' }]}>
-    <Users size={28} color={colors.primary} />
+  <View style={[styles.actionIconContainer, { backgroundColor: colors.primary + '15' }]}>
+    <Users size={24} color={colors.primary} />
   </View>
             <View style={styles.actionContent}>
               <Text style={[styles.actionTitle, { color: colors.text }]}>
@@ -427,6 +449,37 @@ export default function AdminDashboardScreen() {
               </Text>
               <Text style={[styles.actionSubtitle, { color: colors.textSecondary }]}>
                 Manage volunteer accounts and permissions
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Organization Applications */}
+          <TouchableOpacity
+            style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/(admin)/organization-applications')}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.actionIconContainer, { backgroundColor: '#FFC107' + '15' }]}>
+              <Users size={24} color="#FFC107" />
+              {stats && stats.pendingOrganizations > 0 && (
+                <View style={[styles.badge, { backgroundColor: colors.error }]}>
+                  <Text style={styles.badgeText}>
+                    {stats.pendingOrganizations > 99 ? '99+' : stats.pendingOrganizations}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.actionContent}>
+              <Text style={[styles.actionTitle, { color: colors.text }]}>
+                Organization Applications
+              </Text>
+              <Text style={[styles.actionSubtitle, { color: colors.textSecondary }]}>
+                Review pending partner organization requests
+                {stats && stats.pendingOrganizations > 0 && (
+                  <Text style={{ fontWeight: '600', color: colors.error }}>
+                    {' '}({stats.pendingOrganizations} pending)
+                  </Text>
+                )}
               </Text>
             </View>
           </TouchableOpacity>

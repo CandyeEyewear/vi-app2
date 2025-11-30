@@ -8,6 +8,7 @@ interface AvatarWithBadgeProps {
   role: string;
   membershipTier: string;
   membershipStatus?: string;
+  isPartnerOrganization?: boolean;  // NEW - For partner organizations
   style?: ViewStyle;
 }
 
@@ -18,16 +19,20 @@ export const AvatarWithBadge: React.FC<AvatarWithBadgeProps> = ({
   role,
   membershipTier,
   membershipStatus = 'inactive',
+  isPartnerOrganization,  // NEW
   style,
 }) => {
   // Determine border color based on user type
   const isAdmin = role === 'admin';
+  const isPartner = isPartnerOrganization === true;
   const isPremium = membershipTier === 'premium' && membershipStatus === 'active';
   
   let borderColor: string | undefined;
   
   if (isAdmin) {
     borderColor = '#000000';
+  } else if (isPartner) {
+    borderColor = '#FFC107';
   } else if (isPremium) {
     borderColor = '#38B6FF';
   }

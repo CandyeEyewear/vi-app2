@@ -32,6 +32,7 @@ import { Colors } from '../../constants/colors';
 import FeedPostCard from '../../components/cards/FeedPostCard';
 import CustomAlert from '../../components/CustomAlert';
 import { FeedSkeleton } from '../../components/SkeletonLayouts';
+import OrganizationPaymentBanner from '../../components/OrganizationPaymentBanner';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
@@ -461,6 +462,9 @@ const renderTabs = () => (
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <FeedPostCard post={item} />}
         contentContainerStyle={styles.listContent}
+        ListHeaderComponent={() => {
+          return <OrganizationPaymentBanner />;
+        }}
         refreshControl={
           <RefreshControl
             refreshing={loading}

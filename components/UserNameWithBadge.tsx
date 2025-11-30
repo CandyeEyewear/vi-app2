@@ -29,6 +29,7 @@ export interface UserNameWithBadgeProps {
   role?: UserRole | string;
   membershipTier?: MembershipTier | string;
   membershipStatus?: MembershipStatus | string;
+  isPartnerOrganization?: boolean;  // NEW - For partner organizations
   
   // Legacy support
   isAdmin?: boolean;
@@ -56,6 +57,7 @@ export default function UserNameWithBadge({
   role,
   membershipTier,
   membershipStatus,
+  isPartnerOrganization,  // NEW - Add this line
   isAdmin: isAdminProp,
   isPremiumMember: isPremiumProp,
   isVerified: isVerifiedProp,
@@ -87,11 +89,12 @@ export default function UserNameWithBadge({
   
   const textColor = color || colors.text;
   
-  // Show tick for premium (non-admin) or admin
-  // Premium gets blue tick, admin gets black tick
-  const shouldShowTick = showVerifiedTick && ((userIsPremium && !userIsAdmin) || userIsAdmin);
-  const isPremiumTick = userIsPremium && !userIsAdmin; // Blue tick for premium
+  // Show tick for admin, partner orgs, or premium (non-admin)
+  // Admin gets black tick, partner orgs get golden tick, premium gets blue tick
+  const shouldShowTick = showVerifiedTick && (userIsAdmin || isPartnerOrganization || (userIsPremium && !userIsAdmin));
   const isAdminTick = userIsAdmin; // Black tick for admin
+  const isPartnerTick = isPartnerOrganization && !userIsAdmin; // Golden tick for partner orgs
+  const isPremiumTick = userIsPremium && !userIsAdmin && !isPartnerOrganization; // Blue tick for premium
   
   // Icon size proportional to font
   const iconSize = Math.round(fontSize * 0.85);
@@ -117,7 +120,7 @@ export default function UserNameWithBadge({
               width: iconSize,
               height: iconSize,
               borderRadius: iconSize / 2,
-              backgroundColor: isAdminTick ? '#000000' : colors.primary, // Black for admin, blue for premium
+              backgroundColor: isAdminTick ? '#000000' : isPartnerTick ? '#FFC107' : colors.primary,
             },
           ]}
         >

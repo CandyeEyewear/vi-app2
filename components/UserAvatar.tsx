@@ -28,6 +28,7 @@ export interface UserAvatarProps {
   role?: UserRole | string;
   membershipTier?: MembershipTier | string;
   membershipStatus?: MembershipStatus | string;
+  isPartnerOrganization?: boolean;  // NEW - For partner organizations
   
   // Legacy support - if using old field names
   isAdmin?: boolean;
@@ -54,6 +55,7 @@ const SIZES = {
 // Ring colors
 const RING_COLORS = {
   admin: '#000000',      // Black for admin
+  partner: '#FFC107',    // Golden for partner organizations
   premium: '#2196F3',    // Blue for premium/paid members
   none: 'transparent',
 };
@@ -64,6 +66,7 @@ export default function UserAvatar({
   role,
   membershipTier,
   membershipStatus,
+  isPartnerOrganization,  // NEW - Add this line
   isAdmin: isAdminProp,
   isPremiumMember: isPremiumProp,
   isVerified,
@@ -93,10 +96,11 @@ export default function UserAvatar({
   ) ?? isVerified;
   
   // Determine ring color based on status hierarchy
-  // Admin gets black ring, premium (non-admin) gets blue ring
+  // Admin gets black ring, partner orgs get golden ring, premium (non-admin) gets blue ring
   const getRingColor = (): string => {
     if (!showRing) return RING_COLORS.none;
     if (userIsAdmin) return RING_COLORS.admin;
+    if (isPartnerOrganization) return RING_COLORS.partner; // Golden for partner orgs
     if (userIsPremium && !userIsAdmin) return RING_COLORS.premium; // Only blue if not admin
     return RING_COLORS.none;
   };

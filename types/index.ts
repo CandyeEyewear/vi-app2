@@ -24,6 +24,10 @@ export interface User {
   membershipTier?: 'free' | 'premium'; // Subscription tier
   membershipStatus?: 'inactive' | 'active' | 'expired' | 'cancelled'; // Subscription status
   isPrivate?: boolean; // Privacy setting for profile visibility
+  // Organization fields
+  account_type?: 'volunteer' | 'organization';
+  approval_status?: 'pending' | 'approved' | 'rejected';
+  is_partner_organization?: boolean;
   // Moderation fields
   isBanned?: boolean;
   bannedUntil?: string;

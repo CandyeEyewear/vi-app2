@@ -194,6 +194,7 @@ async function handleSuccessfulPayment(transaction: any) {
       break;
 
     case 'membership':
+    case 'organization_membership':  // NEW: Handle organization memberships
       // Update payment_subscriptions status if linked via metadata
       if (transaction.metadata?.payment_subscriptions_id) {
         await supabase
@@ -209,13 +210,32 @@ async function handleSuccessfulPayment(transaction: any) {
       
       // Update user membership status
       if (transaction.user_id) {
-        await supabase
+        // Check if this is an organization account
+        const { data: userData } = await supabase
           .from('users')
-          .update({ 
-            membership_status: 'active', 
-            is_premium: true 
-          })
-          .eq('id', transaction.user_id);
+          .select('account_type')
+          .eq('id', transaction.user_id)
+          .single();
+        
+        if (userData?.account_type === 'organization') {
+          // For organizations: set is_partner_organization = true
+          await supabase
+            .from('users')
+            .update({ 
+              membership_status: 'active',
+              is_partner_organization: true,  // Golden badge!
+            })
+            .eq('id', transaction.user_id);
+        } else {
+          // For individuals: set is_premium = true
+          await supabase
+            .from('users')
+            .update({ 
+              membership_status: 'active', 
+              is_premium: true 
+            })
+            .eq('id', transaction.user_id);
+        }
       }
       break;
 
@@ -320,10 +340,30 @@ async function handleSuccessfulSubscriptionPayment(subscription: any) {
       break;
 
     case 'membership':
-      await supabase
+    case 'organization_membership':  // NEW: Handle organization memberships
+      // Check if this is an organization account
+      const { data: userData } = await supabase
         .from('users')
-        .update({ membership_status: 'active', is_premium: true })
-        .eq('id', user_id);
+        .select('account_type')
+        .eq('id', user_id)
+        .single();
+      
+      if (userData?.account_type === 'organization') {
+        // For organizations: set is_partner_organization = true
+        await supabase
+          .from('users')
+          .update({ 
+            membership_status: 'active',
+            is_partner_organization: true,  // Golden badge!
+          })
+          .eq('id', user_id);
+      } else {
+        // For individuals: set is_premium = true
+        await supabase
+          .from('users')
+          .update({ membership_status: 'active', is_premium: true })
+          .eq('id', user_id);
+      }
       break;
   }
 
