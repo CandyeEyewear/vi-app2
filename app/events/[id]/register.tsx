@@ -665,9 +665,13 @@ export default function EventRegisterScreen() {
         >
           <ScrollView
             style={styles.scrollView}
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: Platform.OS === 'web' ? 100 : 100 }
+            ]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled={true}
           >
             {/* Event Summary */}
             <EventSummaryCard event={event} colors={colors} />
@@ -732,6 +736,12 @@ export default function EventRegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    ...Platform.select({
+      web: {
+        overflow: 'auto' as any,
+        height: '100vh' as any,
+      },
+    }),
   },
   header: {
     flexDirection: 'row',
@@ -920,12 +930,21 @@ const styles = StyleSheet.create({
     ...Typography.caption,
   },
   bottomBar: {
-    position: 'absolute',
-    bottom: 0,
+    ...Platform.select({
+      web: {
+        position: 'sticky' as any,
+        bottom: 0,
+      },
+      default: {
+        position: 'absolute',
+        bottom: 0,
+      },
+    }),
     left: 0,
     right: 0,
     padding: Spacing.lg,
     borderTopWidth: 1,
+    backgroundColor: 'transparent',
     ...Platform.select({
       ios: {
         shadowColor: '#000',

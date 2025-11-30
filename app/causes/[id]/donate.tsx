@@ -413,9 +413,13 @@ export default function DonateScreen() {
         <WebContainer>
         <ScrollView
           style={styles.scrollView}
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
+          contentContainerStyle={[
+            styles.scrollContent, 
+            { paddingBottom: Platform.OS === 'web' ? 100 : insets.bottom + 120 }
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled={true}
         >
           {/* Cause Info */}
           <View style={[styles.causeCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -679,6 +683,12 @@ export default function DonateScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    ...Platform.select({
+      web: {
+        overflow: 'auto' as any,
+        height: '100vh' as any,
+      },
+    }),
   },
   header: {
     flexDirection: 'row',
@@ -946,14 +956,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   bottomBar: {
-    position: Platform.OS === 'web' ? ('fixed' as any) : 'absolute',
-    bottom: 0,
+    ...Platform.select({
+      web: {
+        position: 'sticky' as any,
+        bottom: 0,
+      },
+      default: {
+        position: 'absolute',
+        bottom: 0,
+      },
+    }),
     left: 0,
     right: 0,
     padding: 16,
     borderTopWidth: 1,
     zIndex: 1000,
     elevation: 8,
+    backgroundColor: 'transparent',
   },
   submitButton: {
     flexDirection: 'row',

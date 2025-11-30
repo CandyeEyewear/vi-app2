@@ -175,7 +175,23 @@ export async function getEvents(options?: {
 
     if (error) throw error;
 
-    const events = data?.map(transformEvent) || [];
+    let events = data?.map(transformEvent) || [];
+
+    // Filter out past events for non-admin users (similar to opportunities)
+    if (!isAdmin && events.length > 0) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      events = events.filter((event) => {
+        if (!event.eventDate) return true; // Show events without dates
+        
+        const eventDate = new Date(event.eventDate);
+        eventDate.setHours(23, 59, 59, 999);
+        
+        // Show event if it's today or in the future
+        return eventDate >= today;
+      });
+    }
 
     return { success: true, data: events };
   } catch (error) {

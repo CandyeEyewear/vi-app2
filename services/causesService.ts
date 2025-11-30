@@ -834,8 +834,11 @@ async function updateUserDonationStats(userId: string): Promise<void> {
  * Get cause progress percentage
  */
 export function getCauseProgress(cause: Cause): number {
-  if (cause.goalAmount <= 0) return 0;
-  const progress = (cause.amountRaised / cause.goalAmount) * 100;
+  const goalAmount = Number(cause.goalAmount) || 0;
+  const amountRaised = Number(cause.amountRaised) || 0;
+  
+  if (goalAmount <= 0 || isNaN(goalAmount) || isNaN(amountRaised)) return 0;
+  const progress = (amountRaised / goalAmount) * 100;
   return Math.min(progress, 100); // Cap at 100%
 }
 
@@ -856,7 +859,17 @@ export function getCauseDaysRemaining(cause: Cause): number | null {
 /**
  * Format currency for display (JMD)
  */
-export function formatCurrency(amount: number, currency: string = 'JMD'): string {
+export function formatCurrency(amount: number | null | undefined, currency: string = 'JMD'): string {
+  // Handle null, undefined, or NaN values
+  if (amount == null || isNaN(amount)) {
+    return new Intl.NumberFormat('en-JM', {
+      style: 'currency',
+      currency: currency,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(0);
+  }
+  
   return new Intl.NumberFormat('en-JM', {
     style: 'currency',
     currency: currency,
