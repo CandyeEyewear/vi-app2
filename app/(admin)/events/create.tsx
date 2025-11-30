@@ -44,9 +44,11 @@ import {
   Link,
   Upload,
   X,
+  Globe,
+  Lock,
 } from 'lucide-react-native';
 import { Colors } from '../../../constants/colors';
-import { EventCategory } from '../../../types';
+import { EventCategory, VisibilityType } from '../../../types';
 import { createEvent } from '../../../services/eventsService';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../services/supabase';
@@ -143,6 +145,8 @@ export default function CreateEventScreen() {
   const [contactPhone, setContactPhone] = useState('');
   
   // UI state
+  const [visibility, setVisibility] = useState<VisibilityType>('public');
+  const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // Handle image picker
@@ -335,6 +339,7 @@ export default function CreateEventScreen() {
         contactName: contactName.trim() || undefined,
         contactEmail: contactEmail.trim() || undefined,
         contactPhone: contactPhone.trim() || undefined,
+        visibility,
         createdBy: user.id,
       });
 
@@ -1021,6 +1026,38 @@ export default function CreateEventScreen() {
             </View>
           </View>
 
+          {/* Settings Section */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Settings</Text>
+
+            {/* Visibility */}
+            <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.toggleInfo}>
+                {visibility === 'public' ? (
+                  <Globe size={20} color="#4CAF50" />
+                ) : (
+                  <Lock size={20} color="#FF9800" />
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.toggleLabel, { color: colors.text }]}>
+                    {visibility === 'public' ? 'Public' : 'Members Only'}
+                  </Text>
+                  <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
+                    {visibility === 'public' 
+                      ? 'Visible to everyone, including visitors' 
+                      : 'Only visible to logged-in members'}
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={visibility === 'members_only'}
+                onValueChange={(value) => setVisibility(value ? 'members_only' : 'public')}
+                trackColor={{ false: colors.border, true: '#FF9800' }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+          </View>
+
         </ScrollView>
         </WebContainer>
       </KeyboardAvoidingView>
@@ -1279,5 +1316,29 @@ const styles = StyleSheet.create({
   coordinateText: {
     fontSize: 12,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderWidth: 1,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  toggleInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  toggleLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  toggleDescription: {
+    fontSize: 13,
+    lineHeight: 18,
   },
 });

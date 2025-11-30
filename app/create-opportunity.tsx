@@ -16,6 +16,7 @@ import {
   Platform,
   Image,
   ActivityIndicator,
+  Switch,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -32,9 +33,12 @@ import {
   X,
   Plus,
   Link as LinkIcon,
+  Globe,
+  Lock,
 } from 'lucide-react-native';
 import { supabase } from '../services/supabase';
 import { geocodeLocation, GeocodeResult } from '../services/geocoding';
+import { VisibilityType } from '../types';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { File } from 'expo-file-system';
@@ -108,6 +112,8 @@ export default function CreateOpportunityScreen() {
   const [loading, setLoading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [visibility, setVisibility] = useState<VisibilityType>('public');
+  const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertConfig, setAlertConfig] = useState({
     title: '',
@@ -563,6 +569,7 @@ export default function CreateOpportunityScreen() {
           image_url: imageUrl,
           contact_person_name: contactPersonName.trim() || null,
           contact_person_phone: contactPersonPhone.trim() || null,
+          visibility,
           status: 'active',
           created_by: user.id,
         })
@@ -1294,6 +1301,36 @@ export default function CreateOpportunityScreen() {
           )}
         </View>
 
+        {/* Visibility */}
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.text }]}>Visibility</Text>
+          <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.toggleInfo}>
+              {visibility === 'public' ? (
+                <Globe size={20} color="#4CAF50" />
+              ) : (
+                <Lock size={20} color="#FF9800" />
+              )}
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.toggleLabel, { color: colors.text }]}>
+                  {visibility === 'public' ? 'Public' : 'Members Only'}
+                </Text>
+                <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
+                  {visibility === 'public' 
+                    ? 'Visible to everyone, including visitors' 
+                    : 'Only visible to logged-in members'}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={visibility === 'members_only'}
+              onValueChange={(value) => setVisibility(value ? 'members_only' : 'public')}
+              trackColor={{ false: colors.border, true: '#FF9800' }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        </View>
+
         {/* Create Button */}
         <TouchableOpacity
           style={[styles.createButton, { backgroundColor: colors.primary }, (loading || !isOnline) && styles.createButtonDisabled]}
@@ -1583,5 +1620,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderWidth: 1,
+    borderRadius: 12,
+  },
+  toggleInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  toggleLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  toggleDescription: {
+    fontSize: 13,
+    lineHeight: 18,
   },
 });

@@ -16,6 +16,7 @@ import {
   Platform,
   Image,
   ActivityIndicator,
+  Switch,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -32,9 +33,12 @@ import {
   X,
   Plus,
   Link as LinkIcon,
+  Globe,
+  Lock,
 } from 'lucide-react-native';
 import { supabase } from '../../services/supabase';
 import { geocodeLocation, GeocodeResult } from '../../services/geocoding';
+import { VisibilityType } from '../../types';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { File } from 'expo-file-system';
@@ -105,6 +109,8 @@ export default function EditOpportunityScreen() {
   // UI state
   const [loading, setLoading] = useState(true);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [visibility, setVisibility] = useState<VisibilityType>('public');
+  const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertConfig, setAlertConfig] = useState({
     title: '',
@@ -253,6 +259,7 @@ export default function EditOpportunityScreen() {
       setRequirements(data.requirements || []);
       setSkillsNeeded(data.skills_needed || []);
       setLinks(data.links || []);
+      setVisibility(data.visibility || 'public');
     } catch (error) {
       console.error('Error loading opportunity:', error);
       showAlert('Error', 'Failed to load opportunity data', 'error');
@@ -457,6 +464,7 @@ export default function EditOpportunityScreen() {
           impact_statement: impactStatement.trim() || null,
           links: links.length > 0 ? links : null,
           image_url: imageUrl,
+          visibility,
           updated_at: new Date().toISOString(),
         })
         .eq('id', opportunityId)
@@ -1071,6 +1079,36 @@ export default function EditOpportunityScreen() {
           )}
         </View>
 
+        {/* Visibility */}
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.text }]}>Visibility</Text>
+          <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.toggleInfo}>
+              {visibility === 'public' ? (
+                <Globe size={20} color="#4CAF50" />
+              ) : (
+                <Lock size={20} color="#FF9800" />
+              )}
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.toggleLabel, { color: colors.text }]}>
+                  {visibility === 'public' ? 'Public' : 'Members Only'}
+                </Text>
+                <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
+                  {visibility === 'public' 
+                    ? 'Visible to everyone, including visitors' 
+                    : 'Only visible to logged-in members'}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={visibility === 'members_only'}
+              onValueChange={(value) => setVisibility(value ? 'members_only' : 'public')}
+              trackColor={{ false: colors.border, true: '#FF9800' }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        </View>
+
         {/* Update Button */}
         <TouchableOpacity
           style={[styles.createButton, { backgroundColor: colors.primary }, loading && styles.createButtonDisabled]}
@@ -1343,5 +1381,28 @@ const styles = StyleSheet.create({
   helperText: {
     fontSize: 12,
     marginTop: 6,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderWidth: 1,
+    borderRadius: 12,
+  },
+  toggleInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  toggleLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  toggleDescription: {
+    fontSize: 13,
+    lineHeight: 18,
   },
 });
