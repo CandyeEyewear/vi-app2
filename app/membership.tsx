@@ -81,29 +81,56 @@ export default function MembershipScreen() {
     if (!user?.id) return;
 
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('membership_tier, membership_status, membership_expires_at, subscription_start_date, revenuecat_user_id')
-        .eq('id', user.id)
-        .single();
+      const isOrganization = user.account_type === 'organization';
+      
+      // For organizations, check payment_subscriptions table
+      if (isOrganization) {
+        const { data: subscriptionData, error: subError } = await supabase
+          .from('payment_subscriptions')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('subscription_type', 'organization_membership')
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
 
-      if (error) throw error;
+        if (subError && subError.code !== 'PGRST116') {
+          console.error('Error fetching organization subscription:', subError);
+        }
 
-      // Note: revenuecat_user_id is being repurposed as ezee subscription_id
-      setMembership({
-        tier: data.membership_tier || 'free',
-        status: data.membership_status || 'inactive',
-        subscriptionId: data.revenuecat_user_id,
-        startDate: data.subscription_start_date,
-        expiresAt: data.membership_expires_at,
-        // subscriptionPlan would need to be stored separately or derived
-      });
+        setMembership({
+          tier: user.is_partner_organization ? 'premium' : 'free',
+          status: user.membership_status || 'inactive',
+          subscriptionId: subscriptionData?.ezee_subscription_id || subscriptionData?.id,
+          startDate: subscriptionData?.created_at,
+          expiresAt: subscriptionData?.next_billing_date,
+        });
+      } else {
+        // For individuals, use existing logic
+        const { data, error } = await supabase
+          .from('users')
+          .select('membership_tier, membership_status, membership_expires_at, subscription_start_date, revenuecat_user_id')
+          .eq('id', user.id)
+          .single();
+
+        if (error) throw error;
+
+        // Note: revenuecat_user_id is being repurposed as ezee subscription_id
+        setMembership({
+          tier: data.membership_tier || 'free',
+          status: data.membership_status || 'inactive',
+          subscriptionId: data.revenuecat_user_id,
+          startDate: data.subscription_start_date,
+          expiresAt: data.membership_expires_at,
+        });
+      }
     } catch (error) {
       console.error('Error fetching membership:', error);
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, user?.account_type, user?.is_partner_organization, user?.membership_status]);
 
   useEffect(() => {
     fetchMembership();
@@ -113,11 +140,12 @@ export default function MembershipScreen() {
   const handleCancelSubscription = useCallback(async () => {
     if (!user?.id) return;
     
-    // Allow cancellation even without subscriptionId (for demo mode or direct database updates)
-
+    const isOrganization = user.account_type === 'organization';
+    const membershipType = isOrganization ? 'partner organization membership' : 'premium membership';
+    
     Alert.alert(
-      'Cancel Membership',
-      'Are you sure you want to cancel your premium membership? You will lose access to all premium benefits at the end of your billing period.',
+      `Cancel ${isOrganization ? 'Partner Membership' : 'Membership'}`,
+      `Are you sure you want to cancel your ${membershipType}? You will lose access to all benefits at the end of your billing period.${isOrganization ? ' Your golden badge will be removed.' : ''}`,
       [
         { text: 'Keep Membership', style: 'cancel' },
         {
@@ -129,16 +157,24 @@ export default function MembershipScreen() {
               // If payment system is not configured or no subscriptionId, update database directly
               if (!isConfigured() || !membership.subscriptionId) {
                 // Demo mode or direct cancellation - update database directly
+                const updateData: any = {
+                  membership_status: 'cancelled',
+                };
+                
+                if (isOrganization) {
+                  updateData.is_partner_organization = false;
+                } else {
+                  updateData.is_premium = false;
+                }
+                
                 const { error: updateError } = await supabase
                   .from('users')
-                  .update({
-                    membership_status: 'cancelled',
-                  })
+                  .update(updateData)
                   .eq('id', user?.id);
 
                 if (updateError) throw updateError;
 
-                // Refresh user context to update blue tick status
+                // Refresh user context
                 if (refreshUser) await refreshUser();
                 
                 Alert.alert(
@@ -153,29 +189,49 @@ export default function MembershipScreen() {
               }
 
               // Production mode with subscriptionId - cancel via payment provider
-              const result = await cancelSubscription(membership.subscriptionId);
-              
-              if (result.success) {
-                // Update local database
-                const { error: updateError } = await supabase
-                  .from('users')
-                  .update({
-                    membership_status: 'cancelled',
-                  })
-                  .eq('id', user?.id);
+              // Use paymentService for organization subscriptions
+              if (isOrganization) {
+                const { cancelSubscription: cancelSub } = await import('../services/paymentService');
+                const result = await cancelSub(membership.subscriptionId, user.id);
+                
+                if (result.success) {
+                  // Refresh user context
+                  if (refreshUser) await refreshUser();
 
-                if (updateError) throw updateError;
-
-                // Refresh user context to update blue tick status
-                if (refreshUser) await refreshUser();
-
-                Alert.alert(
-                  'Membership Cancelled',
-                  'Your membership will remain active until the end of your current billing period.',
-                  [{ text: 'OK', onPress: fetchMembership }]
-                );
+                  Alert.alert(
+                    'Membership Cancelled',
+                    'Your partner membership will remain active until the end of your current billing period.',
+                    [{ text: 'OK', onPress: fetchMembership }]
+                  );
+                } else {
+                  throw new Error(result.error);
+                }
               } else {
-                throw new Error(result.error);
+                // Individual membership
+                const result = await cancelSubscription(membership.subscriptionId);
+                
+                if (result.success) {
+                  // Update local database
+                  const { error: updateError } = await supabase
+                    .from('users')
+                    .update({
+                      membership_status: 'cancelled',
+                    })
+                    .eq('id', user?.id);
+
+                  if (updateError) throw updateError;
+
+                  // Refresh user context
+                  if (refreshUser) await refreshUser();
+
+                  Alert.alert(
+                    'Membership Cancelled',
+                    'Your membership will remain active until the end of your current billing period.',
+                    [{ text: 'OK', onPress: fetchMembership }]
+                  );
+                } else {
+                  throw new Error(result.error);
+                }
               }
             } catch (error) {
               console.error('Error cancelling subscription:', error);
@@ -187,7 +243,7 @@ export default function MembershipScreen() {
         },
       ]
     );
-  }, [membership, user?.id, fetchMembership, refreshUser]);
+  }, [membership, user?.id, user?.account_type, fetchMembership, refreshUser]);
 
   // Navigate to subscribe
   const handleSubscribe = useCallback(() => {
@@ -239,7 +295,10 @@ export default function MembershipScreen() {
     );
   }
 
-  const isPremium = membership?.tier === 'premium' && membership?.status === 'active';
+  const isOrganization = user?.account_type === 'organization';
+  const isPremium = isOrganization 
+    ? (user?.is_partner_organization && membership?.status === 'active')
+    : (membership?.tier === 'premium' && membership?.status === 'active');
   const isCancelled = membership?.status === 'cancelled';
   const isExpired = membership?.status === 'expired';
 
@@ -285,7 +344,9 @@ export default function MembershipScreen() {
                 styles.statusTitle,
                 { color: isPremium ? '#FFFFFF' : colors.text }
               ]}>
-                {isPremium ? 'Premium Member' : 'Free Member'}
+                {isPremium 
+                  ? (isOrganization ? 'Partner Organization' : 'Premium Member')
+                  : (isOrganization ? 'Organization' : 'Free Member')}
               </Text>
               <Text style={[
                 styles.statusSubtitle,

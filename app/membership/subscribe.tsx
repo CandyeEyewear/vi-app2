@@ -2,7 +2,7 @@
  * Subscribe Screen
  * Payment flow for premium membership subscription
  * File: app/membership/subscribe.tsx
- * FIXED: Web-compatible alerts
+ * FIXED: Unified with paymentService
  */
 
 import React, { useState, useCallback } from 'react';
@@ -16,7 +16,6 @@ import {
   Alert,
   ActivityIndicator,
   Dimensions,
-  Linking,
   Platform,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
@@ -27,9 +26,7 @@ import {
   Crown,
   Star,
   CreditCard,
-  Shield,
   Lock,
-  ChevronRight,
   Award,
   TrendingUp,
   Shirt,
@@ -38,17 +35,39 @@ import {
 } from 'lucide-react-native';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
-import {
-  MEMBERSHIP_PLANS,
-  formatCurrency,
-} from '../../services/ezeepayService';
-import { supabase } from '../../services/supabase';
-import { processSubscription, type Frequency } from '../../services/paymentService';
+import { processSubscription, formatPaymentAmount, type Frequency } from '../../services/paymentService';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
 
 type PlanType = 'monthly' | 'yearly';
+
+// Define membership plans
+const MEMBERSHIP_PLANS = {
+  monthly: {
+    price: 1000, // JMD 1,000/month
+    benefits: [
+      'Blue verification tick',
+      'Official Member designation',
+      'Propose volunteer opportunities',
+      'Customized Blue VI T-Shirt',
+      'Impact Statistics on profile',
+      'Priority support',
+    ],
+  },
+  yearly: {
+    price: 10000, // JMD 10,000/year (saves 2 months)
+    benefits: [
+      'Blue verification tick',
+      'Official Member designation',
+      'Propose volunteer opportunities',
+      'Customized Blue VI T-Shirt',
+      'Impact Statistics on profile',
+      'Priority support',
+      'Save JMD 2,000 per year',
+    ],
+  },
+};
 
 // Benefit icons mapping
 const BENEFIT_ICONS: Record<string, any> = {
@@ -58,7 +77,7 @@ const BENEFIT_ICONS: Record<string, any> = {
   'Customized Blue VI T-Shirt': Shirt,
   'Impact Statistics on profile': TrendingUp,
   'Priority support': Zap,
-  'All yearly benefits': Star,
+  'Save JMD 2,000 per year': Star,
 };
 
 // ============================================
@@ -93,10 +112,10 @@ export default function SubscribeScreen() {
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
-  const { user, refreshUser } = useAuth();
+  const { user } = useAuth();
 
   // State
-  const [selectedPlan, setSelectedPlan] = useState<PlanType>('monthly');
+  const [selectedPlan, setSelectedPlan] = useState<PlanType>('yearly'); // Default to yearly (best value)
   const [processing, setProcessing] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
 
@@ -129,14 +148,6 @@ export default function SubscribeScreen() {
       // Map plan to frequency
       const frequency: Frequency = selectedPlan === 'monthly' ? 'monthly' : 'annually';
 
-      // Calculate expiration date
-                const expiresAt = new Date();
-                if (selectedPlan === 'monthly') {
-                  expiresAt.setMonth(expiresAt.getMonth() + 1);
-                } else {
-                  expiresAt.setFullYear(expiresAt.getFullYear() + 1);
-                }
-
       console.log('Calling processSubscription...');
       // Process subscription payment through eZeePayments
       const subscriptionResult = await processSubscription({
@@ -146,8 +157,8 @@ export default function SubscribeScreen() {
         userId: user.id,
         customerEmail: user.email || '',
         customerName: user.fullName || 'VIbe Member',
-        description: `Premium Membership - ${selectedPlan === 'monthly' ? 'Monthly' : 'Yearly'} Plan`,
-        endDate: expiresAt.toISOString(),
+        description: `VIbe Premium Membership - ${selectedPlan === 'monthly' ? 'Monthly' : 'Yearly'} Plan`,
+        platform: 'app',
       });
 
       console.log('Subscription result:', subscriptionResult);
@@ -161,21 +172,10 @@ export default function SubscribeScreen() {
         return;
       }
 
-      // Store subscription ID and update membership status
-      // The status will be updated by webhook when payment is confirmed
-      if (subscriptionResult.subscriptionId) {
-      await supabase
-        .from('users')
-        .update({
-            revenuecat_user_id: subscriptionResult.subscriptionId,
-            membership_status: 'pending', // Will be updated by webhook when payment completes
-        })
-        .eq('id', user.id);
-      }
-
+      // Payment initiated successfully - webhook will handle the rest
       showAlert(
-        'Subscription Processing! 🎉',
-        `Your premium membership subscription is being processed. You will receive a confirmation once payment is complete.`,
+        'Payment Initiated! 🎉',
+        'You will be redirected to our secure payment gateway. Your premium membership will activate once payment is complete.',
         () => router.replace('/membership')
       );
     } catch (error) {
@@ -184,7 +184,7 @@ export default function SubscribeScreen() {
     } finally {
       setProcessing(false);
     }
-  }, [user, selectedPlan, agreedToTerms, plan, router, refreshUser]);
+  }, [user, selectedPlan, agreedToTerms, plan, router]);
 
   // Not logged in
   if (!user) {
@@ -279,7 +279,7 @@ export default function SubscribeScreen() {
             </View>
             <View style={styles.planPriceContainer}>
               <Text style={[styles.planPrice, { color: '#38B6FF' }]}>
-                {formatCurrency(MEMBERSHIP_PLANS.monthly.price)}
+                {formatPaymentAmount(MEMBERSHIP_PLANS.monthly.price)}
               </Text>
               <Text style={[styles.planPeriod, { color: colors.textSecondary }]}>/mo</Text>
             </View>
@@ -310,18 +310,17 @@ export default function SubscribeScreen() {
             <View style={styles.planInfo}>
               <View style={styles.planNameRow}>
                 <Text style={[styles.planName, { color: colors.text }]}>Yearly</Text>
-                {/* Uncomment if you add a discount */}
-                {/* <View style={[styles.savingsBadge, { backgroundColor: '#4CAF50' }]}>
-                  <Text style={styles.savingsText}>Best Value</Text>
-                </View> */}
+                <View style={[styles.savingsBadge, { backgroundColor: '#10B981' }]}>
+                  <Text style={styles.savingsText}>SAVE 17%</Text>
+                </View>
               </View>
               <Text style={[styles.planDescription, { color: colors.textSecondary }]}>
-                Billed annually
+                Billed annually (save 2 months)
               </Text>
             </View>
             <View style={styles.planPriceContainer}>
               <Text style={[styles.planPrice, { color: '#38B6FF' }]}>
-                {formatCurrency(MEMBERSHIP_PLANS.yearly.price)}
+                {formatPaymentAmount(MEMBERSHIP_PLANS.yearly.price)}
               </Text>
               <Text style={[styles.planPeriod, { color: colors.textSecondary }]}>/yr</Text>
             </View>
@@ -331,83 +330,70 @@ export default function SubscribeScreen() {
         {/* Benefits */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            What You Get
+            What's Included
           </Text>
-
           <View style={[styles.benefitsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             {plan.benefits.map((benefit, index) => {
-              const IconComponent = BENEFIT_ICONS[benefit] || Star;
+              const Icon = BENEFIT_ICONS[benefit] || CheckCircle;
               return (
                 <View
                   key={index}
                   style={[
                     styles.benefitItem,
-                    index < plan.benefits.length - 1 && {
-                      borderBottomWidth: 1,
-                      borderBottomColor: colors.border,
-                    }
+                    index < plan.benefits.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
                   ]}
                 >
-                  <CheckCircle size={20} color="#4CAF50" />
-                  <Text style={[styles.benefitText, { color: colors.text }]}>
-                    {benefit}
-                  </Text>
+                  <Icon size={20} color="#38B6FF" />
+                  <Text style={[styles.benefitText, { color: colors.text }]}>{benefit}</Text>
                 </View>
               );
             })}
           </View>
         </View>
 
-        {/* Order Summary */}
+        {/* Summary */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Order Summary
+            Payment Summary
           </Text>
-
           <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.summaryRow}>
               <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
-                {plan.name}
+                {selectedPlan === 'monthly' ? 'Monthly' : 'Yearly'} Plan
               </Text>
               <Text style={[styles.summaryValue, { color: colors.text }]}>
-                {formatCurrency(plan.price)}
+                {formatPaymentAmount(plan.price)}
               </Text>
             </View>
             <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
             <View style={styles.summaryRow}>
               <Text style={[styles.totalLabel, { color: colors.text }]}>Total</Text>
               <Text style={[styles.totalValue, { color: '#38B6FF' }]}>
-                {formatCurrency(plan.price)}
+                {formatPaymentAmount(plan.price)}
               </Text>
             </View>
             <Text style={[styles.billingNote, { color: colors.textSecondary }]}>
-              {selectedPlan === 'monthly' 
-                ? 'Billed monthly. Cancel anytime.'
-                : 'Billed annually. Cancel anytime.'
-              }
+              Billed {selectedPlan === 'monthly' ? 'monthly' : 'annually'}
             </Text>
           </View>
         </View>
 
-        {/* Terms Agreement */}
+        {/* Terms Checkbox */}
         <TouchableOpacity
           style={styles.termsRow}
           onPress={() => setAgreedToTerms(!agreedToTerms)}
+          activeOpacity={0.7}
         >
-          <View style={[
-            styles.checkbox,
-            { 
-              backgroundColor: agreedToTerms ? '#38B6FF' : 'transparent',
-              borderColor: agreedToTerms ? '#38B6FF' : colors.border,
-            }
-          ]}>
-            {agreedToTerms && <CheckCircle size={14} color="#FFFFFF" />}
+          <View
+            style={[
+              styles.checkbox,
+              { borderColor: agreedToTerms ? '#38B6FF' : colors.border, backgroundColor: agreedToTerms ? '#38B6FF' : 'transparent' },
+            ]}
+          >
+            {agreedToTerms && <CheckCircle size={16} color="#FFFFFF" />}
           </View>
-          <Text style={[styles.termsText, { color: colors.textSecondary }]}>
-            I agree to the{' '}
-            <Text style={{ color: '#38B6FF' }}>Terms of Service</Text>
-            {' '}and{' '}
-            <Text style={{ color: '#38B6FF' }}>Privacy Policy</Text>
+          <Text style={[styles.termsText, { color: colors.text }]}>
+            I agree to the Terms & Conditions and Privacy Policy
           </Text>
         </TouchableOpacity>
 
@@ -439,7 +425,7 @@ export default function SubscribeScreen() {
             <>
               <CreditCard size={22} color="#FFFFFF" />
               <Text style={styles.subscribeButtonText}>
-                Subscribe for {formatCurrency(plan.price)}/{selectedPlan === 'monthly' ? 'mo' : 'yr'}
+                Subscribe for {formatPaymentAmount(plan.price)}/{selectedPlan === 'monthly' ? 'mo' : 'yr'}
               </Text>
             </>
           )}

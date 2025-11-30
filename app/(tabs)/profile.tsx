@@ -139,6 +139,7 @@ export default function ProfileScreen() {
             role={user.role || 'volunteer'}
             membershipTier={user.membershipTier || 'free'}
             membershipStatus={user.membershipStatus || 'inactive'}
+            isPartnerOrganization={user.is_partner_organization}
           />
         </View>
         <UserNameWithBadge
@@ -146,6 +147,7 @@ export default function ProfileScreen() {
           role={user.role || 'volunteer'}
           membershipTier={user.membershipTier || 'free'}
           membershipStatus={user.membershipStatus || 'inactive'}
+          isPartnerOrganization={user.is_partner_organization}
           style={[styles.name, { color: colors.text }]}
           badgeSize={20}
         />
@@ -373,21 +375,27 @@ export default function ProfileScreen() {
             <ChevronRight size={20} color={colors.textSecondary} />
           </TouchableOpacity>
 
-          {/* Membership */}
+          {/* Membership / Partner Membership */}
           <TouchableOpacity
             style={[styles.menuItem, { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() => router.push('/membership')}
             activeOpacity={0.7}
           >
-            <View style={[styles.menuIconContainer, { backgroundColor: '#38B6FF' + '15' }]}>
-              <Crown size={22} color="#38B6FF" />
+            <View style={[styles.menuIconContainer, { backgroundColor: user?.account_type === 'organization' ? '#FFC107' + '15' : '#38B6FF' + '15' }]}>
+              <Crown size={22} color={user?.account_type === 'organization' ? '#FFC107' : '#38B6FF'} />
             </View>
             <View style={styles.menuContent}>
-              <Text style={[styles.menuTitle, { color: colors.text }]}>Membership</Text>
+              <Text style={[styles.menuTitle, { color: colors.text }]}>
+                {user?.account_type === 'organization' ? 'Partner Membership' : 'Membership'}
+              </Text>
               <Text style={[styles.menuSubtitle, { color: colors.textSecondary }]}>
-                {user?.membershipTier === 'premium' && user?.membershipStatus === 'active' 
-                  ? 'Official Member ✓' 
-                  : 'Upgrade to Full Membership'}
+                {user?.account_type === 'organization' 
+                  ? (user?.is_partner_organization && user?.membershipStatus === 'active'
+                      ? 'Partner Organization ✓'
+                      : 'Complete Payment to Activate')
+                  : (user?.membershipTier === 'premium' && user?.membershipStatus === 'active' 
+                      ? 'Official Member ✓' 
+                      : 'Upgrade to Full Membership')}
               </Text>
             </View>
             <ChevronRight size={20} color={colors.textSecondary} />

@@ -34,6 +34,10 @@ import {
   MapPin,
   Users,
   Settings,
+  Building2,
+  Globe,
+  Crown,
+  CheckCircle2,
 } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useFeed } from '../../contexts/FeedContext';
@@ -89,6 +93,7 @@ export default function ViewProfileScreen() {
   const isPrivateProfile = profileUser?.isPrivate && !isOwnProfile;
   const isInCircle = circleStatus === 'accepted';
   const canViewFullProfile = isOwnProfile || !isPrivateProfile || isInCircle;
+  const isOrganization = profileUser?.account_type === 'organization';
 
   useEffect(() => {
     if (id) {
@@ -160,6 +165,10 @@ export default function ViewProfileScreen() {
         achievements: [],
         createdAt: data.created_at,
         updatedAt: data.updated_at,
+        account_type: data.account_type,
+        approval_status: data.approval_status,
+        is_partner_organization: data.is_partner_organization,
+        organization_data: data.organization_data,
       };
 
       cache.set(cacheKey, userData, 5 * 60 * 1000);
@@ -618,6 +627,132 @@ export default function ViewProfileScreen() {
     }
 
     if (activeTab === 'about') {
+      if (isOrganization) {
+        return (
+          <View style={styles.aboutContentContainer}>
+            {/* Organization Description */}
+            {profileUser?.organization_data?.organization_description && (
+              <View style={[styles.aboutSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.aboutSectionTitle, { color: colors.text }]}>About</Text>
+                <Text style={[styles.aboutText, { color: colors.text }]}>
+                  {profileUser.organization_data.organization_description}
+                </Text>
+              </View>
+            )}
+
+            {/* Industry Focus */}
+            {profileUser?.organization_data?.industry_focus && profileUser.organization_data.industry_focus.length > 0 && (
+              <View style={[styles.aboutSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.aboutSectionTitle, { color: colors.text }]}>Industry Focus</Text>
+                <View style={styles.expertiseContainer}>
+                  {profileUser.organization_data.industry_focus.map((focus, index) => (
+                    <View key={index} style={[styles.expertiseChip, { backgroundColor: '#FFC107' + '20', borderColor: '#FFC107' }]}>
+                      <Text style={[styles.expertiseText, { color: '#F57F17' }]}>{focus}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* Organization Details */}
+            <View style={[styles.aboutSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Text style={[styles.aboutSectionTitle, { color: colors.text }]}>Organization Details</Text>
+              
+              {profileUser?.organization_data?.registration_number && (
+                <View style={styles.orgDetailRow}>
+                  <Text style={[styles.orgDetailLabel, { color: colors.textSecondary }]}>Registration Number:</Text>
+                  <Text style={[styles.orgDetailValue, { color: colors.text }]}>
+                    {profileUser.organization_data.registration_number}
+                  </Text>
+                </View>
+              )}
+              
+              {profileUser?.organization_data?.organization_size && (
+                <View style={styles.orgDetailRow}>
+                  <Text style={[styles.orgDetailLabel, { color: colors.textSecondary }]}>Organization Size:</Text>
+                  <Text style={[styles.orgDetailValue, { color: colors.text }]}>
+                    {profileUser.organization_data.organization_size} employees
+                  </Text>
+                </View>
+              )}
+              
+              {profileUser?.organization_data?.contact_person_name && (
+                <View style={styles.orgDetailRow}>
+                  <Text style={[styles.orgDetailLabel, { color: colors.textSecondary }]}>Contact Person:</Text>
+                  <Text style={[styles.orgDetailValue, { color: colors.text }]}>
+                    {profileUser.organization_data.contact_person_name}
+                    {profileUser.organization_data.contact_person_role && ` (${profileUser.organization_data.contact_person_role})`}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Website */}
+            {profileUser?.organization_data?.website_url && (
+              <View style={[styles.aboutSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.aboutSectionTitle, { color: colors.text }]}>Website</Text>
+                <TouchableOpacity
+                  style={styles.websiteRow}
+                  onPress={() => Linking.openURL(profileUser.organization_data!.website_url!)}
+                >
+                  <Globe size={20} color={colors.primary} />
+                  <Text style={[styles.websiteText, { color: colors.primary }]}>
+                    {profileUser.organization_data.website_url}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Partner Status */}
+            {profileUser?.is_partner_organization && (
+              <View style={[styles.aboutSection, { backgroundColor: '#FFF9E6', borderColor: '#FFC107', borderWidth: 2 }]}>
+                <View style={styles.partnerStatusRow}>
+                  <Crown size={24} color="#FFC107" fill="#FFC107" />
+                  <View style={styles.partnerStatusText}>
+                    <Text style={[styles.partnerStatusTitle, { color: '#1F2937' }]}>Partner Organization</Text>
+                    <Text style={[styles.partnerStatusSubtitle, { color: '#6B7280' }]}>
+                      This organization is a verified partner with a golden badge
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {/* Contact Info */}
+            {(currentUser?.role === 'admin' || isOwnProfile) && (profileUser?.phone || profileUser?.email) && (
+              <View style={[styles.aboutSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.aboutSectionTitle, { color: colors.text }]}>Contact Info</Text>
+                {profileUser?.phone && (
+                  <TouchableOpacity
+                    style={styles.contactRow}
+                    onPress={() => Linking.openURL(`tel:${profileUser.phone}`)}
+                  >
+                    <Phone size={20} color={colors.primary} />
+                    <Text style={[styles.contactText, { color: colors.primary }]}>{profileUser.phone}</Text>
+                  </TouchableOpacity>
+                )}
+                {profileUser?.email && (
+                  <TouchableOpacity
+                    style={styles.contactRow}
+                    onPress={() => Linking.openURL(`mailto:${profileUser.email}`)}
+                  >
+                    <Mail size={20} color={colors.primary} />
+                    <Text style={[styles.contactText, { color: colors.primary }]}>{profileUser.email}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {/* Member Since */}
+            <View style={styles.memberSince}>
+              <Text style={[styles.memberSinceText, { color: colors.textSecondary }]}>
+                Partner since {profileUser ? new Date(profileUser.createdAt).toLocaleDateString() : ''}
+              </Text>
+            </View>
+          </View>
+        );
+      }
+
       return (
         <View style={styles.aboutContentContainer}>
           {/* Bio */}
@@ -808,49 +943,102 @@ export default function ViewProfileScreen() {
               role={profileUser.role || 'volunteer'}
               membershipTier={profileUser.membershipTier || 'free'}
               membershipStatus={profileUser.membershipStatus || 'inactive'}
+              isPartnerOrganization={profileUser.is_partner_organization}
             />
           </View>
-          <UserNameWithBadge
-            name={profileUser.fullName}
-            role={profileUser.role || 'volunteer'}
-            membershipTier={profileUser.membershipTier || 'free'}
-            membershipStatus={profileUser.membershipStatus || 'inactive'}
-            style={[styles.name, { color: colors.text }]}
-            badgeSize={20}
-          />
-          {/* Role Label */}
-          {profileUser.role === 'admin' ? (
-            <Text style={{ color: '#000000', fontSize: 14, fontWeight: '600', marginTop: 4 }}>Admin</Text>
-          ) : (profileUser.membershipTier === 'premium' && profileUser.membershipStatus === 'active') ? (
-            <Text style={{ color: '#38B6FF', fontSize: 14, fontWeight: '600', marginTop: 4 }}>Official Member</Text>
-          ) : null}
-          {profileUser.location && (
-            <Text style={[styles.location, { color: colors.textSecondary }]}>{profileUser.location}</Text>
+          {isOrganization ? (
+            <>
+              <View style={styles.organizationHeader}>
+                <Building2 size={24} color="#FFC107" />
+                <Text style={[styles.name, { color: colors.text, marginLeft: 8 }]}>
+                  {profileUser.organization_data?.organization_name || profileUser.fullName}
+                </Text>
+                {profileUser.is_partner_organization && (
+                  <View style={styles.goldenBadge}>
+                    <Crown size={16} color="#000000" fill="#FFC107" />
+                    <Text style={styles.goldenBadgeText}>Partner</Text>
+                  </View>
+                )}
+              </View>
+              {profileUser.organization_data?.organization_description && (
+                <Text style={[styles.organizationDescription, { color: colors.textSecondary }]}>
+                  {profileUser.organization_data.organization_description}
+                </Text>
+              )}
+              {profileUser.location && (
+                <View style={styles.locationRow}>
+                  <MapPin size={16} color={colors.textSecondary} />
+                  <Text style={[styles.location, { color: colors.textSecondary, marginLeft: 4 }]}>
+                    {profileUser.location}
+                  </Text>
+                </View>
+              )}
+            </>
+          ) : (
+            <>
+              <UserNameWithBadge
+                name={profileUser.fullName}
+                role={profileUser.role || 'volunteer'}
+                membershipTier={profileUser.membershipTier || 'free'}
+                membershipStatus={profileUser.membershipStatus || 'inactive'}
+                isPartnerOrganization={profileUser.is_partner_organization}
+                style={[styles.name, { color: colors.text }]}
+                badgeSize={20}
+              />
+              {/* Role Label */}
+              {profileUser.role === 'admin' ? (
+                <Text style={{ color: '#000000', fontSize: 14, fontWeight: '600', marginTop: 4 }}>Admin</Text>
+              ) : (profileUser.membershipTier === 'premium' && profileUser.membershipStatus === 'active') ? (
+                <Text style={{ color: '#38B6FF', fontSize: 14, fontWeight: '600', marginTop: 4 }}>Official Member</Text>
+              ) : null}
+              {profileUser.location && (
+                <Text style={[styles.location, { color: colors.textSecondary }]}>{profileUser.location}</Text>
+              )}
+            </>
           )}
         </View>
 
         {/* Stats Section - Scrolls away */}
         <View style={[styles.statsSection, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-          <View style={styles.statsGrid}>
-            <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Text style={[styles.statValue, { color: colors.primary }]}>{profileUser.totalHours}</Text>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Hours</Text>
+          {isOrganization ? (
+            <View style={styles.statsGrid}>
+              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.statValue, { color: colors.primary }]}>{profileUser.activitiesCompleted}</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                  {profileUser.activitiesCompleted === 1 ? 'Opportunity' : 'Opportunities'}
+                </Text>
+              </View>
+              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.statValue, { color: colors.primary }]}>{profileUser.totalHours}</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total Hours</Text>
+              </View>
+              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.statValue, { color: colors.primary }]}>{profileUser.organizationsHelped}</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Volunteers</Text>
+              </View>
             </View>
-            <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Text style={[styles.statValue, { color: colors.primary }]}>{profileUser.activitiesCompleted}</Text>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-                {profileUser.activitiesCompleted === 1 ? 'Activity' : 'Activities'}
-              </Text>
+          ) : (
+            <View style={styles.statsGrid}>
+              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.statValue, { color: colors.primary }]}>{profileUser.totalHours}</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Hours</Text>
+              </View>
+              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.statValue, { color: colors.primary }]}>{profileUser.activitiesCompleted}</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                  {profileUser.activitiesCompleted === 1 ? 'Activity' : 'Activities'}
+                </Text>
+              </View>
+              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.statValue, { color: colors.primary }]}>{profileUser.organizationsHelped}</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Organizations</Text>
+              </View>
             </View>
-            <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Text style={[styles.statValue, { color: colors.primary }]}>{profileUser.organizationsHelped}</Text>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Organizations</Text>
-            </View>
-          </View>
+          )}
 
           {/* Action Buttons */}
           <View style={styles.actionButtons}>
-            {!isOwnProfile && (
+            {!isOwnProfile && !isOrganization && (
               <TouchableOpacity
                 style={[
                   styles.actionButton,
@@ -887,7 +1075,7 @@ export default function ViewProfileScreen() {
                 )}
               </TouchableOpacity>
             )}
-            {!isOwnProfile && circleStatus === 'accepted' && (
+            {!isOwnProfile && (
               <TouchableOpacity
                 style={[styles.actionButton, styles.messageButton, { borderColor: colors.border }]}
                 onPress={handleMessage}
@@ -1255,5 +1443,87 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  organizationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  goldenBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFC107',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+    gap: 4,
+  },
+  goldenBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#000000',
+  },
+  organizationDescription: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginTop: 8,
+    marginBottom: 8,
+    paddingHorizontal: 16,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  orgDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.light.border,
+  },
+  orgDetailLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  orgDetailValue: {
+    fontSize: 14,
+    flex: 1,
+    textAlign: 'right',
+  },
+  websiteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  websiteText: {
+    fontSize: 14,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  partnerStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  partnerStatusText: {
+    flex: 1,
+  },
+  partnerStatusTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  partnerStatusSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
   },
 });

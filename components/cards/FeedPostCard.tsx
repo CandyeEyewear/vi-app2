@@ -249,6 +249,7 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
             role={post.user.role || 'volunteer'}
             membershipTier={post.user.membershipTier || 'free'}
             membershipStatus={post.user.membershipStatus || 'inactive'}
+            isPartnerOrganization={post.user.is_partner_organization}
           />
         </TouchableOpacity>
         <TouchableOpacity 
@@ -261,6 +262,7 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
             role={post.user.role || 'volunteer'}
             membershipTier={post.user.membershipTier || 'free'}
             membershipStatus={post.user.membershipStatus || 'inactive'}
+            isPartnerOrganization={post.user.is_partner_organization}
             style={styles.userName}
           />
           <Text style={styles.timestamp}>{formatTimeAgo(post.createdAt)}</Text>
@@ -408,6 +410,8 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
                       name={lastComment.user.fullName}
                       role={lastComment.user.role || 'volunteer'}
                       membershipTier={lastComment.user.membershipTier || 'free'}
+                      membershipStatus={lastComment.user.membershipStatus || 'inactive'}
+                      isPartnerOrganization={lastComment.user.is_partner_organization}
                       style={styles.commentUsername}
                       badgeSize={14}
                     />
@@ -499,6 +503,8 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
                                 name={comment.user.fullName}
                                 role={comment.user.role || 'volunteer'}
                                 membershipTier={comment.user.membershipTier || 'free'}
+                                membershipStatus={comment.user.membershipStatus || 'inactive'}
+                                isPartnerOrganization={comment.user.is_partner_organization}
                                 style={[
                                 styles.modalCommentUser,
                                 isOwnComment && styles.modalCommentUserOwn

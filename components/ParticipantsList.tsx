@@ -125,7 +125,8 @@ export default function ParticipantsList({
             phone,
             role,
             membership_tier,
-            membership_status
+            membership_status,
+            is_partner_organization
           )
         `)
         .eq('opportunity_id', opportunityId)
@@ -279,6 +280,7 @@ export default function ParticipantsList({
               role={user.role || 'volunteer'}
               membershipTier={user.membership_tier || 'free'}
               membershipStatus={user.membership_status || 'inactive'}
+              isPartnerOrganization={user.is_partner_organization}
             />
             
             <View style={styles.participantDetails}>
@@ -289,6 +291,7 @@ export default function ParticipantsList({
                   role={user.role || 'volunteer'}
                   membershipTier={user.membership_tier || 'free'}
                   membershipStatus={user.membership_status || 'inactive'}
+                  isPartnerOrganization={user.is_partner_organization}
                   style={styles.participantName}
                   badgeSize={16}
                 />

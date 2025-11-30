@@ -13,7 +13,7 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://vibe.volunteers
 
 // Types
 export type OrderType = 'donation' | 'event_registration' | 'membership' | 'other';
-export type SubscriptionType = 'recurring_donation' | 'membership' | 'other';
+export type SubscriptionType = 'recurring_donation' | 'membership' | 'organization_membership' | 'other';
 export type Frequency = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'annually';
 export type PaymentStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled' | 'refunded';
 

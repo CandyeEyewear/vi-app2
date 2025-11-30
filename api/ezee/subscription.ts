@@ -214,6 +214,16 @@ async function cancelSubscription(req: any, res: any) {
         .eq('id', userId);
     }
 
+    if (subscription.subscription_type === 'organization_membership') {
+      await supabase
+        .from('users')
+        .update({ 
+          membership_status: 'cancelled', 
+          is_partner_organization: false 
+        })
+        .eq('id', userId);
+    }
+
   return res.status(200).json({
     success: true,
     message: 'Subscription cancelled successfully'

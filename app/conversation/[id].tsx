@@ -992,6 +992,8 @@ export default function ConversationScreen() {
               name={otherUser.fullName}
               role={otherUser.role || 'volunteer'}
               membershipTier={otherUser.membershipTier || 'free'}
+              membershipStatus={otherUser.membershipStatus || 'inactive'}
+              isPartnerOrganization={otherUser.is_partner_organization}
               style={styles.headerName}
             />
             {otherUserOnline && <Text style={styles.onlineText}>Online</Text>}

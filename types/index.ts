@@ -28,6 +28,16 @@ export interface User {
   account_type?: 'volunteer' | 'organization';
   approval_status?: 'pending' | 'approved' | 'rejected';
   is_partner_organization?: boolean;
+  organization_data?: {
+    organization_name: string;
+    registration_number: string;
+    organization_description: string;
+    website_url?: string;
+    contact_person_name: string;
+    contact_person_role?: string;
+    organization_size: string;
+    industry_focus: string[];
+  };
   // Moderation fields
   isBanned?: boolean;
   bannedUntil?: string;

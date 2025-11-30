@@ -161,6 +161,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         achievements: [],
         createdAt: profileData.created_at,
         updatedAt: profileData.updated_at,
+        account_type: profileData.account_type,
+        approval_status: profileData.approval_status,
+        is_partner_organization: profileData.is_partner_organization,
+        organization_data: profileData.organization_data,
       };
 
       // Cache the user data (5 minutes TTL)
@@ -267,6 +271,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         achievements: [],
         createdAt: profileData.created_at,
         updatedAt: profileData.updated_at,
+        account_type: profileData.account_type,
+        approval_status: profileData.approval_status,
+        is_partner_organization: profileData.is_partner_organization,
+        organization_data: profileData.organization_data,
       };
 
       console.log('[AUTH] 📦 Setting user state...');
@@ -522,6 +530,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         achievements: [],
         createdAt: profileData.created_at,
         updatedAt: profileData.updated_at,
+        account_type: profileData.account_type,
+        approval_status: profileData.approval_status,
+        is_partner_organization: profileData.is_partner_organization,
+        organization_data: profileData.organization_data,
       };
 
       setUser(userData);
