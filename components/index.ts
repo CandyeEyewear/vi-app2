@@ -8,3 +8,8 @@ export type { UserAvatarProps } from './UserAvatar';
 export { default as UserNameWithBadge } from './UserNameWithBadge';
 export type { UserNameWithBadgeProps } from './UserNameWithBadge';
 
+// Export messaging components
+export { default as OnlineStatusDot } from './OnlineStatusDot';
+export { default as TypingIndicator } from './TypingIndicator';
+export { default as MessageStatus } from './MessageStatus';
+
