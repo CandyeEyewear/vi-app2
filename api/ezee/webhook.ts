@@ -223,6 +223,7 @@ async function handleSuccessfulPayment(transaction: any) {
             .from('users')
             .update({ 
               membership_status: 'active',
+              membership_tier: 'premium',
               is_partner_organization: true,  // Golden badge!
             })
             .eq('id', transaction.user_id);
@@ -231,7 +232,8 @@ async function handleSuccessfulPayment(transaction: any) {
           await supabase
             .from('users')
             .update({ 
-              membership_status: 'active', 
+              membership_status: 'active',
+              membership_tier: 'premium',
               is_premium: true 
             })
             .eq('id', transaction.user_id);
@@ -354,6 +356,7 @@ async function handleSuccessfulSubscriptionPayment(subscription: any) {
           .from('users')
           .update({ 
             membership_status: 'active',
+            membership_tier: 'premium',
             is_partner_organization: true,  // Golden badge!
           })
           .eq('id', user_id);
@@ -361,7 +364,11 @@ async function handleSuccessfulSubscriptionPayment(subscription: any) {
         // For individuals: set is_premium = true
         await supabase
           .from('users')
-          .update({ membership_status: 'active', is_premium: true })
+          .update({ 
+            membership_status: 'active',
+            membership_tier: 'premium',
+            is_premium: true 
+          })
           .eq('id', user_id);
       }
       break;

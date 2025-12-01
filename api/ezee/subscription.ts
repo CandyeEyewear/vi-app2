@@ -210,7 +210,11 @@ async function cancelSubscription(req: any, res: any) {
     if (subscription.subscription_type === 'membership') {
       await supabase
         .from('users')
-        .update({ membership_status: 'cancelled', is_premium: false })
+        .update({ 
+          membership_status: 'cancelled',
+          membership_tier: 'free',
+          is_premium: false 
+        })
         .eq('id', userId);
     }
 
@@ -218,7 +222,8 @@ async function cancelSubscription(req: any, res: any) {
       await supabase
         .from('users')
         .update({ 
-          membership_status: 'cancelled', 
+          membership_status: 'cancelled',
+          membership_tier: 'free',
           is_partner_organization: false 
         })
         .eq('id', userId);

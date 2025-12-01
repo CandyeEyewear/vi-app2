@@ -159,6 +159,7 @@ export default function MembershipScreen() {
                 // Demo mode or direct cancellation - update database directly
                 const updateData: any = {
                   membership_status: 'cancelled',
+                  membership_tier: 'free',
                 };
                 
                 if (isOrganization) {
@@ -216,6 +217,8 @@ export default function MembershipScreen() {
                     .from('users')
                     .update({
                       membership_status: 'cancelled',
+                      membership_tier: 'free',
+                      is_premium: false,
                     })
                     .eq('id', user?.id);
 
