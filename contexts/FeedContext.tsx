@@ -194,6 +194,80 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
             }
           }
 
+          // Fetch cause data if post references a cause
+          if (newPostData.cause_id) {
+            console.log('[FEED] 💙 New post with cause, fetching cause data...');
+            const { data: causeData } = await supabase
+              .from('causes')
+              .select('*')
+              .eq('id', newPostData.cause_id)
+              .single();
+
+            if (causeData) {
+              const cause: any = {
+                id: causeData.id,
+                title: causeData.title,
+                description: causeData.description,
+                category: causeData.category,
+                goalAmount: parseFloat(causeData.goal_amount) || 0,
+                amountRaised: parseFloat(causeData.amount_raised) || 0,
+                currency: causeData.currency || 'JMD',
+                donorCount: causeData.donor_count || 0,
+                imageUrl: causeData.image_url,
+                endDate: causeData.end_date,
+                isFeatured: causeData.is_featured,
+                isDonationsPublic: causeData.is_donations_public,
+                status: causeData.status,
+                createdAt: causeData.created_at,
+                updatedAt: causeData.updated_at,
+              };
+              newPost.cause = cause;
+            }
+          }
+
+          // Fetch event data if post references an event
+          if (newPostData.event_id) {
+            console.log('[FEED] 🎉 New post with event, fetching event data...');
+            const { data: eventData } = await supabase
+              .from('events')
+              .select('*')
+              .eq('id', newPostData.event_id)
+              .single();
+
+            if (eventData) {
+              const event: any = {
+                id: eventData.id,
+                title: eventData.title,
+                description: eventData.description,
+                category: eventData.category,
+                location: eventData.location,
+                locationAddress: eventData.location_address,
+                latitude: eventData.latitude,
+                longitude: eventData.longitude,
+                mapLink: eventData.map_link,
+                isVirtual: eventData.is_virtual ?? false,
+                virtualLink: eventData.virtual_link,
+                eventDate: eventData.event_date,
+                startTime: eventData.start_time,
+                endTime: eventData.end_time,
+                timezone: eventData.timezone || 'America/Jamaica',
+                capacity: eventData.capacity,
+                spotsRemaining: eventData.spots_remaining,
+                registrationRequired: eventData.registration_required ?? false,
+                isFree: eventData.is_free ?? true,
+                ticketPrice: eventData.ticket_price ? parseFloat(eventData.ticket_price) : undefined,
+                currency: eventData.currency || 'JMD',
+                imageUrl: eventData.image_url,
+                status: eventData.status,
+                isFeatured: eventData.is_featured ?? false,
+                visibility: eventData.visibility || 'public',
+                createdAt: eventData.created_at,
+                updatedAt: eventData.updated_at,
+              };
+              newPost.event = event;
+            }
+          }
+
           // Check for shared posts and fetch original post
           if (newPostData.shared_post_id) {
             console.log('[FEED] 📎 New shared post, fetching original...');
@@ -836,15 +910,15 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
                 id: causeData.id,
                 title: causeData.title,
                 description: causeData.description,
-                organizationName: causeData.organization_name,
-                organizationVerified: causeData.organization_verified,
                 category: causeData.category,
-                location: causeData.location,
-                latitude: causeData.latitude,
-                longitude: causeData.longitude,
-                goalAmount: causeData.goal_amount,
-                currentAmount: causeData.current_amount,
+                goalAmount: parseFloat(causeData.goal_amount) || 0,
+                amountRaised: parseFloat(causeData.amount_raised) || 0,
+                currency: causeData.currency || 'JMD',
+                donorCount: causeData.donor_count || 0,
                 imageUrl: causeData.image_url,
+                endDate: causeData.end_date,
+                isFeatured: causeData.is_featured,
+                isDonationsPublic: causeData.is_donations_public,
                 status: causeData.status,
                 createdAt: causeData.created_at,
                 updatedAt: causeData.updated_at,
