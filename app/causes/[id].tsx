@@ -18,6 +18,7 @@ import {
   Alert,
   Dimensions,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -486,23 +487,9 @@ export default function CauseDetailScreen() {
             </View>
           )}
 
-          {/* Bottom spacing for fixed button */}
-          <View style={{ height: 100 }} />
         </View>
       </ScrollView>
       </WebContainer>
-
-      {/* Fixed Bottom Button */}
-      <View style={[styles.bottomBar, { backgroundColor: colors.background, paddingBottom: insets.bottom + 16, borderTopColor: colors.border }]}>
-        <TouchableOpacity
-          style={[styles.fixedDonateButton, { backgroundColor: '#38B6FF' }]}
-          onPress={handleDonate}
-          activeOpacity={0.8}
-        >
-          <Heart size={22} color="#FFFFFF" />
-          <Text style={styles.fixedDonateButtonText}>Donate to this Cause</Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }
