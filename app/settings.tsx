@@ -35,6 +35,8 @@ const insets = useSafeAreaInsets();
      opportunities_enabled: true,
      messages_enabled: true,
      opportunity_proposals_enabled: true,
+     causes_enabled: true,
+     events_enabled: true,
    });
 
    const [loading, setLoading] = useState(true);
@@ -97,6 +99,8 @@ const insets = useSafeAreaInsets();
            opportunities_enabled: data.opportunities_enabled,
            messages_enabled: data.messages_enabled,
            opportunity_proposals_enabled: data.opportunity_proposals_enabled,
+           causes_enabled: data.causes_enabled ?? true,
+           events_enabled: data.events_enabled ?? true,
          });
        }
      } catch (error) {
@@ -322,37 +326,69 @@ const handleDeleteAccount = async () => {
        />
      </View>
 
-     <View style={styles.settingRow}>
-       <View style={styles.settingInfo}>
-         <Text style={styles.settingLabel}>Opportunities</Text>
-         <Text style={styles.settingDescription}>
-           Get notified about new volunteer opportunities
-         </Text>
-       </View>
-       <Switch
-         value={notificationSettings.opportunities_enabled}
-         onValueChange={(value) => updateNotificationSetting('opportunities_enabled', value)}
-         trackColor={{ false: Colors.light.border, true: Colors.light.primary }}
-         thumbColor="#FFFFFF"
-         disabled={loading}
-       />
-     </View>
+    <View style={styles.settingRow}>
+      <View style={styles.settingInfo}>
+        <Text style={styles.settingLabel}>Opportunities</Text>
+        <Text style={styles.settingDescription}>
+          Get notified about new volunteer opportunities
+        </Text>
+      </View>
+      <Switch
+        value={notificationSettings.opportunities_enabled}
+        onValueChange={(value) => updateNotificationSetting('opportunities_enabled', value)}
+        trackColor={{ false: Colors.light.border, true: Colors.light.primary }}
+        thumbColor="#FFFFFF"
+        disabled={loading}
+      />
+    </View>
 
-     <View style={styles.settingRow}>
-       <View style={styles.settingInfo}>
-         <Text style={styles.settingLabel}>Messages</Text>
-         <Text style={styles.settingDescription}>
-           Receive notifications for new messages
-         </Text>
-       </View>
-       <Switch
-         value={notificationSettings.messages_enabled}
-         onValueChange={(value) => updateNotificationSetting('messages_enabled', value)}
-         trackColor={{ false: Colors.light.border, true: Colors.light.primary }}
-         thumbColor="#FFFFFF"
-         disabled={loading}
-       />
-     </View>
+    <View style={styles.settingRow}>
+      <View style={styles.settingInfo}>
+        <Text style={styles.settingLabel}>Fundraising Causes</Text>
+        <Text style={styles.settingDescription}>
+          Get notified about new fundraising causes
+        </Text>
+      </View>
+      <Switch
+        value={notificationSettings.causes_enabled}
+        onValueChange={(value) => updateNotificationSetting('causes_enabled', value)}
+        trackColor={{ false: Colors.light.border, true: Colors.light.primary }}
+        thumbColor="#FFFFFF"
+        disabled={loading}
+      />
+    </View>
+
+    <View style={styles.settingRow}>
+      <View style={styles.settingInfo}>
+        <Text style={styles.settingLabel}>Events</Text>
+        <Text style={styles.settingDescription}>
+          Get notified about new community events
+        </Text>
+      </View>
+      <Switch
+        value={notificationSettings.events_enabled}
+        onValueChange={(value) => updateNotificationSetting('events_enabled', value)}
+        trackColor={{ false: Colors.light.border, true: Colors.light.primary }}
+        thumbColor="#FFFFFF"
+        disabled={loading}
+      />
+    </View>
+
+    <View style={styles.settingRow}>
+      <View style={styles.settingInfo}>
+        <Text style={styles.settingLabel}>Messages</Text>
+        <Text style={styles.settingDescription}>
+          Receive notifications for new messages
+        </Text>
+      </View>
+      <Switch
+        value={notificationSettings.messages_enabled}
+        onValueChange={(value) => updateNotificationSetting('messages_enabled', value)}
+        trackColor={{ false: Colors.light.border, true: Colors.light.primary }}
+        thumbColor="#FFFFFF"
+        disabled={loading}
+      />
+    </View>
 
      {isAdmin && (
        <View style={styles.settingRow}>
