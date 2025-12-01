@@ -303,6 +303,7 @@ export async function updateCause(
     minimumDonation: number;
     status: CauseStatus;
     isFeatured: boolean;
+    visibility: 'public' | 'members_only';
   }>
 ): Promise<ApiResponse<Cause>> {
   try {

@@ -129,6 +129,8 @@ BEGIN
     opportunities_enabled,         -- ✅ CORRECT column name
     messages_enabled,              -- ✅ CORRECT column name
     opportunity_proposals_enabled, -- ✅ CORRECT column name
+    causes_enabled,                -- ✅ NEW: Causes notifications
+    events_enabled,                -- ✅ NEW: Events notifications
     created_at,
     updated_at
   )
@@ -139,6 +141,8 @@ BEGIN
     true,  -- Default: enabled
     true,  -- Default: enabled
     true,  -- Default: enabled
+    true,  -- Default: enabled (causes)
+    true,  -- Default: enabled (events)
     NOW(),
     NOW()
   )
