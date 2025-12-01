@@ -51,7 +51,7 @@ const BENEFIT_ICONS: Record<string, any> = {
   'Customized Blue VI T-Shirt': Shirt,
   'Impact Statistics on profile': TrendingUp,
   'Priority support': Zap,
-  'All yearly benefits': Star,
+  'Save J$6,000 per year (50% off)': Star,
 };
 
 interface MembershipData {

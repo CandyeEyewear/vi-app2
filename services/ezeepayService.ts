@@ -114,7 +114,6 @@ export const MEMBERSHIP_PLANS = {
       'Blue verification tick',
       'Official Member designation',
       'Propose volunteer opportunities',
-      'Customized Blue VI T-Shirt',
       'Impact Statistics on profile',
       'Priority support',
     ],
@@ -122,11 +121,11 @@ export const MEMBERSHIP_PLANS = {
   yearly: {
     id: 'premium_yearly',
     name: 'Premium Yearly',
-    price: 12000,
+    price: 6000,
     currency: 'JMD',
     frequency: 'annually' as PaymentFrequency,
-    description: 'VIbe Premium Membership - Yearly',
-    savings: 0, // J$1000 * 12 = J$12,000 (no savings, but could add discount later)
+    description: 'VIbe Premium Membership - Yearly (Includes VI T-Shirt)',
+    savings: 6000, // J$1000 * 12 = J$12,000 - J$6,000 = J$6,000 savings (50% off!)
     benefits: [
       'Blue verification tick',
       'Official Member designation',
@@ -134,7 +133,7 @@ export const MEMBERSHIP_PLANS = {
       'Customized Blue VI T-Shirt',
       'Impact Statistics on profile',
       'Priority support',
-      'All yearly benefits',
+      'Save J$6,000 per year (50% off)',
     ],
   },
 };

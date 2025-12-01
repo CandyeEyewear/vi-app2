@@ -50,13 +50,12 @@ const MEMBERSHIP_PLANS = {
       'Blue verification tick',
       'Official Member designation',
       'Propose volunteer opportunities',
-      'Customized Blue VI T-Shirt',
       'Impact Statistics on profile',
       'Priority support',
     ],
   },
   yearly: {
-    price: 10000, // JMD 10,000/year (saves 2 months)
+    price: 6000, // JMD 6,000/year (50% off - includes shirt!)
     benefits: [
       'Blue verification tick',
       'Official Member designation',
@@ -64,7 +63,7 @@ const MEMBERSHIP_PLANS = {
       'Customized Blue VI T-Shirt',
       'Impact Statistics on profile',
       'Priority support',
-      'Save JMD 2,000 per year',
+      'Save J$6,000 per year (50% off)',
     ],
   },
 };
@@ -77,7 +76,7 @@ const BENEFIT_ICONS: Record<string, any> = {
   'Customized Blue VI T-Shirt': Shirt,
   'Impact Statistics on profile': TrendingUp,
   'Priority support': Zap,
-  'Save JMD 2,000 per year': Star,
+  'Save J$6,000 per year (50% off)': Star,
 };
 
 // ============================================
@@ -311,11 +310,11 @@ export default function SubscribeScreen() {
               <View style={styles.planNameRow}>
                 <Text style={[styles.planName, { color: colors.text }]}>Yearly</Text>
                 <View style={[styles.savingsBadge, { backgroundColor: '#10B981' }]}>
-                  <Text style={styles.savingsText}>SAVE 17%</Text>
+                  <Text style={styles.savingsText}>SAVE 50%</Text>
                 </View>
               </View>
               <Text style={[styles.planDescription, { color: colors.textSecondary }]}>
-                Billed annually (save 2 months)
+                Billed annually (includes VI T-Shirt)
               </Text>
             </View>
             <View style={styles.planPriceContainer}>
