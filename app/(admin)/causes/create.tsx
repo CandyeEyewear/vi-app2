@@ -587,9 +587,17 @@ export default function CreateCauseScreen() {
                 mode="date"
                 display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                 onChange={(event, selectedDate) => {
-                  setShowEndDatePicker(Platform.OS === 'ios');
+                  // Close picker on Android immediately
+                  if (Platform.OS === 'android') {
+                    setShowEndDatePicker(false);
+                  }
+                  
                   if (selectedDate) {
                     setEndDate(selectedDate);
+                    // Auto-close on iOS after selection (better UX)
+                    if (Platform.OS === 'ios') {
+                      setShowEndDatePicker(false);
+                    }
                   } else if (Platform.OS === 'android' && event.type === 'dismissed') {
                     setEndDate(null);
                   }

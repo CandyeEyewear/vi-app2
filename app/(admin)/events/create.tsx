@@ -757,9 +757,14 @@ export default function CreateEventScreen() {
                   mode="date"
                   display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                   onChange={(event, selectedDate) => {
-                    setShowDatePicker(Platform.OS === 'ios');
+                    if (Platform.OS === 'android') {
+                      setShowDatePicker(false);
+                    }
                     if (selectedDate) {
                       setEventDate(selectedDate);
+                      if (Platform.OS === 'ios') {
+                        setShowDatePicker(false);
+                      }
                     }
                   }}
                   minimumDate={new Date()}
@@ -785,9 +790,14 @@ export default function CreateEventScreen() {
                     mode="time"
                     display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                     onChange={(event, selectedTime) => {
-                      setShowStartTimePicker(Platform.OS === 'ios');
+                      if (Platform.OS === 'android') {
+                        setShowStartTimePicker(false);
+                      }
                       if (selectedTime) {
                         setStartTime(selectedTime);
+                        if (Platform.OS === 'ios') {
+                          setShowStartTimePicker(false);
+                        }
                       }
                     }}
                     is24Hour={true}
@@ -812,9 +822,14 @@ export default function CreateEventScreen() {
                     mode="time"
                     display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                     onChange={(event, selectedTime) => {
-                      setShowEndTimePicker(Platform.OS === 'ios');
+                      if (Platform.OS === 'android') {
+                        setShowEndTimePicker(false);
+                      }
                       if (selectedTime) {
                         setEndTime(selectedTime);
+                        if (Platform.OS === 'ios') {
+                          setShowEndTimePicker(false);
+                        }
                       }
                     }}
                     is24Hour={true}
@@ -899,9 +914,14 @@ export default function CreateEventScreen() {
                     mode="date"
                     display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                     onChange={(event, selectedDate) => {
-                      setShowRegistrationDeadlinePicker(Platform.OS === 'ios');
+                      if (Platform.OS === 'android') {
+                        setShowRegistrationDeadlinePicker(false);
+                      }
                       if (selectedDate) {
                         setRegistrationDeadline(selectedDate);
+                        if (Platform.OS === 'ios') {
+                          setShowRegistrationDeadlinePicker(false);
+                        }
                       }
                     }}
                     minimumDate={new Date()}
