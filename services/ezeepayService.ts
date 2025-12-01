@@ -100,16 +100,18 @@ export interface TransactionResult {
 
 // =============================================================================
 // MEMBERSHIP SUBSCRIPTION PLANS
+// Note: Only YEARLY membership is available for individual volunteers
 // =============================================================================
 
 export const MEMBERSHIP_PLANS = {
+  // Monthly plan kept for backward compatibility but not offered in UI
   monthly: {
     id: 'premium_monthly',
     name: 'Premium Monthly',
     price: 1000,
     currency: 'JMD',
     frequency: 'monthly' as PaymentFrequency,
-    description: 'VIbe Premium Membership - Monthly',
+    description: 'VIbe Premium Membership - Monthly (Not currently offered)',
     benefits: [
       'Blue verification tick',
       'Official Member designation',
@@ -118,14 +120,15 @@ export const MEMBERSHIP_PLANS = {
       'Priority support',
     ],
   },
+  // ACTIVE PLAN: Yearly membership with VI T-Shirt included
   yearly: {
     id: 'premium_yearly',
-    name: 'Premium Yearly',
-    price: 6000,
+    name: 'Annual Membership',
+    price: 6000, // J$6,000/year (Includes VI T-Shirt)
     currency: 'JMD',
     frequency: 'annually' as PaymentFrequency,
-    description: 'VIbe Premium Membership - Yearly (Includes VI T-Shirt)',
-    savings: 6000, // J$1000 * 12 = J$12,000 - J$6,000 = J$6,000 savings (50% off!)
+    description: 'VIbe Premium Membership - Annual Plan (Includes VI T-Shirt)',
+    savings: 6000, // Would be J$12,000 at monthly rate - now J$6,000
     benefits: [
       'Blue verification tick',
       'Official Member designation',
@@ -133,7 +136,7 @@ export const MEMBERSHIP_PLANS = {
       'Customized Blue VI T-Shirt',
       'Impact Statistics on profile',
       'Priority support',
-      'Save J$6,000 per year (50% off)',
+      'Auto-renews annually',
     ],
   },
 };

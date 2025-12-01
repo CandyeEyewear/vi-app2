@@ -40,9 +40,7 @@ import { processSubscription, formatPaymentAmount, type Frequency } from '../../
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
 
-type PlanType = 'monthly' | 'yearly';
-
-// Define membership plans
+// Define membership plans (Yearly only - no monthly option)
 const MEMBERSHIP_PLANS = {
   monthly: {
     price: 1000, // JMD 1,000/month
@@ -55,7 +53,7 @@ const MEMBERSHIP_PLANS = {
     ],
   },
   yearly: {
-    price: 6000, // JMD 6,000/year (50% off - includes shirt!)
+    price: 6000, // JMD 6,000/year (includes shirt!)
     benefits: [
       'Blue verification tick',
       'Official Member designation',
@@ -63,7 +61,7 @@ const MEMBERSHIP_PLANS = {
       'Customized Blue VI T-Shirt',
       'Impact Statistics on profile',
       'Priority support',
-      'Save J$6,000 per year (50% off)',
+      'Auto-renews annually',
     ],
   },
 };
@@ -76,7 +74,7 @@ const BENEFIT_ICONS: Record<string, any> = {
   'Customized Blue VI T-Shirt': Shirt,
   'Impact Statistics on profile': TrendingUp,
   'Priority support': Zap,
-  'Save J$6,000 per year (50% off)': Star,
+  'Auto-renews annually': RefreshCw,
 };
 
 // ============================================
@@ -114,11 +112,10 @@ export default function SubscribeScreen() {
   const { user } = useAuth();
 
   // State
-  const [selectedPlan, setSelectedPlan] = useState<PlanType>('yearly'); // Default to yearly (best value)
   const [processing, setProcessing] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
 
-  const plan = MEMBERSHIP_PLANS[selectedPlan];
+  const plan = MEMBERSHIP_PLANS.yearly; // Only yearly plan available
 
   // Handle subscription
   const handleSubscribe = useCallback(async () => {
@@ -144,8 +141,8 @@ export default function SubscribeScreen() {
     setProcessing(true);
 
     try {
-      // Map plan to frequency
-      const frequency: Frequency = selectedPlan === 'monthly' ? 'monthly' : 'annually';
+      // Yearly plan only
+      const frequency: Frequency = 'annually';
 
       console.log('Calling processSubscription...');
       // Process subscription payment through eZeePayments
@@ -156,7 +153,7 @@ export default function SubscribeScreen() {
         userId: user.id,
         customerEmail: user.email || '',
         customerName: user.fullName || 'VIbe Member',
-        description: `VIbe Premium Membership - ${selectedPlan === 'monthly' ? 'Monthly' : 'Yearly'} Plan`,
+        description: 'VIbe Premium Membership - Annual Plan (Includes VI T-Shirt)',
         platform: 'app',
       });
 
@@ -183,7 +180,7 @@ export default function SubscribeScreen() {
     } finally {
       setProcessing(false);
     }
-  }, [user, selectedPlan, agreedToTerms, plan, router]);
+  }, [user, agreedToTerms, plan, router]);
 
   // Not logged in
   if (!user) {
@@ -242,88 +239,42 @@ export default function SubscribeScreen() {
           </Text>
         </View>
 
-        {/* Plan Selection */}
+        {/* Membership Plan */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Choose Your Plan
+            Annual Membership
           </Text>
 
-          {/* Monthly Plan */}
-          <TouchableOpacity
+          {/* Yearly Plan Card - Display Only */}
+          <View
             style={[
               styles.planCard,
               { 
                 backgroundColor: colors.card,
-                borderColor: selectedPlan === 'monthly' ? '#38B6FF' : colors.border,
-                borderWidth: selectedPlan === 'monthly' ? 2 : 1,
+                borderColor: '#38B6FF',
+                borderWidth: 2,
               }
             ]}
-            onPress={() => setSelectedPlan('monthly')}
           >
-            <View style={styles.planRadio}>
-              <View style={[
-                styles.radioOuter,
-                { borderColor: selectedPlan === 'monthly' ? '#38B6FF' : colors.border }
-              ]}>
-                {selectedPlan === 'monthly' && (
-                  <View style={[styles.radioInner, { backgroundColor: '#38B6FF' }]} />
-                )}
-              </View>
-            </View>
-            <View style={styles.planInfo}>
-              <Text style={[styles.planName, { color: colors.text }]}>Monthly</Text>
-              <Text style={[styles.planDescription, { color: colors.textSecondary }]}>
-                Billed every month
-              </Text>
-            </View>
-            <View style={styles.planPriceContainer}>
-              <Text style={[styles.planPrice, { color: '#38B6FF' }]}>
-                {formatPaymentAmount(MEMBERSHIP_PLANS.monthly.price)}
-              </Text>
-              <Text style={[styles.planPeriod, { color: colors.textSecondary }]}>/mo</Text>
-            </View>
-          </TouchableOpacity>
-
-          {/* Yearly Plan */}
-          <TouchableOpacity
-            style={[
-              styles.planCard,
-              { 
-                backgroundColor: colors.card,
-                borderColor: selectedPlan === 'yearly' ? '#38B6FF' : colors.border,
-                borderWidth: selectedPlan === 'yearly' ? 2 : 1,
-              }
-            ]}
-            onPress={() => setSelectedPlan('yearly')}
-          >
-            <View style={styles.planRadio}>
-              <View style={[
-                styles.radioOuter,
-                { borderColor: selectedPlan === 'yearly' ? '#38B6FF' : colors.border }
-              ]}>
-                {selectedPlan === 'yearly' && (
-                  <View style={[styles.radioInner, { backgroundColor: '#38B6FF' }]} />
-                )}
-              </View>
-            </View>
             <View style={styles.planInfo}>
               <View style={styles.planNameRow}>
-                <Text style={[styles.planName, { color: colors.text }]}>Yearly</Text>
+                <Text style={[styles.planName, { color: colors.text }]}>Annual Membership</Text>
                 <View style={[styles.savingsBadge, { backgroundColor: '#10B981' }]}>
-                  <Text style={styles.savingsText}>SAVE 50%</Text>
+                  <Shirt size={12} color="#FFFFFF" />
+                  <Text style={styles.savingsText}>INCLUDES SHIRT</Text>
                 </View>
               </View>
               <Text style={[styles.planDescription, { color: colors.textSecondary }]}>
-                Billed annually (includes VI T-Shirt)
+                Billed once per year • Includes VI T-Shirt
               </Text>
             </View>
             <View style={styles.planPriceContainer}>
               <Text style={[styles.planPrice, { color: '#38B6FF' }]}>
                 {formatPaymentAmount(MEMBERSHIP_PLANS.yearly.price)}
               </Text>
-              <Text style={[styles.planPeriod, { color: colors.textSecondary }]}>/yr</Text>
+              <Text style={[styles.planPeriod, { color: colors.textSecondary }]}>/year</Text>
             </View>
-          </TouchableOpacity>
+          </View>
         </View>
 
         {/* Benefits */}
@@ -358,10 +309,18 @@ export default function SubscribeScreen() {
           <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.summaryRow}>
               <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
-                {selectedPlan === 'monthly' ? 'Monthly' : 'Yearly'} Plan
+                Annual Membership
               </Text>
               <Text style={[styles.summaryValue, { color: colors.text }]}>
                 {formatPaymentAmount(plan.price)}
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
+                VI T-Shirt
+              </Text>
+              <Text style={[styles.summaryValue, { color: '#10B981' }]}>
+                Included
               </Text>
             </View>
             <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
@@ -372,7 +331,7 @@ export default function SubscribeScreen() {
               </Text>
             </View>
             <Text style={[styles.billingNote, { color: colors.textSecondary }]}>
-              Billed {selectedPlan === 'monthly' ? 'monthly' : 'annually'}
+              Billed annually • Auto-renews each year
             </Text>
           </View>
         </View>
@@ -424,7 +383,7 @@ export default function SubscribeScreen() {
             <>
               <CreditCard size={22} color="#FFFFFF" />
               <Text style={styles.subscribeButtonText}>
-                Subscribe for {formatPaymentAmount(plan.price)}/{selectedPlan === 'monthly' ? 'mo' : 'yr'}
+                Subscribe for {formatPaymentAmount(plan.price)}/year
               </Text>
             </>
           )}
@@ -570,6 +529,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   savingsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 8,

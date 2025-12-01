@@ -51,7 +51,7 @@ const BENEFIT_ICONS: Record<string, any> = {
   'Customized Blue VI T-Shirt': Shirt,
   'Impact Statistics on profile': TrendingUp,
   'Priority support': Zap,
-  'Save J$6,000 per year (50% off)': Star,
+  'Auto-renews annually': RefreshCw,
 };
 
 interface MembershipData {
@@ -444,42 +444,29 @@ export default function MembershipScreen() {
         {!isPremium && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Choose Your Plan
+              Membership Plan
             </Text>
 
-            {/* Monthly Plan */}
+            {/* Annual Membership - Only Option */}
             <TouchableOpacity
-              style={[styles.planCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+              style={[styles.planCard, { backgroundColor: colors.card, borderColor: '#38B6FF', borderWidth: 2 }]}
               onPress={handleSubscribe}
             >
               <View style={styles.planHeader}>
-                <View>
-                  <Text style={[styles.planName, { color: colors.text }]}>Monthly</Text>
-                  <Text style={[styles.planPrice, { color: '#38B6FF' }]}>
-                    {formatCurrency(MEMBERSHIP_PLANS.monthly.price)}
-                    <Text style={[styles.planPeriod, { color: colors.textSecondary }]}>/month</Text>
-                  </Text>
-                </View>
-                <ChevronRight size={24} color={colors.textSecondary} />
-              </View>
-            </TouchableOpacity>
-
-            {/* Yearly Plan */}
-            <TouchableOpacity
-              style={[styles.planCard, { backgroundColor: colors.card, borderColor: '#38B6FF' }]}
-              onPress={handleSubscribe}
-            >
-              <View style={styles.planHeader}>
-                <View>
+                <View style={{ flex: 1 }}>
                   <View style={styles.planNameRow}>
-                    <Text style={[styles.planName, { color: colors.text }]}>Yearly</Text>
-                    {/* <View style={[styles.savingsBadge, { backgroundColor: '#4CAF50' }]}>
-                      <Text style={styles.savingsText}>Save 17%</Text>
-                    </View> */}
+                    <Text style={[styles.planName, { color: colors.text }]}>Annual Membership</Text>
+                    <View style={[styles.savingsBadge, { backgroundColor: '#10B981' }]}>
+                      <Shirt size={12} color="#FFFFFF" />
+                      <Text style={styles.savingsText}>SHIRT INCLUDED</Text>
+                    </View>
                   </View>
                   <Text style={[styles.planPrice, { color: '#38B6FF' }]}>
                     {formatCurrency(MEMBERSHIP_PLANS.yearly.price)}
                     <Text style={[styles.planPeriod, { color: colors.textSecondary }]}>/year</Text>
+                  </Text>
+                  <Text style={[styles.planDescription, { color: colors.textSecondary, fontSize: 13, marginTop: 4 }]}>
+                    Billed annually • Auto-renews each year
                   </Text>
                 </View>
                 <ChevronRight size={24} color={colors.textSecondary} />
@@ -712,6 +699,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 4,
   },
+  planDescription: {
+    fontSize: 13,
+  },
   planPrice: {
     fontSize: 24,
     fontWeight: '700',
@@ -721,6 +711,9 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   savingsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
