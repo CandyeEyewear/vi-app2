@@ -216,28 +216,11 @@ async function handleSuccessfulPayment(transaction: any) {
           .select('account_type')
           .eq('id', transaction.user_id)
           .single();
-        
-        if (userData?.account_type === 'organization') {
-          // For organizations: set is_partner_organization = true
-          await supabase
-            .from('users')
-            .update({ 
-              membership_status: 'active',
-              membership_tier: 'premium',
-              is_partner_organization: true,  // Golden badge!
-            })
-            .eq('id', transaction.user_id);
-        } else {
-          // For individuals: set is_premium = true
-          await supabase
-            .from('users')
-            .update({ 
-              membership_status: 'active',
-              membership_tier: 'premium',
-              is_premium: true 
-            })
-            .eq('id', transaction.user_id);
-        }
+
+        const expiresAt = await resolveMembershipExpiryFromTransaction(transaction);
+        await updateUserMembership(transaction.user_id, userData?.account_type, {
+          expiresAt,
+        });
       }
       break;
 
@@ -349,28 +332,11 @@ async function handleSuccessfulSubscriptionPayment(subscription: any) {
         .select('account_type')
         .eq('id', user_id)
         .single();
-      
-      if (userData?.account_type === 'organization') {
-        // For organizations: set is_partner_organization = true
-        await supabase
-          .from('users')
-          .update({ 
-            membership_status: 'active',
-            membership_tier: 'premium',
-            is_partner_organization: true,  // Golden badge!
-          })
-          .eq('id', user_id);
-      } else {
-        // For individuals: set is_premium = true
-        await supabase
-          .from('users')
-          .update({ 
-            membership_status: 'active',
-            membership_tier: 'premium',
-            is_premium: true 
-          })
-          .eq('id', user_id);
-      }
+
+      const expiresAt = subscription.next_billing_date || calculateNextBillingDate(subscription.frequency);
+      await updateUserMembership(user_id, userData?.account_type, {
+        expiresAt,
+      });
       break;
   }
 
@@ -387,4 +353,51 @@ function calculateNextBillingDate(frequency: string): string {
     case 'annually': now.setFullYear(now.getFullYear() + 1); break;
   }
   return now.toISOString().split('T')[0];
+}
+
+async function resolveMembershipExpiryFromTransaction(transaction: any): Promise<string | null> {
+  if (transaction.metadata?.payment_subscriptions_id) {
+    const { data } = await supabase
+      .from('payment_subscriptions')
+      .select('next_billing_date')
+      .eq('id', transaction.metadata.payment_subscriptions_id)
+      .single();
+
+    if (data?.next_billing_date) {
+      return data.next_billing_date;
+    }
+  }
+
+  if (transaction.metadata?.frequency) {
+    return calculateNextBillingDate(transaction.metadata.frequency);
+  }
+
+  return null;
+}
+
+async function updateUserMembership(
+  userId: string,
+  accountType: string | null | undefined,
+  options: { expiresAt?: string | null } = {}
+) {
+  const updateData: Record<string, any> = {
+    membership_status: 'active',
+    subscription_start_date: new Date().toISOString(),
+  };
+
+  if (accountType === 'organization') {
+    updateData.is_partner_organization = true;
+  } else {
+    updateData.is_premium = true;
+    updateData.membership_tier = 'premium';
+  }
+
+  if (options.expiresAt) {
+    updateData.membership_expires_at = options.expiresAt;
+  }
+
+  await supabase
+    .from('users')
+    .update(updateData)
+    .eq('id', userId);
 }

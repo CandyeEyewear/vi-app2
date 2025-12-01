@@ -384,7 +384,7 @@ export default function CreateCauseScreen() {
                 setDescription('');
                 setCategory('community');
                 setGoalAmount('');
-                setEndDate('');
+                setEndDate(null);
                 setImageUri(null);
                 setImageUrl('');
                 setIsDonationsPublic(true);
@@ -404,7 +404,7 @@ export default function CreateCauseScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [validateForm, user, title, description, category, goalAmount, endDate, imageUri, imageUrl, isDonationsPublic, allowRecurring, minimumDonation, router, uploadImageToStorage]);
+  }, [validateForm, user, title, description, category, goalAmount, endDate, imageUri, imageUrl, isDonationsPublic, allowRecurring, minimumDonation, isFeatured, visibility, router, uploadImageToStorage]);
 
   // Access check
   if (!isAdmin) {
@@ -587,9 +587,17 @@ export default function CreateCauseScreen() {
                 mode="date"
                 display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                 onChange={(event, selectedDate) => {
-                  setShowEndDatePicker(Platform.OS === 'ios');
+                  // Close picker on Android immediately
+                  if (Platform.OS === 'android') {
+                    setShowEndDatePicker(false);
+                  }
+                  
                   if (selectedDate) {
                     setEndDate(selectedDate);
+                    // Auto-close on iOS after selection (better UX)
+                    if (Platform.OS === 'ios') {
+                      setShowEndDatePicker(false);
+                    }
                   } else if (Platform.OS === 'android' && event.type === 'dismissed') {
                     setEndDate(null);
                   }
