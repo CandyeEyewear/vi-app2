@@ -384,7 +384,7 @@ export default function CreateCauseScreen() {
                 setDescription('');
                 setCategory('community');
                 setGoalAmount('');
-                setEndDate('');
+                setEndDate(null);
                 setImageUri(null);
                 setImageUrl('');
                 setIsDonationsPublic(true);
@@ -404,7 +404,7 @@ export default function CreateCauseScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [validateForm, user, title, description, category, goalAmount, endDate, imageUri, imageUrl, isDonationsPublic, allowRecurring, minimumDonation, router, uploadImageToStorage]);
+  }, [validateForm, user, title, description, category, goalAmount, endDate, imageUri, imageUrl, isDonationsPublic, allowRecurring, minimumDonation, isFeatured, visibility, router, uploadImageToStorage]);
 
   // Access check
   if (!isAdmin) {
