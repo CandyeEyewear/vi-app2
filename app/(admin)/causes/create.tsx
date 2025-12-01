@@ -384,7 +384,7 @@ export default function CreateCauseScreen() {
                 setDescription('');
                 setCategory('community');
                 setGoalAmount('');
-                setEndDate('');
+                setEndDate(null);  // FIX: Was '' (empty string), should be null
                 setImageUri(null);
                 setImageUrl('');
                 setIsDonationsPublic(true);
@@ -398,9 +398,21 @@ export default function CreateCauseScreen() {
       } else {
         throw new Error(response.error || 'Failed to create cause');
       }
-    } catch (error) {
-      console.error('Error creating cause:', error);
-      Alert.alert('Error', 'Failed to create cause. Please try again.');
+    } catch (error: any) {
+      console.error('❌ Error creating cause:', error);
+      console.error('Error details:', {
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+        hint: error?.hint,
+      });
+      
+      const errorMessage = error?.message || 'Failed to create cause';
+      Alert.alert(
+        'Error Creating Cause',
+        `${errorMessage}. Please try again or contact support if the problem persists.`,
+        [{ text: 'OK' }]
+      );
     } finally {
       setSubmitting(false);
     }
@@ -587,11 +599,19 @@ export default function CreateCauseScreen() {
                 mode="date"
                 display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                 onChange={(event, selectedDate) => {
-                  setShowEndDatePicker(Platform.OS === 'ios');
-                  if (selectedDate) {
-                    setEndDate(selectedDate);
-                  } else if (Platform.OS === 'android' && event.type === 'dismissed') {
-                    setEndDate(null);
+                  // On Android, dismiss is automatic - just close picker
+                  if (Platform.OS === 'android') {
+                    setShowEndDatePicker(false);
+                    // Only set date if user didn't cancel
+                    if (event.type === 'set' && selectedDate) {
+                      setEndDate(selectedDate);
+                    }
+                  } else {
+                    // On iOS, keep picker open until user confirms
+                    if (selectedDate) {
+                      setEndDate(selectedDate);
+                      setShowEndDatePicker(false);  // Close after selection on iOS
+                    }
                   }
                 }}
                 minimumDate={new Date()}

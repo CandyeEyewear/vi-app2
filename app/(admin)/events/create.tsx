@@ -450,9 +450,21 @@ export default function CreateEventScreen() {
       } else {
         Alert.alert('Error', response.error || 'Failed to create event');
       }
-    } catch (error) {
-      console.error('Create event error:', error);
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+    } catch (error: any) {
+      console.error('❌ Error creating event:', error);
+      console.error('Error details:', {
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+        hint: error?.hint,
+      });
+      
+      const errorMessage = error?.message || 'Failed to create event';
+      Alert.alert(
+        'Error Creating Event',
+        `${errorMessage}. Please try again or contact support if the problem persists.`,
+        [{ text: 'OK' }]
+      );
     } finally {
       setSubmitting(false);
     }
@@ -757,9 +769,16 @@ export default function CreateEventScreen() {
                   mode="date"
                   display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                   onChange={(event, selectedDate) => {
-                    setShowDatePicker(Platform.OS === 'ios');
-                    if (selectedDate) {
-                      setEventDate(selectedDate);
+                    if (Platform.OS === 'android') {
+                      setShowDatePicker(false);
+                      if (event.type === 'set' && selectedDate) {
+                        setEventDate(selectedDate);
+                      }
+                    } else {
+                      if (selectedDate) {
+                        setEventDate(selectedDate);
+                        setShowDatePicker(false);
+                      }
                     }
                   }}
                   minimumDate={new Date()}
@@ -785,9 +804,16 @@ export default function CreateEventScreen() {
                     mode="time"
                     display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                     onChange={(event, selectedTime) => {
-                      setShowStartTimePicker(Platform.OS === 'ios');
-                      if (selectedTime) {
-                        setStartTime(selectedTime);
+                      if (Platform.OS === 'android') {
+                        setShowStartTimePicker(false);
+                        if (event.type === 'set' && selectedTime) {
+                          setStartTime(selectedTime);
+                        }
+                      } else {
+                        if (selectedTime) {
+                          setStartTime(selectedTime);
+                          setShowStartTimePicker(false);
+                        }
                       }
                     }}
                     is24Hour={true}
@@ -812,9 +838,16 @@ export default function CreateEventScreen() {
                     mode="time"
                     display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                     onChange={(event, selectedTime) => {
-                      setShowEndTimePicker(Platform.OS === 'ios');
-                      if (selectedTime) {
-                        setEndTime(selectedTime);
+                      if (Platform.OS === 'android') {
+                        setShowEndTimePicker(false);
+                        if (event.type === 'set' && selectedTime) {
+                          setEndTime(selectedTime);
+                        }
+                      } else {
+                        if (selectedTime) {
+                          setEndTime(selectedTime);
+                          setShowEndTimePicker(false);
+                        }
                       }
                     }}
                     is24Hour={true}
@@ -899,9 +932,16 @@ export default function CreateEventScreen() {
                     mode="date"
                     display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                     onChange={(event, selectedDate) => {
-                      setShowRegistrationDeadlinePicker(Platform.OS === 'ios');
-                      if (selectedDate) {
-                        setRegistrationDeadline(selectedDate);
+                      if (Platform.OS === 'android') {
+                        setShowRegistrationDeadlinePicker(false);
+                        if (event.type === 'set' && selectedDate) {
+                          setRegistrationDeadline(selectedDate);
+                        }
+                      } else {
+                        if (selectedDate) {
+                          setRegistrationDeadline(selectedDate);
+                          setShowRegistrationDeadlinePicker(false);
+                        }
                       }
                     }}
                     minimumDate={new Date()}
