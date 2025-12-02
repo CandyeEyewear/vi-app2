@@ -559,41 +559,70 @@ export default function EditCauseScreen() {
           {/* End Date */}
           <View style={styles.section}>
             <Text style={[styles.label, { color: colors.text }]}>End Date (Optional)</Text>
-            <TouchableOpacity
-              style={[
-                styles.inputContainer, 
-                { backgroundColor: colors.card, borderColor: errors.endDate ? colors.error : colors.border }
-              ]}
-              onPress={() => setShowEndDatePicker(true)}
-            >
-              <Calendar size={20} color={colors.textSecondary} />
-              <Text style={[styles.input, { color: colors.text }]}>
-                {endDate ? dateToString(endDate) : 'Not set (optional)'}
-              </Text>
-            </TouchableOpacity>
-            {showEndDatePicker && (
-              <DateTimePicker
-                value={endDate || new Date()}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={(event, selectedDate) => {
-                  // Close picker on Android immediately
-                  if (Platform.OS === 'android') {
-                    setShowEndDatePicker(false);
-                  }
-                  
-                  if (selectedDate) {
-                    setEndDate(selectedDate);
-                    // Auto-close on iOS after selection (better UX)
-                    if (Platform.OS === 'ios') {
-                      setShowEndDatePicker(false);
+            {Platform.OS === 'web' ? (
+              <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: errors.endDate ? colors.error : colors.border }]}>
+                <Calendar size={20} color={colors.textSecondary} />
+                <input
+                  type="date"
+                  value={endDate ? dateToString(endDate) : ''}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setEndDate(new Date(e.target.value));
+                    } else {
+                      setEndDate(null);
                     }
-                  } else if (Platform.OS === 'android' && event.type === 'dismissed') {
-                    setEndDate(null);
-                  }
-                }}
-                minimumDate={new Date()}
-              />
+                  }}
+                  min={dateToString(new Date())}
+                  style={{
+                    flex: 1,
+                    fontSize: 16,
+                    paddingVertical: 14,
+                    border: 'none',
+                    outline: 'none',
+                    backgroundColor: 'transparent',
+                    color: colors.text,
+                  }}
+                />
+              </View>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={[
+                    styles.inputContainer, 
+                    { backgroundColor: colors.card, borderColor: errors.endDate ? colors.error : colors.border }
+                  ]}
+                  onPress={() => setShowEndDatePicker(true)}
+                >
+                  <Calendar size={20} color={colors.textSecondary} />
+                  <Text style={[styles.input, { color: colors.text }]}>
+                    {endDate ? dateToString(endDate) : 'Not set (optional)'}
+                  </Text>
+                </TouchableOpacity>
+                {showEndDatePicker && (
+                  <DateTimePicker
+                    value={endDate || new Date()}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={(event, selectedDate) => {
+                      // Close picker on Android immediately
+                      if (Platform.OS === 'android') {
+                        setShowEndDatePicker(false);
+                      }
+                      
+                      if (selectedDate) {
+                        setEndDate(selectedDate);
+                        // Auto-close on iOS after selection (better UX)
+                        if (Platform.OS === 'ios') {
+                          setShowEndDatePicker(false);
+                        }
+                      } else if (Platform.OS === 'android' && event.type === 'dismissed') {
+                        setEndDate(null);
+                      }
+                    }}
+                    minimumDate={new Date()}
+                  />
+                )}
+              </>
             )}
             {errors.endDate && (
               <Text style={[styles.errorMessage, { color: colors.error }]}>{errors.endDate}</Text>
