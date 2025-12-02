@@ -13,7 +13,6 @@ import {
   TouchableOpacity,
   TextInput,
   useColorScheme,
-  Alert,
   Dimensions,
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -26,6 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import CrossPlatformDateTimePicker from '../../../../components/CrossPlatformDateTimePicker';
+import CustomAlert from '../../../../components/CustomAlert';
 import {
   ArrowLeft,
   Heart,
@@ -108,6 +108,25 @@ export default function EditCauseScreen() {
   
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Alert state
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({
+    type: 'info' as 'success' | 'error' | 'warning' | 'info',
+    title: '',
+    message: '',
+    onConfirm: undefined as (() => void) | undefined,
+  });
+
+  const showAlert = (
+    type: 'success' | 'error' | 'warning' | 'info',
+    title: string,
+    message: string,
+    onConfirm?: () => void
+  ) => {
+    setAlertConfig({ type, title, message, onConfirm });
+    setAlertVisible(true);
+  };
+
   // Helper function for date conversion
   const dateToString = (date: Date): string => {
     const year = date.getFullYear();
@@ -146,7 +165,7 @@ export default function EditCauseScreen() {
         }
       } catch (error) {
         console.error('Error fetching cause:', error);
-        Alert.alert('Error', 'Failed to load cause details');
+        showAlert('error', 'Error', 'Failed to load cause details');
         router.back();
       } finally {
         setLoading(false);
@@ -165,7 +184,7 @@ export default function EditCauseScreen() {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'We need access to your photos to upload an image.');
+        showAlert('warning', 'Permission Denied', 'We need access to your photos to upload an image.');
         return;
       }
 
@@ -181,7 +200,7 @@ export default function EditCauseScreen() {
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      showAlert('error', 'Error', 'Failed to pick image. Please try again.');
     }
   }, []);
 
@@ -234,7 +253,7 @@ export default function EditCauseScreen() {
       return urlData.publicUrl;
     } catch (error) {
       console.error('Error uploading image:', error);
-      Alert.alert('Upload Error', 'Failed to upload image. Please try again.');
+      showAlert('error', 'Upload Error', 'Failed to upload image. Please try again.');
       return null;
     } finally {
       setUploadingImage(false);
@@ -288,7 +307,7 @@ export default function EditCauseScreen() {
   // Handle form submission
   const handleSubmit = useCallback(async () => {
     if (!validateForm() || !id) {
-      Alert.alert('Validation Error', 'Please fix the errors in the form');
+      showAlert('warning', 'Validation Error', 'Please fix the errors in the form');
       return;
     }
 
@@ -302,7 +321,7 @@ export default function EditCauseScreen() {
         if (uploadedUrl) {
           finalImageUrl = uploadedUrl;
         } else {
-          Alert.alert('Error', 'Failed to upload image. Please try again.');
+          showAlert('error', 'Error', 'Failed to upload image. Please try again.');
           setSubmitting(false);
           return;
         }
@@ -329,14 +348,15 @@ export default function EditCauseScreen() {
 
       if (error) throw error;
 
-      Alert.alert(
+      showAlert(
+        'success',
         'Success! ✅',
         'Cause has been updated successfully.',
-        [{ text: 'OK', onPress: () => router.back() }]
+        () => router.back()
       );
     } catch (error) {
       console.error('Error updating cause:', error);
-      Alert.alert('Error', 'Failed to update cause. Please try again.');
+      showAlert('error', 'Error', 'Failed to update cause. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -745,6 +765,17 @@ export default function EditCauseScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Custom Alert */}
+      <CustomAlert
+        visible={alertVisible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        onClose={() => setAlertVisible(false)}
+        onConfirm={alertConfig.onConfirm}
+        showCancel={!!alertConfig.onConfirm}
+      />
     </View>
   );
 }

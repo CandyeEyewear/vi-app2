@@ -13,7 +13,6 @@ import {
   TouchableOpacity,
   TextInput,
   useColorScheme,
-  Alert,
   Dimensions,
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -26,6 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import CrossPlatformDateTimePicker from '../../../../components/CrossPlatformDateTimePicker';
+import CustomAlert from '../../../../components/CustomAlert';
 import { geocodeLocation, GeocodeResult } from '../../../../services/geocoding';
 import {
   ArrowLeft,
@@ -162,6 +162,25 @@ export default function EditEventScreen() {
   const [contactEmail, setContactEmail] = useState('');
   const [contactPhone, setContactPhone] = useState('');
 
+  // Alert state
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({
+    type: 'info' as 'success' | 'error' | 'warning' | 'info',
+    title: '',
+    message: '',
+    onConfirm: undefined as (() => void) | undefined,
+  });
+
+  const showAlert = (
+    type: 'success' | 'error' | 'warning' | 'info',
+    title: string,
+    message: string,
+    onConfirm?: () => void
+  ) => {
+    setAlertConfig({ type, title, message, onConfirm });
+    setAlertVisible(true);
+  };
+
   // Load event data
   useEffect(() => {
     async function loadEvent() {
@@ -207,7 +226,7 @@ export default function EditEventScreen() {
           setContactEmail(event.contactEmail || '');
           setContactPhone(event.contactPhone || '');
         } else {
-          Alert.alert('Error', 'Failed to load event');
+          showAlert('error', 'Error', 'Failed to load event');
           router.back();
         }
       } catch (error) {
@@ -226,7 +245,7 @@ export default function EditEventScreen() {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'We need access to your photos to upload an image.');
+        showAlert('warning', 'Permission Denied', 'We need access to your photos to upload an image.');
         return;
       }
 
@@ -242,7 +261,7 @@ export default function EditEventScreen() {
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      showAlert('error', 'Error', 'Failed to pick image. Please try again.');
     }
   }, []);
 
@@ -295,7 +314,7 @@ export default function EditEventScreen() {
       return urlData.publicUrl;
     } catch (error) {
       console.error('Error uploading image:', error);
-      Alert.alert('Error', 'Failed to upload image. Please try again.');
+      showAlert('error', 'Error', 'Failed to upload image. Please try again.');
       return null;
     } finally {
       setUploadingImage(false);
@@ -330,39 +349,39 @@ export default function EditEventScreen() {
   // Validate form
   const validateForm = useCallback((): boolean => {
     if (!title.trim()) {
-      Alert.alert('Required', 'Please enter an event title');
+      showAlert('warning', 'Required', 'Please enter an event title');
       return false;
     }
     if (!description.trim()) {
-      Alert.alert('Required', 'Please enter a description');
+      showAlert('warning', 'Required', 'Please enter a description');
       return false;
     }
     if (!isVirtual && !location.trim()) {
-      Alert.alert('Required', 'Please enter a location');
+      showAlert('warning', 'Required', 'Please enter a location');
       return false;
     }
     if (isVirtual && !virtualLink.trim()) {
-      Alert.alert('Required', 'Please enter a virtual meeting link');
+      showAlert('warning', 'Required', 'Please enter a virtual meeting link');
       return false;
     }
     if (!eventDate) {
-      Alert.alert('Required', 'Please enter the event date');
+      showAlert('warning', 'Required', 'Please enter the event date');
       return false;
     }
     if (!startTime) {
-      Alert.alert('Required', 'Please enter the start time');
+      showAlert('warning', 'Required', 'Please enter the start time');
       return false;
     }
     if (hasCapacity && (!capacity || parseInt(capacity) <= 0)) {
-      Alert.alert('Invalid', 'Please enter a valid capacity');
+      showAlert('warning', 'Invalid', 'Please enter a valid capacity');
       return false;
     }
     if (!isFree && (!ticketPrice || parseFloat(ticketPrice) <= 0)) {
-      Alert.alert('Invalid', 'Please enter a valid ticket price');
+      showAlert('warning', 'Invalid', 'Please enter a valid ticket price');
       return false;
     }
     if (!isFree && !paymentLink.trim()) {
-      Alert.alert('Required', 'Please enter a payment link for paid events');
+      showAlert('warning', 'Required', 'Please enter a payment link for paid events');
       return false;
     }
     return true;
@@ -417,15 +436,13 @@ export default function EditEventScreen() {
       });
 
       if (response.success) {
-        Alert.alert('Saved!', 'Event has been updated successfully.', [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
+        showAlert('success', 'Saved!', 'Event has been updated successfully.', () => router.back());
       } else {
-        Alert.alert('Error', response.error || 'Failed to update event');
+        showAlert('error', 'Error', response.error || 'Failed to update event');
       }
     } catch (error) {
       console.error('Update event error:', error);
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+      showAlert('error', 'Error', 'Something went wrong. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -433,27 +450,21 @@ export default function EditEventScreen() {
 
   // Handle delete
   const handleDelete = useCallback(() => {
-    Alert.alert(
-      'Delete Event',
-      'Are you sure you want to delete this event? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            if (!id) return;
-            const response = await deleteEvent(id);
-            if (response.success) {
-              Alert.alert('Deleted', 'Event has been deleted');
-              router.replace('/events');
-            } else {
-              Alert.alert('Error', response.error || 'Failed to delete event');
-            }
-          },
-        },
-      ]
-    );
+    setAlertConfig({
+      type: 'error',
+      title: 'Delete Event',
+      message: 'Are you sure you want to delete this event? This cannot be undone.',
+      onConfirm: async () => {
+        if (!id) return;
+        const response = await deleteEvent(id);
+        if (response.success) {
+          showAlert('success', 'Deleted', 'Event has been deleted', () => router.replace('/events'));
+        } else {
+          showAlert('error', 'Error', response.error || 'Failed to delete event');
+        }
+      },
+    });
+    setAlertVisible(true);
   }, [id, router]);
 
   const selectedCategory = CATEGORY_OPTIONS.find(c => c.value === category);
@@ -1077,6 +1088,17 @@ export default function EditEventScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Custom Alert */}
+      <CustomAlert
+        visible={alertVisible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        onClose={() => setAlertVisible(false)}
+        onConfirm={alertConfig.onConfirm}
+        showCancel={!!alertConfig.onConfirm}
+      />
     </View>
   );
 }

@@ -13,7 +13,6 @@ import {
   TouchableOpacity,
   TextInput,
   useColorScheme,
-  Alert,
   Dimensions,
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -26,6 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import CrossPlatformDateTimePicker from '../../../components/CrossPlatformDateTimePicker';
+import CustomAlert from '../../../components/CustomAlert';
 import { geocodeLocation, GeocodeResult } from '../../../services/geocoding';
 import {
   ArrowLeft,
@@ -146,12 +146,31 @@ export default function CreateEventScreen() {
   const [visibility, setVisibility] = useState<VisibilityType>('public');
   const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
 
+  // Alert state
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({
+    type: 'info' as 'success' | 'error' | 'warning' | 'info',
+    title: '',
+    message: '',
+    onConfirm: undefined as (() => void) | undefined,
+  });
+
+  const showAlert = (
+    type: 'success' | 'error' | 'warning' | 'info',
+    title: string,
+    message: string,
+    onConfirm?: () => void
+  ) => {
+    setAlertConfig({ type, title, message, onConfirm });
+    setAlertVisible(true);
+  };
+
   // Handle image picker
   const handlePickImage = useCallback(async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'We need access to your photos to upload an image.');
+        showAlert('warning', 'Permission Denied', 'We need access to your photos to upload an image.');
         return;
       }
 
@@ -167,7 +186,7 @@ export default function CreateEventScreen() {
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      showAlert('error', 'Error', 'Failed to pick image. Please try again.');
     }
   }, []);
 
@@ -220,7 +239,7 @@ export default function CreateEventScreen() {
       return urlData.publicUrl;
     } catch (error) {
       console.error('Error uploading image:', error);
-      Alert.alert('Error', 'Failed to upload image. Please try again.');
+      showAlert('error', 'Error', 'Failed to upload image. Please try again.');
       return null;
     } finally {
       setUploadingImage(false);
@@ -255,39 +274,39 @@ export default function CreateEventScreen() {
   // Validate form
   const validateForm = useCallback((): boolean => {
     if (!title.trim()) {
-      Alert.alert('Required', 'Please enter an event title');
+      showAlert('warning', 'Required', 'Please enter an event title');
       return false;
     }
     if (!description.trim()) {
-      Alert.alert('Required', 'Please enter a description');
+      showAlert('warning', 'Required', 'Please enter a description');
       return false;
     }
     if (!isVirtual && !location.trim()) {
-      Alert.alert('Required', 'Please enter a location');
+      showAlert('warning', 'Required', 'Please enter a location');
       return false;
     }
     if (isVirtual && !virtualLink.trim()) {
-      Alert.alert('Required', 'Please enter a virtual meeting link');
+      showAlert('warning', 'Required', 'Please enter a virtual meeting link');
       return false;
     }
     if (!eventDate) {
-      Alert.alert('Required', 'Please enter the event date');
+      showAlert('warning', 'Required', 'Please enter the event date');
       return false;
     }
     if (!startTime) {
-      Alert.alert('Required', 'Please enter the start time');
+      showAlert('warning', 'Required', 'Please enter the start time');
       return false;
     }
     if (hasCapacity && (!capacity || parseInt(capacity) <= 0)) {
-      Alert.alert('Invalid', 'Please enter a valid capacity');
+      showAlert('warning', 'Invalid', 'Please enter a valid capacity');
       return false;
     }
     if (!isFree && (!ticketPrice || parseFloat(ticketPrice) <= 0)) {
-      Alert.alert('Invalid', 'Please enter a valid ticket price');
+      showAlert('warning', 'Invalid', 'Please enter a valid ticket price');
       return false;
     }
     if (!isFree && !paymentLink.trim()) {
-      Alert.alert('Required', 'Please enter a payment link for paid events');
+      showAlert('warning', 'Required', 'Please enter a payment link for paid events');
       return false;
     }
     return true;
@@ -436,20 +455,18 @@ export default function CreateEventScreen() {
           // Don't fail the whole operation if notifications fail
         }
 
-        Alert.alert(
+        showAlert(
+          'success',
           'Event Created! 🎉',
           `"${eventTitle}" has been created successfully. Volunteers will be notified.`,
-          [
-            { text: 'View Event', onPress: () => router.replace(`/events/${eventId}`) },
-            { text: 'Done', onPress: () => router.back() },
-          ]
+          () => router.back()
         );
       } else {
-        Alert.alert('Error', response.error || 'Failed to create event');
+        showAlert('error', 'Error', response.error || 'Failed to create event');
       }
     } catch (error) {
       console.error('Create event error:', error);
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+      showAlert('error', 'Error', 'Something went wrong. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -1006,6 +1023,17 @@ export default function CreateEventScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Custom Alert */}
+      <CustomAlert
+        visible={alertVisible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        onClose={() => setAlertVisible(false)}
+        onConfirm={alertConfig.onConfirm}
+        showCancel={!!alertConfig.onConfirm}
+      />
     </View>
   );
 }
