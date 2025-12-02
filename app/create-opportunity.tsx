@@ -9,9 +9,7 @@ import {
   Text,
   ScrollView,
   TextInput,
-  TouchableOpacity,
   StyleSheet,
-  useColorScheme,
   KeyboardAvoidingView,
   Platform,
   Image,
@@ -21,7 +19,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
-import { Colors } from '../constants/colors';
+import { useThemeStyles } from '../hooks/useThemeStyles';
+import { AnimatedPressable } from '../components/AnimatedPressable';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   ChevronLeft,
   Calendar,
@@ -58,8 +58,7 @@ const CATEGORIES = [
 ];
 
 export default function CreateOpportunityScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
+  const { colors, responsive } = useThemeStyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
@@ -684,18 +683,37 @@ export default function CreateOpportunityScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ChevronLeft size={24} color={colors.text} />
-        </TouchableOpacity>
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: insets.top + responsive.spacing.lg,
+            borderBottomColor: colors.border,
+            paddingHorizontal: responsive.spacing.lg,
+          },
+        ]}
+      >
+        <AnimatedPressable
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          style={({ pressed }) => [
+            styles.roundedIconButton,
+            {
+              backgroundColor: pressed ? colors.surfacePressed : colors.surfaceElevated,
+            },
+          ]}
+          onPress={() => router.back()}
+        >
+          <ChevronLeft size={responsive.iconSize.lg} color={colors.text} />
+        </AnimatedPressable>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Create Opportunity</Text>
-        <View style={styles.backButton} />
+        <View style={{ width: 44 }} />
       </View>
 
       {/* Network Status Indicator */}
       {!isOnline && (
         <View style={[styles.networkBanner, { backgroundColor: colors.error }]}>
-          <Text style={styles.networkBannerText}>
+          <Text style={[styles.networkBannerText, { color: colors.textOnPrimary }]}>
             ⚠️ No internet connection. Some features may not work.
           </Text>
         </View>
@@ -704,10 +722,11 @@ export default function CreateOpportunityScreen() {
       <WebContainer>
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: styles.scrollContent.paddingBottom + insets.bottom + 80 },
-        ]}
+        contentContainerStyle={{
+          paddingHorizontal: responsive.spacing.lg,
+          paddingBottom: responsive.spacing.xl + insets.bottom + responsive.spacing.xxl,
+          paddingTop: responsive.spacing.lg,
+        }}
         keyboardShouldPersistTaps="handled"
       >
         {/* Title */}
@@ -743,18 +762,18 @@ export default function CreateOpportunityScreen() {
           <Text style={[styles.label, { color: colors.text }]}>
             Category <Text style={{ color: colors.error }}>*</Text>
           </Text>
-          <TouchableOpacity
+          <AnimatedPressable
             style={[styles.input, styles.selectButton, { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() => setShowCategoryPicker(!showCategoryPicker)}
           >
             <Text style={[styles.selectButtonText, { color: category ? colors.text : colors.textSecondary }]}>
               {category ? CATEGORIES.find(c => c.value === category)?.label : 'Select category'}
             </Text>
-          </TouchableOpacity>
+          </AnimatedPressable>
           {showCategoryPicker && (
             <View style={[styles.pickerContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
               {CATEGORIES.map(cat => (
-                <TouchableOpacity
+                <AnimatedPressable
                   key={cat.value}
                   style={[styles.pickerItem, { borderBottomColor: colors.border }]}
                   onPress={() => {
@@ -763,7 +782,7 @@ export default function CreateOpportunityScreen() {
                   }}
                 >
                   <Text style={[styles.pickerItemText, { color: colors.text }]}>{cat.label}</Text>
-                </TouchableOpacity>
+                </AnimatedPressable>
               ))}
             </View>
           )}
@@ -789,7 +808,7 @@ export default function CreateOpportunityScreen() {
         {/* Location Field */}
         <View style={styles.field}>
           <Text style={[styles.label, { color: colors.text }]}>Location *</Text>
-          <View style={styles.iconInput}>
+          <View style={[styles.iconInput, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <MapPin size={20} color={colors.text} />
             <TextInput
               placeholder="e.g., Kingston, Jamaica"
@@ -830,7 +849,7 @@ export default function CreateOpportunityScreen() {
                 Select a location:
               </Text>
               {locationSuggestions.map((suggestion, index) => (
-                <TouchableOpacity
+                <AnimatedPressable
                   key={index}
                   style={{
                     padding: 12,
@@ -854,23 +873,25 @@ export default function CreateOpportunityScreen() {
                   }}>
                     Lat: {suggestion.latitude.toFixed(4)}, Lon: {suggestion.longitude.toFixed(4)}
                   </Text>
-                </TouchableOpacity>
+                </AnimatedPressable>
               ))}
             </View>
           )}
           
           {/* Success Message After Selection */}
           {geocodingLocation && geocodingLocation.success && !showSuggestions && (
-            <View style={{ 
-              marginTop: 8, 
-              padding: 8, 
-              backgroundColor: '#E8F5E9', 
-              borderRadius: 8 
-            }}>
-              <Text style={{ fontSize: 12, color: '#2E7D32', fontWeight: '500' }}>
+            <View
+              style={{
+                marginTop: responsive.spacing.xs,
+                padding: responsive.spacing.sm,
+                backgroundColor: colors.successSoft,
+                borderRadius: 12,
+              }}
+            >
+              <Text style={{ fontSize: responsive.fontSize.sm, color: colors.successDark, fontWeight: '600' }}>
                 ✅ Location confirmed
               </Text>
-              <Text style={{ fontSize: 11, color: '#558B2F', marginTop: 4 }}>
+              <Text style={{ fontSize: responsive.fontSize.xs, color: colors.successText, marginTop: 4 }}>
                 {geocodingLocation.formattedAddress}
               </Text>
             </View>
@@ -878,13 +899,15 @@ export default function CreateOpportunityScreen() {
           
           {/* Error Message */}
           {geocodingLocation && !geocodingLocation.success && location.trim().length >= 3 && !showSuggestions && (
-            <View style={{ 
-              marginTop: 8, 
-              padding: 8, 
-              backgroundColor: '#FFEBEE', 
-              borderRadius: 8 
-            }}>
-              <Text style={{ fontSize: 12, color: '#C62828', fontWeight: '500' }}>
+            <View
+              style={{
+                marginTop: responsive.spacing.xs,
+                padding: responsive.spacing.sm,
+                backgroundColor: colors.errorSoft,
+                borderRadius: 12,
+              }}
+            >
+              <Text style={{ fontSize: responsive.fontSize.sm, color: colors.errorDark, fontWeight: '600' }}>
                 ⚠️ {geocodingLocation.error}
               </Text>
             </View>
@@ -981,7 +1004,7 @@ export default function CreateOpportunityScreen() {
           <Text style={[styles.label, { color: colors.text }]}>
             Total Spots <Text style={{ color: colors.error }}>*</Text>
           </Text>
-          <View style={styles.iconInput}>
+          <View style={[styles.iconInput, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Users size={20} color={colors.textSecondary} />
             <TextInput
               style={[styles.inputWithIcon, { color: colors.text }]}
@@ -1000,7 +1023,7 @@ export default function CreateOpportunityScreen() {
             Requirements (Optional)
           </Text>
           <View style={styles.arrayInputContainer}>
-            <View style={styles.iconInput}>
+            <View style={[styles.iconInput, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <FileText size={20} color={colors.textSecondary} />
               <TextInput
                 style={[styles.inputWithIcon, { color: colors.text }]}
@@ -1010,9 +1033,9 @@ export default function CreateOpportunityScreen() {
                 placeholderTextColor={colors.textSecondary}
                 onSubmitEditing={addRequirement}
               />
-              <TouchableOpacity onPress={addRequirement} style={styles.addButton}>
-                <Plus size={20} color={colors.primary} />
-              </TouchableOpacity>
+              <AnimatedPressable onPress={addRequirement} style={styles.addButton}>
+                <Plus size={responsive.iconSize.md} color={colors.primary} />
+              </AnimatedPressable>
             </View>
           </View>
           {requirements.length > 0 && (
@@ -1020,9 +1043,9 @@ export default function CreateOpportunityScreen() {
               {requirements.map((req, index) => (
                 <View key={index} style={[styles.chip, { backgroundColor: colors.card, borderColor: colors.border }]}>
                   <Text style={[styles.chipText, { color: colors.text }]}>{req}</Text>
-                  <TouchableOpacity onPress={() => removeRequirement(index)}>
-                    <X size={16} color={colors.textSecondary} />
-                  </TouchableOpacity>
+                  <AnimatedPressable onPress={() => removeRequirement(index)}>
+                    <X size={responsive.iconSize.sm} color={colors.textSecondary} />
+                  </AnimatedPressable>
                 </View>
               ))}
             </View>
@@ -1035,7 +1058,7 @@ export default function CreateOpportunityScreen() {
             Skills Needed (Optional)
           </Text>
           <View style={styles.arrayInputContainer}>
-            <View style={styles.iconInput}>
+            <View style={[styles.iconInput, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <FileText size={20} color={colors.textSecondary} />
               <TextInput
                 style={[styles.inputWithIcon, { color: colors.text }]}
@@ -1045,9 +1068,9 @@ export default function CreateOpportunityScreen() {
                 placeholderTextColor={colors.textSecondary}
                 onSubmitEditing={addSkill}
               />
-              <TouchableOpacity onPress={addSkill} style={styles.addButton}>
-                <Plus size={20} color={colors.primary} />
-              </TouchableOpacity>
+              <AnimatedPressable onPress={addSkill} style={styles.addButton}>
+                <Plus size={responsive.iconSize.md} color={colors.primary} />
+              </AnimatedPressable>
             </View>
           </View>
           {skillsNeeded.length > 0 && (
@@ -1055,9 +1078,9 @@ export default function CreateOpportunityScreen() {
               {skillsNeeded.map((skill, index) => (
                 <View key={index} style={[styles.chip, { backgroundColor: colors.card, borderColor: colors.border }]}>
                   <Text style={[styles.chipText, { color: colors.text }]}>{skill}</Text>
-                  <TouchableOpacity onPress={() => removeSkill(index)}>
-                    <X size={16} color={colors.textSecondary} />
-                  </TouchableOpacity>
+                  <AnimatedPressable onPress={() => removeSkill(index)}>
+                    <X size={responsive.iconSize.sm} color={colors.textSecondary} />
+                  </AnimatedPressable>
                 </View>
               ))}
             </View>
@@ -1103,14 +1126,14 @@ export default function CreateOpportunityScreen() {
               autoCapitalize="none"
               keyboardType="url"
             />
-            <TouchableOpacity
+            <AnimatedPressable
               onPress={addLink}
               style={[styles.addLinkButton, { backgroundColor: colors.primary }]}
               disabled={!currentLinkLabel.trim() || !currentLinkUrl.trim()}
             >
-              <Plus size={20} color="#FFFFFF" />
-              <Text style={styles.addLinkButtonText}>Add Link</Text>
-            </TouchableOpacity>
+              <Plus size={responsive.iconSize.md} color={colors.textOnPrimary} />
+              <Text style={[styles.addLinkButtonText, { color: colors.textOnPrimary }]}>Add Link</Text>
+            </AnimatedPressable>
           </View>
           {links.length > 0 && (
             <View style={styles.linksListContainer}>
@@ -1125,9 +1148,9 @@ export default function CreateOpportunityScreen() {
                       </Text>
                     </View>
                   </View>
-                  <TouchableOpacity onPress={() => removeLink(index)}>
-                    <X size={20} color={colors.error} />
-                  </TouchableOpacity>
+                  <AnimatedPressable onPress={() => removeLink(index)}>
+                    <X size={responsive.iconSize.md} color={colors.error} />
+                  </AnimatedPressable>
                 </View>
               ))}
             </View>
@@ -1168,15 +1191,15 @@ export default function CreateOpportunityScreen() {
           {imageUri ? (
             <View style={styles.imagePreviewContainer}>
               <Image source={{ uri: imageUri }} style={styles.imagePreview} />
-              <TouchableOpacity
+              <AnimatedPressable
                 style={styles.removeImageButton}
                 onPress={() => setImageUri(null)}
               >
-                <X size={20} color="#FFFFFF" />
-              </TouchableOpacity>
+                <X size={responsive.iconSize.md} color={colors.textOnPrimary} />
+              </AnimatedPressable>
             </View>
           ) : (
-            <TouchableOpacity
+            <AnimatedPressable
               style={[styles.imagePickerButton, { backgroundColor: colors.card, borderColor: colors.border }]}
               onPress={handlePickImage}
               disabled={uploadingImage}
@@ -1196,7 +1219,7 @@ export default function CreateOpportunityScreen() {
                   </Text>
                 </>
               )}
-            </TouchableOpacity>
+            </AnimatedPressable>
           )}
         </View>
 
@@ -1205,9 +1228,9 @@ export default function CreateOpportunityScreen() {
           <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.toggleInfo}>
               {visibility === 'public' ? (
-                <Globe size={20} color="#4CAF50" />
+                <Globe size={responsive.iconSize.md} color={colors.success} />
               ) : (
-                <Lock size={20} color="#FF9800" />
+                <Lock size={responsive.iconSize.md} color={colors.warning} />
               )}
               <View style={{ flex: 1 }}>
                 <Text style={[styles.toggleLabel, { color: colors.text }]}>
@@ -1223,29 +1246,46 @@ export default function CreateOpportunityScreen() {
             <Switch
               value={visibility === 'members_only'}
               onValueChange={(value) => setVisibility(value ? 'members_only' : 'public')}
-              trackColor={{ false: colors.border, true: '#FF9800' }}
-              thumbColor="#FFFFFF"
+              trackColor={{ false: colors.border, true: colors.warning }}
+              thumbColor={colors.textOnPrimary}
             />
           </View>
         </View>
 
         {/* Create Button */}
-        <TouchableOpacity
-          style={[styles.createButton, { backgroundColor: colors.primary }, (loading || !isOnline) && styles.createButtonDisabled]}
+        <AnimatedPressable
+          style={[styles.createButton, (loading || !isOnline) && styles.createButtonDisabled]}
           onPress={handleCreate}
           disabled={loading || !isOnline}
         >
-          {loading ? (
-            <View style={styles.buttonLoadingContainer}>
-              <ActivityIndicator size="small" color="#FFFFFF" />
-              <Text style={styles.createButtonText}>Creating Opportunity...</Text>
-            </View>
-          ) : (
-            <Text style={styles.createButtonText}>
-              {!isOnline ? 'No Internet Connection' : 'Create Opportunity'}
-            </Text>
-          )}
-        </TouchableOpacity>
+          <LinearGradient
+            colors={
+              loading || !isOnline
+                ? [colors.textSecondary, colors.textSecondary]
+                : [colors.primary, colors.primaryDark]
+            }
+            style={[
+              styles.createButtonGradient,
+              {
+                height: responsive.buttonHeight,
+                paddingHorizontal: responsive.spacing.xl,
+              },
+            ]}
+          >
+            {loading ? (
+              <View style={styles.buttonLoadingContainer}>
+                <ActivityIndicator size="small" color={colors.textOnPrimary} />
+                <Text style={[styles.createButtonText, { color: colors.textOnPrimary }]}>
+                  Creating Opportunity...
+                </Text>
+              </View>
+            ) : (
+              <Text style={[styles.createButtonText, { color: colors.textOnPrimary }]}>
+                {!isOnline ? 'No Internet Connection' : 'Create Opportunity'}
+              </Text>
+            )}
+          </LinearGradient>
+        </AnimatedPressable>
       </ScrollView>
       </WebContainer>
 
@@ -1269,12 +1309,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
   },
-  backButton: {
-    width: 40,
+  roundedIconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
     fontSize: 18,
@@ -1282,10 +1325,6 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 32,
   },
   field: {
     marginBottom: 20,
@@ -1312,8 +1351,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 12,
-    backgroundColor: Colors.light.card,
-    borderColor: Colors.light.border,
   },
   inputWithIcon: {
     flex: 1,
@@ -1394,7 +1431,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   addLinkButtonText: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1458,16 +1494,20 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   createButton: {
-    padding: 18,
-    borderRadius: 12,
-    alignItems: 'center',
+    borderRadius: 16,
+    overflow: 'hidden',
     marginTop: 8,
+  },
+  createButtonGradient: {
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
   },
   createButtonDisabled: {
     opacity: 0.6,
   },
   createButtonText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -1533,7 +1573,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   networkBannerText: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
   },

@@ -10,15 +10,16 @@ import {
   Text,
   ScrollView,
   Image,
-  TouchableOpacity,
   StyleSheet,
-  useColorScheme,
-  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
+import { useThemeStyles } from '../hooks/useThemeStyles';
+import { AnimatedPressable } from '../components/AnimatedPressable';
+import { LinearGradient } from 'expo-linear-gradient';
+import { ShimmerSkeleton } from '../components/ShimmerSkeleton';
 import {
   ChevronLeft,
   MapPin,
@@ -37,8 +38,7 @@ import { supabase } from '../services/supabase';
 import CustomAlert from '../components/CustomAlert';
 
 export default function OpportunityDetailsScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
+  const { colors, responsive, cardShadow } = useThemeStyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, isAdmin } = useAuth();
@@ -248,28 +248,53 @@ export default function OpportunityDetailsScreen() {
     }
   };
 
-  const getCategoryColor = (category: string) => {
-    const categoryColors: { [key: string]: string } = {
-      environment: '#10B981',
-      education: '#3B82F6',
-      healthcare: '#EF4444',
-      community: '#8B5CF6',
-      poorRelief: '#F59E0B',
-      viEngage: '#FF6B35',
+  const getCategoryTheme = (category: string) => {
+    const normalized = category?.toLowerCase().replace(/\s+/g, '');
+    const palette = (Colors.categories as Record<string, { base: string; soft: string }>)?.[normalized];
+    return {
+      base: palette?.base || colors.primary,
+      soft: palette?.soft || colors.primarySoft,
     };
-    return categoryColors[category] || colors.primary;
   };
 
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ChevronLeft size={24} color={colors.text} />
-          </TouchableOpacity>
+        <View style={[styles.header, { paddingTop: insets.top + responsive.spacing.lg, borderBottomColor: colors.border }]}>
+          <AnimatedPressable
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            style={({ pressed }) => [
+              styles.roundedIconButton,
+              {
+                backgroundColor: pressed ? colors.surfacePressed : colors.surfaceElevated,
+              },
+            ]}
+            onPress={() => router.back()}
+          >
+            <ChevronLeft size={responsive.iconSize.lg} color={colors.text} />
+          </AnimatedPressable>
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <ShimmerSkeleton
+            colors={colors}
+            style={{
+              height: 220,
+              borderRadius: 20,
+              marginBottom: responsive.spacing.lg,
+            }}
+          />
+          {[...Array(4).keys()].map((index) => (
+            <ShimmerSkeleton
+              key={`skeleton-${index}`}
+              colors={colors}
+              style={{
+                height: 80,
+                borderRadius: 16,
+                marginBottom: responsive.spacing.md,
+              }}
+            />
+          ))}
         </View>
       </View>
     );
@@ -278,10 +303,20 @@ export default function OpportunityDetailsScreen() {
   if (!opportunity) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ChevronLeft size={24} color={colors.text} />
-          </TouchableOpacity>
+        <View style={[styles.header, { paddingTop: insets.top + responsive.spacing.lg, borderBottomColor: colors.border }]}>
+          <AnimatedPressable
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            style={({ pressed }) => [
+              styles.roundedIconButton,
+              {
+                backgroundColor: pressed ? colors.surfacePressed : colors.surfaceElevated,
+              },
+            ]}
+            onPress={() => router.back()}
+          >
+            <ChevronLeft size={responsive.iconSize.lg} color={colors.text} />
+          </AnimatedPressable>
         </View>
         <View style={styles.errorContainer}>
           <Text style={[styles.errorText, { color: colors.error }]}>
@@ -292,7 +327,7 @@ export default function OpportunityDetailsScreen() {
     );
   }
 
-  const categoryColor = getCategoryColor(opportunity.category);
+  const categoryTheme = getCategoryTheme(opportunity.category);
   const spotsLeft = opportunity.spotsAvailable;
   const isLimited = spotsLeft <= 5;
   const isFull = spotsLeft <= 0;
@@ -300,27 +335,47 @@ export default function OpportunityDetailsScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ChevronLeft size={24} color={colors.text} />
-        </TouchableOpacity>
+      <View style={[styles.header, { paddingTop: insets.top + responsive.spacing.lg, borderBottomColor: colors.border }]}>
+        <AnimatedPressable
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          style={({ pressed }) => [
+            styles.roundedIconButton,
+            {
+              backgroundColor: pressed ? colors.surfacePressed : colors.surfaceElevated,
+            },
+          ]}
+          onPress={() => router.back()}
+        >
+          <ChevronLeft size={responsive.iconSize.lg} color={colors.text} />
+        </AnimatedPressable>
         
         {/* Admin Actions */}
         {isAdmin && (
           <View style={styles.adminActions}>
-            <TouchableOpacity
-              style={[styles.iconButton, { backgroundColor: colors.primary + '15' }]}
+            <AnimatedPressable
+              style={({ pressed }) => [
+                styles.roundedIconButton,
+                {
+                  backgroundColor: pressed ? colors.primarySoft : colors.surfaceElevated,
+                },
+              ]}
               onPress={() => router.push(`/edit-opportunity?id=${opportunityId}`)}
             >
-              <Edit size={20} color={colors.primary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.iconButton, { backgroundColor: colors.error + '15' }]}
+              <Edit size={responsive.iconSize.md} color={colors.primary} />
+            </AnimatedPressable>
+            <AnimatedPressable
+              style={({ pressed }) => [
+                styles.roundedIconButton,
+                {
+                  backgroundColor: pressed ? colors.errorSoft : colors.surfaceElevated,
+                },
+              ]}
               onPress={handleDelete}
               disabled={submitting}
             >
-              <Trash2 size={20} color={colors.error} />
-            </TouchableOpacity>
+              <Trash2 size={responsive.iconSize.md} color={colors.error} />
+            </AnimatedPressable>
           </View>
         )}
       </View>
@@ -338,8 +393,8 @@ export default function OpportunityDetailsScreen() {
         <View style={styles.content}>
           {/* Category and Verified Badge */}
           <View style={styles.badgeRow}>
-            <View style={[styles.categoryBadge, { backgroundColor: categoryColor + '15' }]}>
-              <Text style={[styles.categoryText, { color: categoryColor }]}>
+            <View style={[styles.categoryBadge, { backgroundColor: categoryTheme.soft }]}>
+              <Text style={[styles.categoryText, { color: categoryTheme.base }]}>
                 {opportunity.category.toUpperCase()}
               </Text>
             </View>
@@ -361,7 +416,7 @@ export default function OpportunityDetailsScreen() {
 
           {/* Info Cards */}
           <View style={styles.infoGrid}>
-            <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border, ...cardShadow }]}>
               <MapPin size={20} color={colors.primary} />
               <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Location</Text>
               <Text style={[styles.infoValue, { color: colors.text }]} numberOfLines={2}>
@@ -369,7 +424,7 @@ export default function OpportunityDetailsScreen() {
               </Text>
             </View>
 
-            <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border, ...cardShadow }]}>
               <Calendar size={20} color={colors.primary} />
               <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Date</Text>
               <Text style={[styles.infoValue, { color: colors.text }]}>
@@ -381,13 +436,13 @@ export default function OpportunityDetailsScreen() {
               </Text>
             </View>
 
-            <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border, ...cardShadow }]}>
               <Clock size={20} color={colors.primary} />
               <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Duration</Text>
               <Text style={[styles.infoValue, { color: colors.text }]}>{opportunity.duration}</Text>
             </View>
 
-            <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border, ...cardShadow }]}>
               <Users size={20} color={isLimited ? colors.warning : colors.primary} />
               <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Spots Left</Text>
               <Text style={[styles.infoValue, { color: isLimited ? colors.warning : colors.text }]}>
@@ -409,7 +464,7 @@ export default function OpportunityDetailsScreen() {
 
           {/* Impact Statement */}
           {opportunity.impactStatement && (
-            <View style={[styles.impactCard, { backgroundColor: colors.primary + '10', borderColor: colors.primary }]}>
+            <View style={[styles.impactCard, { backgroundColor: colors.primarySoft, borderColor: colors.primary, ...cardShadow }]}>
               <Award size={20} color={colors.primary} />
               <Text style={[styles.impactText, { color: colors.text }]}>
                 {opportunity.impactStatement}
@@ -456,30 +511,72 @@ export default function OpportunityDetailsScreen() {
 
       {/* Bottom Action Button (Only for non-admins) */}
       {!isAdmin && (
-        <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16, backgroundColor: colors.background, borderTopColor: colors.border }]}>
+        <View
+          style={[
+            styles.bottomBar,
+            {
+              paddingBottom: insets.bottom + responsive.spacing.md,
+              backgroundColor: colors.background,
+              borderTopColor: colors.border,
+            },
+          ]}
+        >
           {isSignedUp ? (
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: colors.error }]}
+            <AnimatedPressable
               onPress={handleCancelSignup}
               disabled={submitting}
-            >
-              <Text style={styles.actionButtonText}>
-                {submitting ? 'Cancelling...' : 'Cancel Signup'}
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[
+              style={({ pressed }) => [
                 styles.actionButton,
-                { backgroundColor: isFull ? colors.textSecondary : colors.primary },
+                {
+                  opacity: pressed ? 0.9 : 1,
+                },
               ]}
+            >
+              <LinearGradient
+                colors={[colors.error, colors.errorDark]}
+                style={[
+                  styles.gradientButton,
+                  {
+                    height: responsive.buttonHeight,
+                    paddingHorizontal: responsive.spacing.xl,
+                    opacity: submitting ? 0.7 : 1,
+                  },
+                ]}
+              >
+                <Text style={[styles.actionButtonText, { color: colors.textOnPrimary }]}>
+                  {submitting ? 'Cancelling...' : 'Cancel Signup'}
+                </Text>
+              </LinearGradient>
+            </AnimatedPressable>
+          ) : (
+            <AnimatedPressable
               onPress={handleSignUp}
               disabled={submitting || isFull}
+              style={({ pressed }) => [
+                styles.actionButton,
+                { opacity: pressed ? 0.9 : 1 },
+              ]}
             >
-              <Text style={styles.actionButtonText}>
-                {submitting ? 'Signing Up...' : isFull ? 'Opportunity Full' : 'Sign Up'}
-              </Text>
-            </TouchableOpacity>
+              <LinearGradient
+                colors={
+                  submitting || isFull
+                    ? [colors.textSecondary, colors.textSecondary]
+                    : [colors.primary, colors.primaryDark]
+                }
+                style={[
+                  styles.gradientButton,
+                  {
+                    height: responsive.buttonHeight,
+                    paddingHorizontal: responsive.spacing.xl,
+                    opacity: submitting || isFull ? 0.7 : 1,
+                  },
+                ]}
+              >
+                <Text style={[styles.actionButtonText, { color: colors.textOnPrimary }]}>
+                  {submitting ? 'Signing Up...' : isFull ? 'Opportunity Full' : 'Sign Up'}
+                </Text>
+              </LinearGradient>
+            </AnimatedPressable>
           )}
         </View>
       )}
@@ -508,27 +605,23 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     borderBottomWidth: 1,
   },
-  backButton: {
-    padding: 4,
+  roundedIconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   adminActions: {
     flexDirection: 'row',
     gap: 12,
-  },
-  iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   scrollView: {
     flex: 1,
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 24,
   },
   errorContainer: {
     flex: 1,
@@ -679,12 +772,15 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
   },
   actionButton: {
-    padding: 18,
-    borderRadius: 12,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  gradientButton: {
+    borderRadius: 16,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   actionButtonText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
   },
