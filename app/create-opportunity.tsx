@@ -42,6 +42,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { File } from 'expo-file-system';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import CrossPlatformDateTimePicker from '../components/CrossPlatformDateTimePicker';
 import CustomAlert from '../components/CustomAlert';
 import { sendNotificationToUser } from '../services/pushNotifications';
 import WebContainer from '../components/WebContainer';
@@ -72,12 +73,8 @@ export default function CreateOpportunityScreen() {
   const [mapLink, setMapLink] = useState('');
   const [startDate, setStartDate] = useState(new Date());
   const [endDate, setEndDate] = useState(new Date());
-  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
-  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('17:00');
-  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
-  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   
   // Helper function to convert HH:MM string to Date object
   const timeStringToDate = (timeString: string): Date => {
@@ -168,7 +165,7 @@ export default function CreateOpportunityScreen() {
     // Keep keyboard open for 1000ms or until user presses Enter
     setShowSuggestions(true);
     
-    // Set new timeout - geocode only after user stops typing (500ms)
+    // Set new timeout - geocode only after user stops typing (800ms)
     geocodeTimeoutRef.current = setTimeout(async () => {
       setIsGeocodingLocation(true);
       try {
@@ -196,7 +193,7 @@ export default function CreateOpportunityScreen() {
       } finally {
         setIsGeocodingLocation(false);
       }
-    }, 500);
+    }, 800);
   };
 
   const handleSelectLocation = (suggestion: any) => {
@@ -917,73 +914,35 @@ export default function CreateOpportunityScreen() {
             Date Range <Text style={{ color: colors.error }}>*</Text>
           </Text>
           
-          {/* Start Date */}
           <View style={styles.dateRangeRow}>
             <View style={styles.dateRangeItem}>
-              <Text style={[styles.dateRangeLabel, { color: colors.textSecondary }]}>Start Date</Text>
-              <TouchableOpacity
-                style={[styles.input, styles.selectButton, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={() => setShowStartDatePicker(true)}
-              >
-                <Calendar size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
-                <Text style={[styles.selectButtonText, { color: colors.text }]}>
-                  {startDate.toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric'
-                  })}
-                </Text>
-              </TouchableOpacity>
-              {showStartDatePicker && (
-                <DateTimePicker
-                  value={startDate}
-                  mode="date"
-                  display="default"
-                  onChange={(event, selectedDate) => {
-                    setShowStartDatePicker(false);
-                    if (selectedDate) {
-                      setStartDate(selectedDate);
-                      // Auto-set end date if it's before start date
-                      if (endDate < selectedDate) {
-                        setEndDate(selectedDate);
-                      }
+              <CrossPlatformDateTimePicker
+                mode="date"
+                value={startDate}
+                onChange={(date) => {
+                  if (date) {
+                    setStartDate(date);
+                    // Auto-set end date if it's before start date
+                    if (endDate < date) {
+                      setEndDate(date);
                     }
-                  }}
-                  minimumDate={new Date()}
-                />
-              )}
+                  }
+                }}
+                minimumDate={new Date()}
+                label="Start Date"
+                colors={colors}
+              />
             </View>
 
-            {/* End Date */}
             <View style={styles.dateRangeItem}>
-              <Text style={[styles.dateRangeLabel, { color: colors.textSecondary }]}>End Date</Text>
-              <TouchableOpacity
-                style={[styles.input, styles.selectButton, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={() => setShowEndDatePicker(true)}
-              >
-                <Calendar size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
-                <Text style={[styles.selectButtonText, { color: colors.text }]}>
-                  {endDate.toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric'
-                  })}
-                </Text>
-              </TouchableOpacity>
-              {showEndDatePicker && (
-                <DateTimePicker
-                  value={endDate}
-                  mode="date"
-                  display="default"
-                  onChange={(event, selectedDate) => {
-                    setShowEndDatePicker(false);
-                    if (selectedDate) {
-                      setEndDate(selectedDate);
-                    }
-                  }}
-                  minimumDate={startDate}
-                />
-              )}
+              <CrossPlatformDateTimePicker
+                mode="date"
+                value={endDate}
+                onChange={(date) => date && setEndDate(date)}
+                minimumDate={startDate}
+                label="End Date"
+                colors={colors}
+              />
             </View>
           </View>
         </View>
@@ -996,83 +955,23 @@ export default function CreateOpportunityScreen() {
           
           <View style={styles.timeRangeRow}>
             <View style={styles.timeRangeItem}>
-              <Text style={[styles.timeRangeLabel, { color: colors.textSecondary }]}>Start Time</Text>
-              <TouchableOpacity
-                style={[styles.input, styles.selectButton, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={() => setShowStartTimePicker(true)}
-              >
-                <Clock size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
-                <Text style={[styles.selectButtonText, { color: colors.text }]}>
-                  {startTime}
-                </Text>
-              </TouchableOpacity>
-              {showStartTimePicker && (
-                <DateTimePicker
-                  value={timeStringToDate(startTime)}
-                  mode="time"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={(event, selectedTime) => {
-                    if (Platform.OS === 'android') {
-                      setShowStartTimePicker(false);
-                    }
-                    if (selectedTime) {
-                      setStartTime(dateToTimeString(selectedTime));
-                    }
-                    if (Platform.OS === 'ios' && event.type === 'dismissed') {
-                      setShowStartTimePicker(false);
-                    }
-                  }}
-                  is24Hour={true}
-                />
-              )}
-              {Platform.OS === 'ios' && showStartTimePicker && (
-                <TouchableOpacity
-                  style={[styles.pickerButton, { backgroundColor: colors.primary }]}
-                  onPress={() => setShowStartTimePicker(false)}
-                >
-                  <Text style={[styles.pickerButtonText, { color: '#FFFFFF' }]}>Done</Text>
-                </TouchableOpacity>
-              )}
+              <CrossPlatformDateTimePicker
+                mode="time"
+                value={timeStringToDate(startTime)}
+                onChange={(date) => date && setStartTime(dateToTimeString(date))}
+                label="Start Time"
+                colors={colors}
+              />
             </View>
 
             <View style={styles.timeRangeItem}>
-              <Text style={[styles.timeRangeLabel, { color: colors.textSecondary }]}>End Time</Text>
-              <TouchableOpacity
-                style={[styles.input, styles.selectButton, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={() => setShowEndTimePicker(true)}
-              >
-                <Clock size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
-                <Text style={[styles.selectButtonText, { color: colors.text }]}>
-                  {endTime}
-                </Text>
-              </TouchableOpacity>
-              {showEndTimePicker && (
-                <DateTimePicker
-                  value={timeStringToDate(endTime)}
-                  mode="time"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={(event, selectedTime) => {
-                    if (Platform.OS === 'android') {
-                      setShowEndTimePicker(false);
-                    }
-                    if (selectedTime) {
-                      setEndTime(dateToTimeString(selectedTime));
-                    }
-                    if (Platform.OS === 'ios' && event.type === 'dismissed') {
-                      setShowEndTimePicker(false);
-                    }
-                  }}
-                  is24Hour={true}
-                />
-              )}
-              {Platform.OS === 'ios' && showEndTimePicker && (
-                <TouchableOpacity
-                  style={[styles.pickerButton, { backgroundColor: colors.primary }]}
-                  onPress={() => setShowEndTimePicker(false)}
-                >
-                  <Text style={[styles.pickerButtonText, { color: '#FFFFFF' }]}>Done</Text>
-                </TouchableOpacity>
-              )}
+              <CrossPlatformDateTimePicker
+                mode="time"
+                value={timeStringToDate(endTime)}
+                onChange={(date) => date && setEndTime(dateToTimeString(date))}
+                label="End Time"
+                colors={colors}
+              />
             </View>
           </View>
         </View>

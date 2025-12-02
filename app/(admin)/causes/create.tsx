@@ -13,7 +13,6 @@ import {
   TouchableOpacity,
   TextInput,
   useColorScheme,
-  Alert,
   Dimensions,
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -25,6 +24,8 @@ import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import CrossPlatformDateTimePicker from '../../../components/CrossPlatformDateTimePicker';
+import CustomAlert from '../../../components/CustomAlert';
 import {
   ArrowLeft,
   Heart,
@@ -82,7 +83,6 @@ export default function CreateCauseScreen() {
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [goalAmount, setGoalAmount] = useState('');
   const [endDate, setEndDate] = useState<Date | null>(null);
-  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -95,6 +95,25 @@ export default function CreateCauseScreen() {
   
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Alert state
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({
+    type: 'info' as 'success' | 'error' | 'warning' | 'info',
+    title: '',
+    message: '',
+    onConfirm: undefined as (() => void) | undefined,
+  });
+
+  const showAlert = (
+    type: 'success' | 'error' | 'warning' | 'info',
+    title: string,
+    message: string,
+    onConfirm?: () => void
+  ) => {
+    setAlertConfig({ type, title, message, onConfirm });
+    setAlertVisible(true);
+  };
 
   // Helper function for date conversion
   const dateToString = (date: Date): string => {
@@ -112,7 +131,7 @@ export default function CreateCauseScreen() {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'We need access to your photos to upload an image.');
+        showAlert('warning', 'Permission Denied', 'We need access to your photos to upload an image.');
         return;
       }
 
@@ -128,7 +147,7 @@ export default function CreateCauseScreen() {
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      showAlert('error', 'Error', 'Failed to pick image. Please try again.');
     }
   }, []);
 
@@ -181,7 +200,7 @@ export default function CreateCauseScreen() {
       return urlData.publicUrl;
     } catch (error) {
       console.error('Error uploading image:', error);
-      Alert.alert('Upload Error', 'Failed to upload image. Please try again.');
+      showAlert('error', 'Upload Error', 'Failed to upload image. Please try again.');
       return null;
     } finally {
       setUploadingImage(false);
@@ -233,12 +252,12 @@ export default function CreateCauseScreen() {
   // Handle form submission
   const handleSubmit = useCallback(async () => {
     if (!validateForm()) {
-      Alert.alert('Validation Error', 'Please fix the errors in the form');
+      showAlert('warning', 'Validation Error', 'Please fix the errors in the form');
       return;
     }
 
     if (!user?.id) {
-      Alert.alert('Error', 'You must be logged in to create a cause');
+      showAlert('error', 'Error', 'You must be logged in to create a cause');
       return;
     }
 
@@ -252,7 +271,7 @@ export default function CreateCauseScreen() {
         if (uploadedUrl) {
           finalImageUrl = uploadedUrl;
         } else {
-          Alert.alert('Error', 'Failed to upload image. Please try again.');
+          showAlert('error', 'Error', 'Failed to upload image. Please try again.');
           setSubmitting(false);
           return;
         }
@@ -279,87 +298,77 @@ export default function CreateCauseScreen() {
         console.log('✅ Cause created successfully!');
         console.log('📊 Cause ID:', causeId);
 
-        // Create notifications for all users
+        // Create notifications using database function
         console.log('🔔 Starting notification process...');
+        console.log('🔧 Calling RPC function: create_cause_notifications');
+        console.log('📦 Function parameters:', {
+          p_cause_id: causeId,
+          p_title: causeTitle,
+          p_creator_id: user.id,
+        });
         
         try {
-          // Get all users (except the creator)
-          const { data: allUsers, error: usersError } = await supabase
-            .from('users')
-            .select('id')
-            .neq('id', user.id);
+          const { data: notifiedUsers, error: notifError } = await supabase.rpc(
+            'create_cause_notifications',
+            {
+              p_cause_id: causeId,
+              p_title: causeTitle,
+              p_creator_id: user.id,
+            }
+          );
 
-          if (!usersError && allUsers && allUsers.length > 0) {
-            console.log('✅ Found', allUsers.length, 'users to notify');
+          console.log('🔍 RPC function response:', {
+            notifiedUsers,
+            error: notifError,
+          });
 
-            // Create notifications for all users
-            const notifications = allUsers.map(u => ({
-              user_id: u.id,
-              type: 'cause',
-              title: 'New Fundraising Cause',
-              message: `${causeTitle} - Help make a difference!`,
-              link: `/causes/${causeId}`,
-              related_id: causeId,
-              is_read: false,
-            }));
+          if (notifError) {
+            console.error('❌ Notification creation error:', notifError);
+            console.error('❌ Error details:', {
+              message: notifError.message,
+              code: notifError.code,
+              details: notifError.details,
+              hint: notifError.hint,
+            });
+            console.warn('⚠️ Cause created but notifications failed');
+            // Don't throw - cause was created successfully
+          } else {
+            console.log('✅ Notifications created successfully');
+            console.log('📊 Total notifications sent:', notifiedUsers?.length || 0);
 
-            const { error: notifError } = await supabase
-              .from('notifications')
-              .insert(notifications);
+            if (notifiedUsers && notifiedUsers.length > 0) {
 
-            if (notifError) {
-              console.error('❌ Error creating notifications:', notifError);
-            } else {
-              console.log('✅ Created', notifications.length, 'notifications');
-
-              // Send push notifications to users with causes notifications enabled
+              // Send push notifications to users with push tokens and causes notifications enabled
               console.log('🔔 Starting push notification process...');
               
-              // Get all users with push tokens
+              // Get users with push tokens from the notified users list
               const { data: usersWithTokens, error: tokensError } = await supabase
                 .from('users')
                 .select('id, push_token')
-                .neq('id', user.id)
+                .in('id', notifiedUsers.map((n: any) => n.user_id))
                 .not('push_token', 'is', null);
 
               console.log('📊 Users with push tokens:', usersWithTokens?.length || 0);
 
               if (!tokensError && usersWithTokens && usersWithTokens.length > 0) {
-                // Get notification settings for these users
-                const { data: settingsData, error: settingsError } = await supabase
-                  .from('user_notification_settings')
-                  .select('user_id, causes_enabled')
-                  .in('user_id', usersWithTokens.map(u => u.id));
+                console.log('✅ Found', usersWithTokens.length, 'users with push tokens');
 
-                if (!settingsError && settingsData) {
-                  // Filter users who have causes notifications enabled
-                  // Default to enabled if setting doesn't exist
-                  const settingsMap = new Map(settingsData.map(s => [s.user_id, s.causes_enabled]));
-                  
-                  const enabledUsers = usersWithTokens.filter(userObj => {
-                    const setting = settingsMap.get(userObj.id);
-                    return setting === true || setting === undefined;
-                  });
-
-                  console.log('✅ Found', enabledUsers.length, 'users with causes notifications enabled');
-
-                  // Send push notifications
-                  for (const userObj of enabledUsers) {
-                    try {
-                      await sendNotificationToUser(userObj.id, {
-                        type: 'cause',
-                        id: causeId,
-                        title: 'New Fundraising Cause',
-                        body: `${causeTitle} - Help make a difference!`,
-                      });
-                      console.log('✅ Push sent to user:', userObj.id.substring(0, 8) + '...');
-                    } catch (pushError) {
-                      console.error('❌ Failed to send push to user:', userObj.id, pushError);
-                    }
+                // Send push notifications
+                for (const userObj of usersWithTokens) {
+                  try {
+                    await sendNotificationToUser(userObj.id, {
+                      type: 'cause',
+                      id: causeId,
+                      title: 'New Fundraising Cause',
+                      body: `${causeTitle} - Help make a difference!`,
+                    });
+                    console.log('✅ Push sent to user:', userObj.id.substring(0, 8) + '...');
+                  } catch (pushError) {
+                    console.error('❌ Failed to send push to user:', userObj.id, pushError);
                   }
-                  
-                  console.log('🎉 Push notification process complete!');
                 }
+                
+                console.log('🎉 Push notification process complete!');
               }
             }
           }
@@ -368,39 +377,32 @@ export default function CreateCauseScreen() {
           // Don't fail the whole operation if notifications fail
         }
 
-        Alert.alert(
-          'Success! 🎉',
-          `"${causeTitle}" has been created successfully. Volunteers will be notified.`,
-          [
-            {
-              text: 'View Cause',
-              onPress: () => router.replace(`/causes/${causeId}`),
-            },
-            {
-              text: 'Create Another',
-              onPress: () => {
-                // Reset form
-                setTitle('');
-                setDescription('');
-                setCategory('community');
-                setGoalAmount('');
-                setEndDate(null);
-                setImageUri(null);
-                setImageUrl('');
-                setIsDonationsPublic(true);
-                setAllowRecurring(true);
-                setMinimumDonation('');
-                setIsFeatured(false);
-              },
-            },
-          ]
-        );
+        setAlertConfig({
+          type: 'success',
+          title: 'Success! 🎉',
+          message: `"${causeTitle}" has been created successfully. Volunteers will be notified.`,
+          onConfirm: undefined,
+        });
+        setAlertVisible(true);
       } else {
         throw new Error(response.error || 'Failed to create cause');
       }
-    } catch (error) {
-      console.error('Error creating cause:', error);
-      Alert.alert('Error', 'Failed to create cause. Please try again.');
+    } catch (error: any) {
+      // Improved error logging for debugging
+      console.error('❌ Error creating cause:', error);
+      console.error('Error details:', {
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+        hint: error?.hint,
+      });
+      
+      const errorMessage = error?.message || 'Failed to create cause';
+      showAlert(
+        'error',
+        'Error Creating Cause',
+        `${errorMessage}. Please try again or contact support if the problem persists.`
+      );
     } finally {
       setSubmitting(false);
     }
@@ -567,51 +569,19 @@ export default function CreateCauseScreen() {
           </View>
 
           {/* End Date */}
-          <View style={styles.section}>
-            <Text style={[styles.label, { color: colors.text }]}>End Date (Optional)</Text>
-            <TouchableOpacity
-              style={[
-                styles.inputContainer, 
-                { backgroundColor: colors.card, borderColor: errors.endDate ? colors.error : colors.border }
-              ]}
-              onPress={() => setShowEndDatePicker(true)}
-            >
-              <Calendar size={20} color={colors.textSecondary} />
-              <Text style={[styles.input, { color: colors.text }]}>
-                {endDate ? dateToString(endDate) : 'Not set (optional)'}
-              </Text>
-            </TouchableOpacity>
-            {showEndDatePicker && (
-              <DateTimePicker
-                value={endDate || new Date()}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={(event, selectedDate) => {
-                  // Close picker on Android immediately
-                  if (Platform.OS === 'android') {
-                    setShowEndDatePicker(false);
-                  }
-                  
-                  if (selectedDate) {
-                    setEndDate(selectedDate);
-                    // Auto-close on iOS after selection (better UX)
-                    if (Platform.OS === 'ios') {
-                      setShowEndDatePicker(false);
-                    }
-                  } else if (Platform.OS === 'android' && event.type === 'dismissed') {
-                    setEndDate(null);
-                  }
-                }}
-                minimumDate={new Date()}
-              />
-            )}
-            {errors.endDate && (
-              <Text style={[styles.errorMessage, { color: colors.error }]}>{errors.endDate}</Text>
-            )}
-            <Text style={[styles.helperText, { color: colors.textSecondary }]}>
-              Leave empty for ongoing campaigns
-            </Text>
-          </View>
+          <CrossPlatformDateTimePicker
+            mode="date"
+            value={endDate || new Date()}
+            onChange={(date) => setEndDate(date)}
+            minimumDate={new Date()}
+            label="End Date (Optional)"
+            placeholder="Not set (optional)"
+            colors={colors}
+            error={errors.endDate}
+          />
+          <Text style={[styles.helperText, { color: colors.textSecondary }]}>
+            Leave empty for ongoing campaigns
+          </Text>
 
           {/* Minimum Donation */}
           <View style={styles.section}>
@@ -803,6 +773,17 @@ export default function CreateCauseScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Custom Alert */}
+      <CustomAlert
+        visible={alertVisible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        onClose={() => setAlertVisible(false)}
+        onConfirm={alertConfig.onConfirm}
+        showCancel={!!alertConfig.onConfirm}
+      />
     </View>
   );
 }

@@ -13,7 +13,6 @@ import {
   TouchableOpacity,
   TextInput,
   useColorScheme,
-  Alert,
   Dimensions,
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -25,6 +24,8 @@ import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import CrossPlatformDateTimePicker from '../../../components/CrossPlatformDateTimePicker';
+import CustomAlert from '../../../components/CustomAlert';
 import { geocodeLocation, GeocodeResult } from '../../../services/geocoding';
 import {
   ArrowLeft,
@@ -100,11 +101,8 @@ export default function CreateEventScreen() {
   
   // Date & Time
   const [eventDate, setEventDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [startTime, setStartTime] = useState(new Date());
-  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [endTime, setEndTime] = useState<Date | null>(null);
-  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   
   // Helper functions for time conversion
   const timeStringToDate = (timeString: string): Date => {
@@ -132,7 +130,6 @@ export default function CreateEventScreen() {
   const [capacity, setCapacity] = useState('');
   const [registrationRequired, setRegistrationRequired] = useState(true);
   const [registrationDeadline, setRegistrationDeadline] = useState<Date | null>(null);
-  const [showRegistrationDeadlinePicker, setShowRegistrationDeadlinePicker] = useState(false);
   
   // Pricing
   const [isFree, setIsFree] = useState(true);
@@ -149,12 +146,31 @@ export default function CreateEventScreen() {
   const [visibility, setVisibility] = useState<VisibilityType>('public');
   const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
 
+  // Alert state
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({
+    type: 'info' as 'success' | 'error' | 'warning' | 'info',
+    title: '',
+    message: '',
+    onConfirm: undefined as (() => void) | undefined,
+  });
+
+  const showAlert = (
+    type: 'success' | 'error' | 'warning' | 'info',
+    title: string,
+    message: string,
+    onConfirm?: () => void
+  ) => {
+    setAlertConfig({ type, title, message, onConfirm });
+    setAlertVisible(true);
+  };
+
   // Handle image picker
   const handlePickImage = useCallback(async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'We need access to your photos to upload an image.');
+        showAlert('warning', 'Permission Denied', 'We need access to your photos to upload an image.');
         return;
       }
 
@@ -170,7 +186,7 @@ export default function CreateEventScreen() {
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      showAlert('error', 'Error', 'Failed to pick image. Please try again.');
     }
   }, []);
 
@@ -223,7 +239,7 @@ export default function CreateEventScreen() {
       return urlData.publicUrl;
     } catch (error) {
       console.error('Error uploading image:', error);
-      Alert.alert('Error', 'Failed to upload image. Please try again.');
+      showAlert('error', 'Error', 'Failed to upload image. Please try again.');
       return null;
     } finally {
       setUploadingImage(false);
@@ -258,39 +274,39 @@ export default function CreateEventScreen() {
   // Validate form
   const validateForm = useCallback((): boolean => {
     if (!title.trim()) {
-      Alert.alert('Required', 'Please enter an event title');
+      showAlert('warning', 'Required', 'Please enter an event title');
       return false;
     }
     if (!description.trim()) {
-      Alert.alert('Required', 'Please enter a description');
+      showAlert('warning', 'Required', 'Please enter a description');
       return false;
     }
     if (!isVirtual && !location.trim()) {
-      Alert.alert('Required', 'Please enter a location');
+      showAlert('warning', 'Required', 'Please enter a location');
       return false;
     }
     if (isVirtual && !virtualLink.trim()) {
-      Alert.alert('Required', 'Please enter a virtual meeting link');
+      showAlert('warning', 'Required', 'Please enter a virtual meeting link');
       return false;
     }
     if (!eventDate) {
-      Alert.alert('Required', 'Please enter the event date');
+      showAlert('warning', 'Required', 'Please enter the event date');
       return false;
     }
     if (!startTime) {
-      Alert.alert('Required', 'Please enter the start time');
+      showAlert('warning', 'Required', 'Please enter the start time');
       return false;
     }
     if (hasCapacity && (!capacity || parseInt(capacity) <= 0)) {
-      Alert.alert('Invalid', 'Please enter a valid capacity');
+      showAlert('warning', 'Invalid', 'Please enter a valid capacity');
       return false;
     }
     if (!isFree && (!ticketPrice || parseFloat(ticketPrice) <= 0)) {
-      Alert.alert('Invalid', 'Please enter a valid ticket price');
+      showAlert('warning', 'Invalid', 'Please enter a valid ticket price');
       return false;
     }
     if (!isFree && !paymentLink.trim()) {
-      Alert.alert('Required', 'Please enter a payment link for paid events');
+      showAlert('warning', 'Required', 'Please enter a payment link for paid events');
       return false;
     }
     return true;
@@ -350,87 +366,77 @@ export default function CreateEventScreen() {
         console.log('✅ Event created successfully!');
         console.log('📊 Event ID:', eventId);
 
-        // Create notifications for all users
+        // Create notifications using database function
         console.log('🔔 Starting notification process...');
+        console.log('🔧 Calling RPC function: create_event_notifications');
+        console.log('📦 Function parameters:', {
+          p_event_id: eventId,
+          p_title: eventTitle,
+          p_creator_id: user.id,
+        });
         
         try {
-          // Get all users (except the creator)
-          const { data: allUsers, error: usersError } = await supabase
-            .from('users')
-            .select('id')
-            .neq('id', user.id);
+          const { data: notifiedUsers, error: notifError } = await supabase.rpc(
+            'create_event_notifications',
+            {
+              p_event_id: eventId,
+              p_title: eventTitle,
+              p_creator_id: user.id,
+            }
+          );
 
-          if (!usersError && allUsers && allUsers.length > 0) {
-            console.log('✅ Found', allUsers.length, 'users to notify');
+          console.log('🔍 RPC function response:', {
+            notifiedUsers,
+            error: notifError,
+          });
 
-            // Create notifications for all users
-            const notifications = allUsers.map(u => ({
-              user_id: u.id,
-              type: 'event',
-              title: 'New Event',
-              message: `${eventTitle} - Join us!`,
-              link: `/events/${eventId}`,
-              related_id: eventId,
-              is_read: false,
-            }));
+          if (notifError) {
+            console.error('❌ Notification creation error:', notifError);
+            console.error('❌ Error details:', {
+              message: notifError.message,
+              code: notifError.code,
+              details: notifError.details,
+              hint: notifError.hint,
+            });
+            console.warn('⚠️ Event created but notifications failed');
+            // Don't throw - event was created successfully
+          } else {
+            console.log('✅ Notifications created successfully');
+            console.log('📊 Total notifications sent:', notifiedUsers?.length || 0);
 
-            const { error: notifError } = await supabase
-              .from('notifications')
-              .insert(notifications);
+            if (notifiedUsers && notifiedUsers.length > 0) {
 
-            if (notifError) {
-              console.error('❌ Error creating notifications:', notifError);
-            } else {
-              console.log('✅ Created', notifications.length, 'notifications');
-
-              // Send push notifications to users with events notifications enabled
+              // Send push notifications to users with push tokens and events notifications enabled
               console.log('🔔 Starting push notification process...');
               
-              // Get all users with push tokens
+              // Get users with push tokens from the notified users list
               const { data: usersWithTokens, error: tokensError } = await supabase
                 .from('users')
                 .select('id, push_token')
-                .neq('id', user.id)
+                .in('id', notifiedUsers.map((n: any) => n.user_id))
                 .not('push_token', 'is', null);
 
               console.log('📊 Users with push tokens:', usersWithTokens?.length || 0);
 
               if (!tokensError && usersWithTokens && usersWithTokens.length > 0) {
-                // Get notification settings for these users
-                const { data: settingsData, error: settingsError } = await supabase
-                  .from('user_notification_settings')
-                  .select('user_id, events_enabled')
-                  .in('user_id', usersWithTokens.map(u => u.id));
+                console.log('✅ Found', usersWithTokens.length, 'users with push tokens');
 
-                if (!settingsError && settingsData) {
-                  // Filter users who have events notifications enabled
-                  // Default to enabled if setting doesn't exist
-                  const settingsMap = new Map(settingsData.map(s => [s.user_id, s.events_enabled]));
-                  
-                  const enabledUsers = usersWithTokens.filter(userObj => {
-                    const setting = settingsMap.get(userObj.id);
-                    return setting === true || setting === undefined;
-                  });
-
-                  console.log('✅ Found', enabledUsers.length, 'users with events notifications enabled');
-
-                  // Send push notifications
-                  for (const userObj of enabledUsers) {
-                    try {
-                      await sendNotificationToUser(userObj.id, {
-                        type: 'event',
-                        id: eventId,
-                        title: 'New Event',
-                        body: `${eventTitle} - Join us!`,
-                      });
-                      console.log('✅ Push sent to user:', userObj.id.substring(0, 8) + '...');
-                    } catch (pushError) {
-                      console.error('❌ Failed to send push to user:', userObj.id, pushError);
-                    }
+                // Send push notifications
+                for (const userObj of usersWithTokens) {
+                  try {
+                    await sendNotificationToUser(userObj.id, {
+                      type: 'event',
+                      id: eventId,
+                      title: 'New Event',
+                      body: `${eventTitle} - Join us!`,
+                    });
+                    console.log('✅ Push sent to user:', userObj.id.substring(0, 8) + '...');
+                  } catch (pushError) {
+                    console.error('❌ Failed to send push to user:', userObj.id, pushError);
                   }
-                  
-                  console.log('🎉 Push notification process complete!');
                 }
+                
+                console.log('🎉 Push notification process complete!');
               }
             }
           }
@@ -439,20 +445,31 @@ export default function CreateEventScreen() {
           // Don't fail the whole operation if notifications fail
         }
 
-        Alert.alert(
+        showAlert(
+          'success',
           'Event Created! 🎉',
           `"${eventTitle}" has been created successfully. Volunteers will be notified.`,
-          [
-            { text: 'View Event', onPress: () => router.replace(`/events/${eventId}`) },
-            { text: 'Done', onPress: () => router.back() },
-          ]
+          () => router.back()
         );
       } else {
-        Alert.alert('Error', response.error || 'Failed to create event');
+        showAlert('error', 'Error', response.error || 'Failed to create event');
       }
-    } catch (error) {
-      console.error('Create event error:', error);
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+    } catch (error: any) {
+      // Improved error logging for debugging
+      console.error('❌ Error creating event:', error);
+      console.error('Error details:', {
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+        hint: error?.hint,
+      });
+      
+      const errorMessage = error?.message || 'Failed to create event';
+      showAlert(
+        'error',
+        'Error Creating Event',
+        `${errorMessage}. Please try again or contact support if the problem persists.`
+      );
     } finally {
       setSubmitting(false);
     }
@@ -675,7 +692,7 @@ export default function CreateEventScreen() {
                           if (text.trim()) {
                             handleLocationGeocode(text);
                           }
-                        }, 1000);
+                        }, 800);
                       }}
                     />
                     {isGeocodingLocation && (
@@ -740,101 +757,35 @@ export default function CreateEventScreen() {
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Date & Time</Text>
 
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Event Date *</Text>
-              <TouchableOpacity
-                style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Calendar size={20} color={colors.textSecondary} />
-                <Text style={[styles.input, { color: colors.text }]}>
-                  {dateToString(eventDate)}
-                </Text>
-              </TouchableOpacity>
-              {showDatePicker && (
-                <DateTimePicker
-                  value={eventDate}
-                  mode="date"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={(event, selectedDate) => {
-                    if (Platform.OS === 'android') {
-                      setShowDatePicker(false);
-                    }
-                    if (selectedDate) {
-                      setEventDate(selectedDate);
-                      if (Platform.OS === 'ios') {
-                        setShowDatePicker(false);
-                      }
-                    }
-                  }}
-                  minimumDate={new Date()}
-                />
-              )}
-            </View>
+            <CrossPlatformDateTimePicker
+              mode="date"
+              value={eventDate}
+              onChange={(date) => date && setEventDate(date)}
+              minimumDate={new Date()}
+              label="Event Date *"
+              colors={colors}
+            />
 
             <View style={styles.row}>
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={[styles.inputLabel, { color: colors.text }]}>Start Time *</Text>
-                <TouchableOpacity
-                  style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={() => setShowStartTimePicker(true)}
-                >
-                  <Clock size={20} color={colors.textSecondary} />
-                  <Text style={[styles.input, { color: colors.text }]}>
-                    {dateToTimeString(startTime)}
-                  </Text>
-                </TouchableOpacity>
-                {showStartTimePicker && (
-                  <DateTimePicker
-                    value={startTime}
-                    mode="time"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={(event, selectedTime) => {
-                      if (Platform.OS === 'android') {
-                        setShowStartTimePicker(false);
-                      }
-                      if (selectedTime) {
-                        setStartTime(selectedTime);
-                        if (Platform.OS === 'ios') {
-                          setShowStartTimePicker(false);
-                        }
-                      }
-                    }}
-                    is24Hour={true}
-                  />
-                )}
+              <View style={{ flex: 1 }}>
+                <CrossPlatformDateTimePicker
+                  mode="time"
+                  value={startTime}
+                  onChange={(date) => date && setStartTime(date)}
+                  label="Start Time *"
+                  colors={colors}
+                />
               </View>
 
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={[styles.inputLabel, { color: colors.text }]}>End Time</Text>
-                <TouchableOpacity
-                  style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={() => setShowEndTimePicker(true)}
-                >
-                  <Clock size={20} color={colors.textSecondary} />
-                  <Text style={[styles.input, { color: colors.text }]}>
-                    {endTime ? dateToTimeString(endTime) : 'Not set'}
-                  </Text>
-                </TouchableOpacity>
-                {showEndTimePicker && (
-                  <DateTimePicker
-                    value={endTime || new Date()}
-                    mode="time"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={(event, selectedTime) => {
-                      if (Platform.OS === 'android') {
-                        setShowEndTimePicker(false);
-                      }
-                      if (selectedTime) {
-                        setEndTime(selectedTime);
-                        if (Platform.OS === 'ios') {
-                          setShowEndTimePicker(false);
-                        }
-                      }
-                    }}
-                    is24Hour={true}
-                  />
-                )}
+              <View style={{ flex: 1 }}>
+                <CrossPlatformDateTimePicker
+                  mode="time"
+                  value={endTime || new Date()}
+                  onChange={(date) => setEndTime(date)}
+                  label="End Time"
+                  placeholder="Not set"
+                  colors={colors}
+                />
               </View>
             </View>
           </View>
@@ -897,37 +848,15 @@ export default function CreateEventScreen() {
             </View>
 
             {registrationRequired && (
-              <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: colors.text }]}>Registration Deadline</Text>
-                <TouchableOpacity
-                  style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={() => setShowRegistrationDeadlinePicker(true)}
-                >
-                  <Calendar size={20} color={colors.textSecondary} />
-                  <Text style={[styles.input, { color: colors.text }]}>
-                    {registrationDeadline ? dateToString(registrationDeadline) : 'Not set (optional)'}
-                  </Text>
-                </TouchableOpacity>
-                {showRegistrationDeadlinePicker && (
-                  <DateTimePicker
-                    value={registrationDeadline || new Date()}
-                    mode="date"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={(event, selectedDate) => {
-                      if (Platform.OS === 'android') {
-                        setShowRegistrationDeadlinePicker(false);
-                      }
-                      if (selectedDate) {
-                        setRegistrationDeadline(selectedDate);
-                        if (Platform.OS === 'ios') {
-                          setShowRegistrationDeadlinePicker(false);
-                        }
-                      }
-                    }}
-                    minimumDate={new Date()}
-                  />
-                )}
-              </View>
+              <CrossPlatformDateTimePicker
+                mode="date"
+                value={registrationDeadline || new Date()}
+                onChange={(date) => setRegistrationDeadline(date)}
+                minimumDate={new Date()}
+                label="Registration Deadline"
+                placeholder="Not set (optional)"
+                colors={colors}
+              />
             )}
           </View>
 
@@ -1097,6 +1026,17 @@ export default function CreateEventScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Custom Alert */}
+      <CustomAlert
+        visible={alertVisible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        onClose={() => setAlertVisible(false)}
+        onConfirm={alertConfig.onConfirm}
+        showCancel={!!alertConfig.onConfirm}
+      />
     </View>
   );
 }

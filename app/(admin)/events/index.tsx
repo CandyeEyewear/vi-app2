@@ -13,7 +13,6 @@ import {
   TouchableOpacity,
   useColorScheme,
   RefreshControl,
-  Alert,
   Dimensions,
   ActivityIndicator,
 } from 'react-native';
@@ -43,6 +42,7 @@ import {
   formatEventTime,
 } from '../../../services/eventsService';
 import { useAuth } from '../../../contexts/AuthContext';
+import CustomAlert from '../../../components/CustomAlert';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
@@ -183,13 +183,51 @@ export default function AdminEventsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<EventStatus | 'all'>('all');
 
+  // Custom Alert State
+  const [alertProps, setAlertProps] = useState({
+    visible: false,
+    type: 'info' as 'success' | 'error' | 'warning' | 'info',
+    title: '',
+    message: '',
+    onConfirm: undefined as (() => void) | undefined,
+    showCancel: false,
+  });
+
+  // Show alert helper
+  const showAlert = useCallback(
+    (
+      type: 'success' | 'error' | 'warning' | 'info',
+      title: string,
+      message: string,
+      onConfirm?: () => void,
+      showCancel: boolean = false
+    ) => {
+      setAlertProps({
+        visible: true,
+        type,
+        title,
+        message,
+        onConfirm,
+        showCancel,
+      });
+    },
+    []
+  );
+
+  // Close alert
+  const closeAlert = useCallback(() => {
+    setAlertProps((prev) => ({ ...prev, visible: false }));
+  }, []);
+
   // Check admin access
   useEffect(() => {
     if (user && user.role !== 'admin') {
-      Alert.alert('Access Denied', 'Admin access required');
-      router.back();
+      showAlert('error', 'Access Denied', 'Admin access required', () => {
+        closeAlert();
+        router.back();
+      });
     }
-  }, [user, router]);
+  }, [user, router, showAlert, closeAlert]);
 
   // Fetch events
   const fetchEvents = useCallback(async () => {
@@ -239,27 +277,25 @@ export default function AdminEventsScreen() {
 
   // Handle delete
   const handleDelete = useCallback((event: Event) => {
-    Alert.alert(
+    const performDelete = async () => {
+      closeAlert();
+      const response = await deleteEvent(event.id);
+      if (response.success) {
+        setEvents(prev => prev.filter(e => e.id !== event.id));
+        showAlert('success', 'Deleted', 'Event has been deleted');
+      } else {
+        showAlert('error', 'Error', response.error || 'Failed to delete event');
+      }
+    };
+
+    showAlert(
+      'error',
       'Delete Event',
       `Are you sure you want to delete "${event.title}"? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const response = await deleteEvent(event.id);
-            if (response.success) {
-              setEvents(prev => prev.filter(e => e.id !== event.id));
-              Alert.alert('Deleted', 'Event has been deleted');
-            } else {
-              Alert.alert('Error', response.error || 'Failed to delete event');
-            }
-          },
-        },
-      ]
+      performDelete,
+      true
     );
-  }, []);
+  }, [showAlert, closeAlert]);
 
   // Render event item
   const renderEventItem = useCallback(({ item }: { item: Event }) => (
@@ -376,6 +412,17 @@ export default function AdminEventsScreen() {
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      {/* Custom Alert */}
+      <CustomAlert
+        visible={alertProps.visible}
+        type={alertProps.type}
+        title={alertProps.title}
+        message={alertProps.message}
+        onClose={closeAlert}
+        onConfirm={alertProps.onConfirm}
+        showCancel={alertProps.showCancel}
+      />
     </View>
   );
 }
