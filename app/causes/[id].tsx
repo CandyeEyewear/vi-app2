@@ -3,15 +3,13 @@
  * Displays full cause details with donation options
  * File: app/causes/[id].tsx
  * 
- * Visual Enhancements:
+ * Modern UI with:
+ * - Responsive design (mobile app, mobile web, desktop)
  * - Shimmer skeleton loading
- * - Glassmorphic floating header
- * - Gradient progress bar with glow
- * - Elevated cards with shadows
- * - Premium donate buttons
- * - Hero image gradient overlay
- * - Polished donor list
- * - 8px grid spacing system
+ * - Glassmorphic elements
+ * - Gradient buttons with animations
+ * - Enhanced progress visualization
+ * - Elevated cards with proper shadows
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -34,8 +32,8 @@ import {
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import {
   ArrowLeft,
   Share2,
@@ -68,108 +66,108 @@ import { useAuth } from '../../contexts/AuthContext';
 import WebContainer from '../../components/WebContainer';
 import { UserAvatar } from '../../components';
 
-const { width: screenWidth } = Dimensions.get('window');
-const isSmallScreen = screenWidth < 380;
-
 // ============================================================================
-// DESIGN TOKENS
+// RESPONSIVE UTILITIES
 // ============================================================================
-const SPACING = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
-  xxxl: 32,
-};
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const RADIUS = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
-  full: 9999,
-};
-
-const SHADOWS = {
-  sm: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  md: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  lg: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  glow: (color: string) => ({
-    shadowColor: color,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
-  }),
+const getResponsiveValues = () => {
+  const width = Dimensions.get('window').width;
+  
+  // Breakpoints
+  const isSmallMobile = width < 380;
+  const isMobile = width < 768;
+  const isTablet = width >= 768 && width < 1024;
+  const isDesktop = width >= 1024;
+  
+  return {
+    isSmallMobile,
+    isMobile,
+    isTablet,
+    isDesktop,
+    // Content width constraints for larger screens
+    maxContentWidth: isDesktop ? 800 : isTablet ? 700 : '100%',
+    // Spacing scale
+    spacing: {
+      xs: isSmallMobile ? 4 : 6,
+      sm: isSmallMobile ? 8 : 10,
+      md: isSmallMobile ? 12 : 16,
+      lg: isSmallMobile ? 16 : 20,
+      xl: isSmallMobile ? 20 : 24,
+      xxl: isSmallMobile ? 24 : 32,
+    },
+    // Typography scale
+    fontSize: {
+      xs: isSmallMobile ? 11 : 12,
+      sm: isSmallMobile ? 12 : 13,
+      md: isSmallMobile ? 14 : 15,
+      lg: isSmallMobile ? 16 : 17,
+      xl: isSmallMobile ? 18 : 20,
+      xxl: isSmallMobile ? 22 : 26,
+      hero: isSmallMobile ? 26 : isTablet ? 32 : 36,
+    },
+    // Hero image height
+    heroHeight: isDesktop ? 400 : isTablet ? 350 : 300,
+    // Button sizes
+    buttonHeight: isSmallMobile ? 48 : 52,
+    // Card padding
+    cardPadding: isSmallMobile ? 12 : 16,
+  };
 };
 
 // ============================================================================
-// CATEGORY CONFIGURATION (Using new color system)
+// CATEGORY CONFIGURATION (using new Colors system)
 // ============================================================================
 const getCategoryConfig = (category: CauseCategory, colors: typeof Colors.light) => {
-  const configs: Record<CauseCategory, { label: string; emoji: string; color: string; softColor: string }> = {
+  const configs: Record<CauseCategory, { label: string; color: string; softColor: string; textColor: string; emoji: string }> = {
     disaster_relief: { 
       label: 'Disaster Relief', 
-      emoji: '🆘', 
       color: colors.disaster,
       softColor: colors.disasterSoft,
+      textColor: colors.disasterText,
+      emoji: '🆘' 
     },
     education: { 
       label: 'Education', 
-      emoji: '📚', 
       color: colors.education,
       softColor: colors.educationSoft,
+      textColor: colors.educationText,
+      emoji: '📚' 
     },
     healthcare: { 
       label: 'Healthcare', 
-      emoji: '🏥', 
       color: colors.healthcare,
       softColor: colors.healthcareSoft,
+      textColor: colors.healthcareText,
+      emoji: '🏥' 
     },
     environment: { 
       label: 'Environment', 
-      emoji: '🌱', 
       color: colors.environment,
       softColor: colors.environmentSoft,
+      textColor: colors.environmentText,
+      emoji: '🌱' 
     },
     community: { 
       label: 'Community', 
-      emoji: '🏘️', 
       color: colors.community,
       softColor: colors.communitySoft,
+      textColor: colors.communityText,
+      emoji: '🏘️' 
     },
     poverty: { 
       label: 'Poverty Relief', 
-      emoji: '💝', 
       color: colors.poorRelief,
       softColor: colors.poorReliefSoft,
+      textColor: colors.poorReliefText,
+      emoji: '💝' 
     },
     other: { 
       label: 'Other', 
-      emoji: '📋', 
       color: colors.textSecondary,
       softColor: colors.surfaceElevated,
+      textColor: colors.textSecondary,
+      emoji: '📋' 
     },
   };
   return configs[category] || configs.other;
@@ -178,78 +176,118 @@ const getCategoryConfig = (category: CauseCategory, colors: typeof Colors.light)
 // ============================================================================
 // SHIMMER SKELETON COMPONENT
 // ============================================================================
-function ShimmerEffect({ colors, style }: { colors: typeof Colors.light; style?: any }) {
+function ShimmerEffect({ style, colors }: { style?: any; colors: typeof Colors.light }) {
   const shimmerAnim = useRef(new Animated.Value(0)).current;
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
 
   useEffect(() => {
     const animation = Animated.loop(
-      Animated.timing(shimmerAnim, {
-        toValue: 1,
-        duration: 1500,
-        useNativeDriver: true,
-      })
+      Animated.sequence([
+        Animated.timing(shimmerAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shimmerAnim, {
+          toValue: 0,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
     );
     animation.start();
     return () => animation.stop();
   }, []);
 
-  const translateX = shimmerAnim.interpolate({
+  const opacity = shimmerAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [-screenWidth, screenWidth],
+    outputRange: [0.3, 0.7],
   });
 
   return (
-    <View style={[styles.shimmerContainer, style]}>
-      <View style={[styles.shimmerBase, { backgroundColor: colors.skeleton }]} />
-      <Animated.View
-        style={[
-          styles.shimmerOverlay,
-          { transform: [{ translateX }] },
-        ]}
-      >
-        <LinearGradient
-          colors={['transparent', colors.skeletonHighlight, 'transparent']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={StyleSheet.absoluteFill}
-        />
-      </Animated.View>
-    </View>
+    <Animated.View
+      style={[
+        {
+          backgroundColor: colors.skeleton,
+          opacity,
+        },
+        style,
+      ]}
+    />
   );
 }
 
 function DetailSkeleton({ colors }: { colors: typeof Colors.light }) {
+  const responsive = getResponsiveValues();
+
   return (
     <View style={styles.skeletonContainer}>
       {/* Hero Image Skeleton */}
-      <ShimmerEffect colors={colors} style={styles.skeletonImage} />
+      <ShimmerEffect 
+        colors={colors} 
+        style={[styles.skeletonImage, { height: responsive.heroHeight }]} 
+      />
       
       {/* Content Skeleton */}
-      <View style={[styles.skeletonContent, { backgroundColor: colors.background }]}>
+      <View style={[
+        styles.skeletonContent, 
+        { 
+          padding: responsive.spacing.md,
+          marginTop: -24,
+          backgroundColor: colors.background,
+          borderTopLeftRadius: 24,
+          borderTopRightRadius: 24,
+        }
+      ]}>
         {/* Title */}
-        <ShimmerEffect colors={colors} style={styles.skeletonTitle} />
-        <ShimmerEffect colors={colors} style={[styles.skeletonTitle, { width: '60%' }]} />
+        <ShimmerEffect 
+          colors={colors} 
+          style={[styles.skeletonTitle, { borderRadius: 8 }]} 
+        />
+        <ShimmerEffect 
+          colors={colors} 
+          style={[styles.skeletonTitle, { width: '60%', marginTop: 8, borderRadius: 8 }]} 
+        />
         
         {/* Progress Card */}
-        <View style={[styles.skeletonCard, { backgroundColor: colors.surface }]}>
-          <ShimmerEffect colors={colors} style={styles.skeletonProgress} />
-          <View style={styles.skeletonStatsRow}>
-            <ShimmerEffect colors={colors} style={styles.skeletonStat} />
-            <ShimmerEffect colors={colors} style={styles.skeletonStat} />
-            <ShimmerEffect colors={colors} style={styles.skeletonStat} />
-          </View>
-        </View>
+        <ShimmerEffect 
+          colors={colors} 
+          style={[styles.skeletonProgressCard, { 
+            borderRadius: 16, 
+            marginTop: responsive.spacing.md 
+          }]} 
+        />
         
         {/* Buttons */}
-        <View style={styles.skeletonButtonRow}>
-          <ShimmerEffect colors={colors} style={styles.skeletonButton} />
-          <ShimmerEffect colors={colors} style={styles.skeletonButton} />
+        <View style={[styles.skeletonButtonRow, { marginTop: responsive.spacing.md }]}>
+          <ShimmerEffect 
+            colors={colors} 
+            style={[styles.skeletonButton, { borderRadius: 14 }]} 
+          />
+          <ShimmerEffect 
+            colors={colors} 
+            style={[styles.skeletonButton, { borderRadius: 14 }]} 
+          />
         </View>
         
         {/* Description */}
-        <ShimmerEffect colors={colors} style={styles.skeletonText} />
-        <ShimmerEffect colors={colors} style={styles.skeletonText} />
-        <ShimmerEffect colors={colors} style={[styles.skeletonText, { width: '80%' }]} />
+        <ShimmerEffect 
+          colors={colors} 
+          style={[styles.skeletonSectionTitle, { marginTop: responsive.spacing.xl, borderRadius: 6 }]} 
+        />
+        <ShimmerEffect 
+          colors={colors} 
+          style={[styles.skeletonText, { marginTop: 12, borderRadius: 4 }]} 
+        />
+        <ShimmerEffect 
+          colors={colors} 
+          style={[styles.skeletonText, { marginTop: 8, borderRadius: 4 }]} 
+        />
+        <ShimmerEffect 
+          colors={colors} 
+          style={[styles.skeletonText, { width: '75%', marginTop: 8, borderRadius: 4 }]} 
+        />
       </View>
     </View>
   );
@@ -260,16 +298,15 @@ function DetailSkeleton({ colors }: { colors: typeof Colors.light }) {
 // ============================================================================
 function HeaderButton({ 
   onPress, 
-  icon: Icon, 
-  colors,
-  colorScheme,
+  children, 
+  colors 
 }: { 
   onPress: () => void; 
-  icon: any; 
+  children: React.ReactNode; 
   colors: typeof Colors.light;
-  colorScheme: 'light' | 'dark';
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const colorScheme = useColorScheme();
 
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
@@ -292,25 +329,30 @@ function HeaderButton({
         onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        style={styles.headerButtonWrapper}
+        style={styles.headerButtonContainer}
       >
-        <BlurView
-          intensity={80}
-          tint={colorScheme === 'dark' ? 'dark' : 'light'}
-          style={styles.headerButtonBlur}
-        >
+        {Platform.OS === 'ios' ? (
+          <BlurView
+            intensity={80}
+            tint={colorScheme === 'dark' ? 'dark' : 'light'}
+            style={[styles.headerButton, styles.headerButtonBlur]}
+          >
+            {children}
+          </BlurView>
+        ) : (
           <View style={[
-            styles.headerButtonInner,
+            styles.headerButton, 
             { 
               backgroundColor: colorScheme === 'dark' 
-                ? 'rgba(30, 41, 59, 0.7)' 
-                : 'rgba(255, 255, 255, 0.8)',
+                ? 'rgba(30, 41, 59, 0.9)' 
+                : 'rgba(255, 255, 255, 0.9)',
               borderColor: colors.border,
+              borderWidth: 1,
             }
           ]}>
-            <Icon size={22} color={colors.text} />
+            {children}
           </View>
-        </BlurView>
+        )}
       </Pressable>
     </Animated.View>
   );
@@ -321,28 +363,39 @@ function HeaderButton({
 // ============================================================================
 function AnimatedProgressBar({ 
   progress, 
-  colors,
-  isComplete,
+  colors 
 }: { 
   progress: number; 
   colors: typeof Colors.light;
-  isComplete: boolean;
 }) {
   const progressAnim = useRef(new Animated.Value(0)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
+  const isComplete = progress >= 100;
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
 
   useEffect(() => {
+    // Animate progress fill
     Animated.timing(progressAnim, {
-      toValue: progress,
-      duration: 1000,
+      toValue: Math.min(progress, 100),
+      duration: 1200,
       useNativeDriver: false,
     }).start();
 
+    // Glow animation for near-complete
     if (progress >= 80) {
       Animated.loop(
         Animated.sequence([
-          Animated.timing(glowAnim, { toValue: 1, duration: 1000, useNativeDriver: false }),
-          Animated.timing(glowAnim, { toValue: 0.5, duration: 1000, useNativeDriver: false }),
+          Animated.timing(glowAnim, {
+            toValue: 1,
+            duration: 1500,
+            useNativeDriver: false,
+          }),
+          Animated.timing(glowAnim, {
+            toValue: 0,
+            duration: 1500,
+            useNativeDriver: false,
+          }),
         ])
       ).start();
     }
@@ -351,50 +404,104 @@ function AnimatedProgressBar({
   const width = progressAnim.interpolate({
     inputRange: [0, 100],
     outputRange: ['0%', '100%'],
-    extrapolate: 'clamp',
   });
 
-  const gradientColors = isComplete 
-    ? [colors.success, colors.successDark] as const
-    : [colors.primary, colors.primaryDark] as const;
+  const glowOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 0.8],
+  });
 
   return (
     <View style={styles.progressBarWrapper}>
-      <View style={[styles.progressBarTrack, { backgroundColor: colors.surface2 }]}>
-        <Animated.View style={[styles.progressBarFill, { width }]}>
-          <LinearGradient
-            colors={gradientColors}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={StyleSheet.absoluteFill}
-          />
-        </Animated.View>
+      {/* Background track */}
+      <View style={[
+        styles.progressTrack, 
+        { backgroundColor: isDark ? colors.surface2 : colors.surfaceElevated }
+      ]}>
+        {/* Inner shadow effect */}
+        <View style={[styles.progressTrackInner, { backgroundColor: colors.shadow }]} />
       </View>
+      
+      {/* Progress fill */}
+      <Animated.View style={[styles.progressFillContainer, { width }]}>
+        <LinearGradient
+          colors={isComplete 
+            ? [colors.success, colors.successDark] 
+            : [colors.primary, colors.primaryDark]
+          }
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.progressFill}
+        />
+        
+        {/* Glow effect for high progress */}
+        {progress >= 80 && (
+          <Animated.View 
+            style={[
+              styles.progressGlow, 
+              { 
+                opacity: glowOpacity,
+                backgroundColor: isComplete ? colors.success : colors.primary,
+              }
+            ]} 
+          />
+        )}
+      </Animated.View>
     </View>
   );
 }
 
 // ============================================================================
-// PREMIUM DONATE BUTTON
+// STAT ITEM COMPONENT
+// ============================================================================
+function StatItem({ 
+  icon: Icon, 
+  value, 
+  label, 
+  colors 
+}: { 
+  icon: any; 
+  value: string | number; 
+  label: string; 
+  colors: typeof Colors.light;
+}) {
+  return (
+    <View style={styles.statItem}>
+      <View style={[styles.statIconContainer, { backgroundColor: colors.primarySoft }]}>
+        <Icon size={16} color={colors.primary} />
+      </View>
+      <Text style={[styles.statValue, { color: colors.text }]}>
+        {value}
+      </Text>
+      <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+// ============================================================================
+// DONATE BUTTON WITH GRADIENT
 // ============================================================================
 function DonateButton({ 
   onPress, 
+  icon: Icon, 
+  label, 
+  variant = 'primary',
   colors,
-  isPrimary = true,
-  icon: Icon,
-  label,
 }: { 
   onPress: () => void; 
+  icon: any; 
+  label: string; 
+  variant?: 'primary' | 'secondary';
   colors: typeof Colors.light;
-  isPrimary?: boolean;
-  icon: any;
-  label: string;
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const responsive = getResponsiveValues();
 
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
-      toValue: 0.96,
+      toValue: 0.97,
       useNativeDriver: true,
     }).start();
   };
@@ -407,25 +514,27 @@ function DonateButton({
     }).start();
   };
 
-  if (isPrimary) {
+  if (variant === 'primary') {
     return (
       <Animated.View style={[styles.donateButtonWrapper, { transform: [{ scale: scaleAnim }] }]}>
         <Pressable
           onPress={onPress}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
-          style={[styles.donateButtonPressable, SHADOWS.glow(colors.primary)]}
+          style={styles.donateButtonPressable}
         >
           <LinearGradient
-            colors={[colors.primary, colors.primaryDark]}
+            colors={Colors.gradients.primary}
             start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.donateButtonGradient}
+            end={{ x: 1, y: 0 }}
+            style={[styles.donateButton, { height: responsive.buttonHeight }]}
           >
             <Icon size={20} color="#FFFFFF" />
-            <Text style={styles.donateButtonTextPrimary}>{label}</Text>
+            <Text style={styles.donateButtonText}>{label}</Text>
           </LinearGradient>
         </Pressable>
+        {/* Shadow layer */}
+        <View style={[styles.buttonShadow, { backgroundColor: colors.primary }]} />
       </Animated.View>
     );
   }
@@ -437,16 +546,17 @@ function DonateButton({
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         style={[
-          styles.donateButtonSecondary,
+          styles.donateButton,
+          styles.secondaryButton,
           { 
-            backgroundColor: colors.primarySoft,
+            height: responsive.buttonHeight,
+            backgroundColor: colors.background,
             borderColor: colors.primary,
-          },
-          SHADOWS.sm,
+          }
         ]}
       >
         <Icon size={20} color={colors.primary} />
-        <Text style={[styles.donateButtonTextSecondary, { color: colors.primary }]}>
+        <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>
           {label}
         </Text>
       </Pressable>
@@ -467,13 +577,13 @@ function DonorItem({
   isLast: boolean;
 }) {
   const displayName = donation.isAnonymous 
-    ? 'Anonymous Hero' 
-    : donation.donorName || donation.user?.fullName || 'Generous Supporter';
+    ? 'Anonymous' 
+    : donation.donorName || donation.user?.fullName || 'Supporter';
 
   return (
     <View style={[
       styles.donorItem, 
-      !isLast && { borderBottomColor: colors.divider, borderBottomWidth: 1 }
+      !isLast && { borderBottomWidth: 1, borderBottomColor: colors.divider }
     ]}>
       {!donation.isAnonymous && donation.user ? (
         <UserAvatar
@@ -485,25 +595,28 @@ function DonorItem({
           membershipStatus={donation.user.membershipStatus || 'inactive'}
         />
       ) : (
-        <View style={[styles.donorAvatarAnonymous, { backgroundColor: colors.surface2 }]}>
+        <View style={[styles.anonymousAvatar, { backgroundColor: colors.surfaceElevated }]}>
           <User size={22} color={colors.textTertiary} />
         </View>
       )}
       
       <View style={styles.donorInfo}>
-        <Text style={[styles.donorName, { color: colors.text }]} numberOfLines={1}>
+        <Text style={[styles.donorName, { color: colors.text }]}>
           {displayName}
         </Text>
         {donation.message && (
-          <Text style={[styles.donorMessage, { color: colors.textSecondary }]} numberOfLines={2}>
+          <Text 
+            style={[styles.donorMessage, { color: colors.textSecondary }]} 
+            numberOfLines={2}
+          >
             "{donation.message}"
           </Text>
         )}
       </View>
       
       {/* Amount Badge */}
-      <View style={[styles.donorAmountBadge, { backgroundColor: colors.primarySoft }]}>
-        <Text style={[styles.donorAmount, { color: colors.primary }]}>
+      <View style={[styles.amountBadge, { backgroundColor: colors.primarySoft }]}>
+        <Text style={[styles.donorAmount, { color: colors.primaryDark }]}>
           {formatCurrency(donation.amount)}
         </Text>
       </View>
@@ -512,26 +625,47 @@ function DonorItem({
 }
 
 // ============================================================================
-// STAT ITEM COMPONENT
+// EMPTY STATE COMPONENT
 // ============================================================================
-function StatItem({ 
-  icon: Icon, 
-  value, 
-  label, 
-  colors,
-}: { 
-  icon: any; 
-  value: string | number; 
-  label: string; 
-  colors: typeof Colors.light;
-}) {
+function EmptyDonorsState({ colors }: { colors: typeof Colors.light }) {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
+
   return (
-    <View style={styles.statItem}>
-      <View style={[styles.statIconContainer, { backgroundColor: colors.primarySoft }]}>
-        <Icon size={18} color={colors.primary} />
-      </View>
-      <Text style={[styles.statValue, { color: colors.text }]}>{value}</Text>
-      <Text style={[styles.statLabel, { color: colors.textTertiary }]}>{label}</Text>
+    <View style={[styles.emptyState, { backgroundColor: colors.card }]}>
+      <Animated.View 
+        style={[
+          styles.emptyIconContainer, 
+          { 
+            backgroundColor: colors.primarySoft,
+            transform: [{ scale: pulseAnim }],
+          }
+        ]}
+      >
+        <Heart size={32} color={colors.primary} />
+      </Animated.View>
+      <Text style={[styles.emptyTitle, { color: colors.text }]}>
+        Be the first to donate!
+      </Text>
+      <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+        Your contribution can make a difference
+      </Text>
     </View>
   );
 }
@@ -544,9 +678,9 @@ export default function CauseDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-  const colors = Colors[isDark ? 'dark' : 'light'];
+  const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const { user } = useAuth();
+  const responsive = getResponsiveValues();
 
   // State
   const [cause, setCause] = useState<Cause | null>(null);
@@ -554,6 +688,9 @@ export default function CauseDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingDonations, setLoadingDonations] = useState(true);
+
+  // Scroll animation for header
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   // Fetch cause data
   const fetchCause = useCallback(async () => {
@@ -635,6 +772,13 @@ export default function CauseDetailScreen() {
     router.push(`/causes/${id}/donate?recurring=true`);
   }, [id, router]);
 
+  // Header background opacity based on scroll
+  const headerBgOpacity = scrollY.interpolate({
+    inputRange: [0, responsive.heroHeight - 100],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+
   // Loading state
   if (loading || !cause) {
     return (
@@ -642,13 +786,13 @@ export default function CauseDetailScreen() {
         <Stack.Screen options={{ headerShown: false }} />
         
         {/* Header */}
-        <View style={[styles.header, { paddingTop: insets.top + SPACING.sm }]}>
-          <HeaderButton
-            onPress={() => router.back()}
-            icon={ArrowLeft}
-            colors={colors}
-            colorScheme={isDark ? 'dark' : 'light'}
-          />
+        <View style={[
+          styles.header, 
+          { paddingTop: insets.top + 8 }
+        ]}>
+          <HeaderButton onPress={() => router.back()} colors={colors}>
+            <ArrowLeft size={22} color={colors.text} />
+          </HeaderButton>
         </View>
 
         <DetailSkeleton colors={colors} />
@@ -659,32 +803,43 @@ export default function CauseDetailScreen() {
   const progress = getCauseProgress(cause);
   const daysRemaining = getCauseDaysRemaining(cause);
   const categoryConfig = getCategoryConfig(cause.category, colors);
-  const isComplete = progress >= 100;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
 
+      {/* Animated Header Background */}
+      <Animated.View 
+        style={[
+          styles.headerBackground, 
+          { 
+            paddingTop: insets.top,
+            backgroundColor: colors.background,
+            opacity: headerBgOpacity,
+            borderBottomColor: colors.border,
+          }
+        ]} 
+      />
+
       {/* Floating Header */}
-      <View style={[styles.header, { paddingTop: insets.top + SPACING.sm }]}>
-        <HeaderButton
-          onPress={() => router.back()}
-          icon={ArrowLeft}
-          colors={colors}
-          colorScheme={isDark ? 'dark' : 'light'}
-        />
-        <HeaderButton
-          onPress={handleShare}
-          icon={Share2}
-          colors={colors}
-          colorScheme={isDark ? 'dark' : 'light'}
-        />
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <HeaderButton onPress={() => router.back()} colors={colors}>
+          <ArrowLeft size={22} color={colors.text} />
+        </HeaderButton>
+        <HeaderButton onPress={handleShare} colors={colors}>
+          <Share2 size={22} color={colors.text} />
+        </HeaderButton>
       </View>
 
       <WebContainer>
-        <ScrollView
+        <Animated.ScrollView
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { useNativeDriver: true }
+          )}
+          scrollEventThrottle={16}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -695,7 +850,7 @@ export default function CauseDetailScreen() {
           }
         >
           {/* Hero Image */}
-          <View style={styles.imageContainer}>
+          <View style={[styles.imageContainer, { height: responsive.heroHeight }]}>
             {cause.imageUrl ? (
               <Image 
                 source={{ uri: cause.imageUrl }} 
@@ -703,33 +858,41 @@ export default function CauseDetailScreen() {
                 resizeMode="cover" 
               />
             ) : (
-              <View style={[styles.imagePlaceholder, { backgroundColor: colors.surface2 }]}>
+              <View style={[styles.imagePlaceholder, { backgroundColor: colors.surfaceElevated }]}>
                 <Heart size={64} color={colors.textTertiary} />
               </View>
             )}
             
             {/* Gradient Overlay */}
             <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.4)']}
-              style={styles.heroGradient}
+              colors={['transparent', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.7)']}
+              style={styles.imageGradient}
             />
-            
-            {/* Category Badge */}
-            <View style={styles.badgesContainer}>
-              <View style={[styles.categoryBadge, { backgroundColor: categoryConfig.color }]}>
-                <Text style={styles.categoryBadgeText}>
-                  {categoryConfig.emoji} {categoryConfig.label}
-                </Text>
-              </View>
 
-              {/* Featured Badge */}
-              {cause.isFeatured && (
-                <View style={[styles.featuredBadge, { backgroundColor: colors.star }]}>
+            {/* Category Badge */}
+            <View style={[
+              styles.categoryBadge, 
+              { backgroundColor: categoryConfig.color }
+            ]}>
+              <Text style={styles.categoryBadgeText}>
+                {categoryConfig.emoji} {categoryConfig.label}
+              </Text>
+            </View>
+
+            {/* Featured Badge */}
+            {cause.isFeatured && (
+              <View style={styles.featuredBadge}>
+                <LinearGradient
+                  colors={['#FFD700', '#FFA500']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.featuredBadgeGradient}
+                >
                   <Sparkles size={14} color="#000" />
                   <Text style={styles.featuredBadgeText}>Featured</Text>
-                </View>
-              )}
-            </View>
+                </LinearGradient>
+              </View>
+            )}
           </View>
 
           {/* Content */}
@@ -737,135 +900,168 @@ export default function CauseDetailScreen() {
             styles.content, 
             { 
               backgroundColor: colors.background,
-              ...SHADOWS.lg,
+              paddingHorizontal: responsive.spacing.md,
+              maxWidth: responsive.maxContentWidth,
+              alignSelf: 'center',
+              width: '100%',
             }
           ]}>
             {/* Title */}
-            <Text style={[styles.title, { color: colors.text }]}>
+            <Text style={[
+              styles.title, 
+              { 
+                color: colors.text,
+                fontSize: responsive.fontSize.xxl,
+              }
+            ]}>
               {cause.title}
             </Text>
 
-            {/* Progress Section */}
+            {/* Progress Card */}
             <View style={[
-              styles.progressSection, 
+              styles.progressCard, 
               { 
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              },
-              SHADOWS.md,
+                backgroundColor: colors.card,
+                shadowColor: colors.shadow,
+                borderColor: colors.cardBorder,
+              }
             ]}>
               {/* Progress Bar */}
-              <View style={styles.progressBarContainer}>
-                <AnimatedProgressBar 
-                  progress={progress} 
-                  colors={colors}
-                  isComplete={isComplete}
-                />
-                <View style={[
-                  styles.progressPercentBadge, 
-                  { backgroundColor: isComplete ? colors.successSoft : colors.primarySoft }
-                ]}>
+              <View style={styles.progressSection}>
+                <View style={styles.progressHeader}>
+                  <Text style={[styles.progressLabel, { color: colors.textSecondary }]}>
+                    Campaign Progress
+                  </Text>
                   <Text style={[
                     styles.progressPercent, 
-                    { color: isComplete ? colors.success : colors.primary }
+                    { 
+                      color: progress >= 100 ? colors.success : colors.primary,
+                    }
                   ]}>
                     {Math.round(progress)}%
                   </Text>
                 </View>
+                
+                <AnimatedProgressBar progress={progress} colors={colors} />
               </View>
 
               {/* Amount Info */}
-              <View style={styles.amountContainer}>
+              <View style={styles.amountSection}>
                 <View style={styles.amountMain}>
-                  <Text style={[styles.amountRaised, { color: colors.text }]}>
+                  <Text style={[
+                    styles.amountRaised, 
+                    { 
+                      color: colors.text,
+                      fontSize: responsive.fontSize.xl,
+                    }
+                  ]}>
                     {formatCurrency(cause.amountRaised)}
                   </Text>
-                  <Text style={[styles.amountLabel, { color: colors.textSecondary }]}>
+                  <Text style={[styles.amountGoal, { color: colors.textSecondary }]}>
                     raised of {formatCurrency(cause.goalAmount)} goal
                   </Text>
                 </View>
-              </View>
 
-              {/* Stats Row */}
-              <View style={[styles.statsRow, { borderTopColor: colors.divider }]}>
-                <StatItem 
-                  icon={Users} 
-                  value={cause.donorCount} 
-                  label="donors" 
-                  colors={colors}
-                />
-                {daysRemaining !== null && (
+                {/* Stats Row */}
+                <View style={[styles.statsRow, { borderTopColor: colors.divider }]}>
                   <StatItem 
-                    icon={Clock} 
-                    value={daysRemaining} 
-                    label={daysRemaining === 1 ? 'day left' : 'days left'} 
-                    colors={colors}
+                    icon={Users} 
+                    value={cause.donorCount} 
+                    label="donors" 
+                    colors={colors} 
                   />
-                )}
+                  
+                  {daysRemaining !== null && (
+                    <StatItem 
+                      icon={Clock} 
+                      value={daysRemaining} 
+                      label={daysRemaining === 1 ? 'day left' : 'days left'} 
+                      colors={colors} 
+                    />
+                  )}
+                </View>
               </View>
             </View>
 
             {/* Donation Buttons */}
-            <View style={styles.donateButtonsContainer}>
+            <View style={[styles.buttonsContainer, { gap: responsive.spacing.sm }]}>
               <DonateButton
                 onPress={handleDonate}
-                colors={colors}
-                isPrimary={true}
                 icon={Heart}
                 label="Donate Now"
+                variant="primary"
+                colors={colors}
               />
 
               {cause.allowRecurring && (
                 <DonateButton
                   onPress={handleRecurringDonate}
-                  colors={colors}
-                  isPrimary={false}
                   icon={RefreshCw}
-                  label="Monthly"
+                  label="Monthly Giving"
+                  variant="secondary"
+                  colors={colors}
                 />
               )}
             </View>
 
-            {/* Description */}
+            {/* Description Section */}
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              <Text style={[
+                styles.sectionTitle, 
+                { 
+                  color: colors.text,
+                  fontSize: responsive.fontSize.lg,
+                }
+              ]}>
                 About this Cause
               </Text>
-              <Text style={[styles.description, { color: colors.textSecondary }]}>
+              <Text style={[
+                styles.description, 
+                { 
+                  color: colors.textSecondary,
+                  fontSize: responsive.fontSize.md,
+                }
+              ]}>
                 {cause.description}
               </Text>
             </View>
 
-            {/* Details */}
+            {/* Details Card */}
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                Campaign Details
+              <Text style={[
+                styles.sectionTitle, 
+                { 
+                  color: colors.text,
+                  fontSize: responsive.fontSize.lg,
+                }
+              ]}>
+                Details
               </Text>
               <View style={[
                 styles.detailsCard, 
                 { 
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                },
-                SHADOWS.sm,
+                  backgroundColor: colors.card,
+                  borderColor: colors.cardBorder,
+                }
               ]}>
                 {cause.endDate && (
-                  <View style={[styles.detailRow, { borderBottomColor: colors.divider }]}>
-                    <View style={[styles.detailIconContainer, { backgroundColor: colors.surface2 }]}>
-                      <Calendar size={18} color={colors.textSecondary} />
+                  <View style={[
+                    styles.detailRow, 
+                    { borderBottomColor: colors.divider }
+                  ]}>
+                    <View style={[styles.detailIconContainer, { backgroundColor: colors.surfaceElevated }]}>
+                      <Calendar size={16} color={colors.textSecondary} />
                     </View>
-                    <View style={styles.detailTextContainer}>
-                      <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
-                        Campaign ends
-                      </Text>
-                      <Text style={[styles.detailValue, { color: colors.text }]}>
-                        {new Date(cause.endDate).toLocaleDateString('en-US', {
-                          month: 'long',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })}
-                      </Text>
-                    </View>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                      Campaign ends
+                    </Text>
+                    <Text style={[styles.detailValue, { color: colors.text }]}>
+                      {new Date(cause.endDate).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </Text>
                   </View>
                 )}
                 
@@ -873,32 +1069,28 @@ export default function CauseDetailScreen() {
                   styles.detailRow, 
                   cause.minimumDonation > 0 && { borderBottomColor: colors.divider }
                 ]}>
-                  <View style={[styles.detailIconContainer, { backgroundColor: colors.surface2 }]}>
-                    <Target size={18} color={colors.textSecondary} />
+                  <View style={[styles.detailIconContainer, { backgroundColor: colors.surfaceElevated }]}>
+                    <Target size={16} color={colors.textSecondary} />
                   </View>
-                  <View style={styles.detailTextContainer}>
-                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
-                      Fundraising goal
-                    </Text>
-                    <Text style={[styles.detailValue, { color: colors.text }]}>
-                      {formatCurrency(cause.goalAmount)}
-                    </Text>
-                  </View>
+                  <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                    Fundraising goal
+                  </Text>
+                  <Text style={[styles.detailValue, { color: colors.text }]}>
+                    {formatCurrency(cause.goalAmount)}
+                  </Text>
                 </View>
                 
                 {cause.minimumDonation > 0 && (
                   <View style={styles.detailRow}>
-                    <View style={[styles.detailIconContainer, { backgroundColor: colors.surface2 }]}>
-                      <Heart size={18} color={colors.textSecondary} />
+                    <View style={[styles.detailIconContainer, { backgroundColor: colors.surfaceElevated }]}>
+                      <Heart size={16} color={colors.textSecondary} />
                     </View>
-                    <View style={styles.detailTextContainer}>
-                      <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
-                        Minimum donation
-                      </Text>
-                      <Text style={[styles.detailValue, { color: colors.text }]}>
-                        {formatCurrency(cause.minimumDonation)}
-                      </Text>
-                    </View>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                      Minimum donation
+                    </Text>
+                    <Text style={[styles.detailValue, { color: colors.text }]}>
+                      {formatCurrency(cause.minimumDonation)}
+                    </Text>
                   </View>
                 )}
               </View>
@@ -906,10 +1098,17 @@ export default function CauseDetailScreen() {
 
             {/* Recent Donors */}
             {cause.isDonationsPublic && (
-              <View style={styles.section}>
+              <View style={[styles.section, { marginBottom: insets.bottom + 24 }]}>
                 <View style={styles.sectionHeader}>
-                  <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>
-                    Recent Supporters
+                  <Text style={[
+                    styles.sectionTitle, 
+                    { 
+                      color: colors.text,
+                      fontSize: responsive.fontSize.lg,
+                      marginBottom: 0,
+                    }
+                  ]}>
+                    Recent Donors
                   </Text>
                   {donations.length > 0 && (
                     <Pressable 
@@ -935,10 +1134,9 @@ export default function CauseDetailScreen() {
                   <View style={[
                     styles.donorsCard, 
                     { 
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    },
-                    SHADOWS.sm,
+                      backgroundColor: colors.card,
+                      borderColor: colors.cardBorder,
+                    }
                   ]}>
                     {donations.map((donation, index) => (
                       <DonorItem
@@ -950,32 +1148,12 @@ export default function CauseDetailScreen() {
                     ))}
                   </View>
                 ) : (
-                  <View style={[
-                    styles.emptyDonorsCard, 
-                    { 
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    },
-                    SHADOWS.sm,
-                  ]}>
-                    <View style={[styles.emptyIconContainer, { backgroundColor: colors.primarySoft }]}>
-                      <Heart size={32} color={colors.primary} />
-                    </View>
-                    <Text style={[styles.emptyTitle, { color: colors.text }]}>
-                      Be the first to donate!
-                    </Text>
-                    <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-                      Your support will kickstart this campaign
-                    </Text>
-                  </View>
+                  <EmptyDonorsState colors={colors} />
                 )}
               </View>
             )}
-
-            {/* Bottom Spacing */}
-            <View style={{ height: insets.bottom + SPACING.xxxl }} />
           </View>
-        </ScrollView>
+        </Animated.ScrollView>
       </WebContainer>
     </View>
   );
@@ -985,10 +1163,11 @@ export default function CauseDetailScreen() {
 // STYLES
 // ============================================================================
 const styles = StyleSheet.create({
+  // Container
   container: {
     flex: 1,
   },
-  
+
   // Header
   header: {
     position: 'absolute',
@@ -998,36 +1177,43 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.sm,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
     zIndex: 100,
   },
-  headerButtonWrapper: {
-    borderRadius: RADIUS.full,
+  headerBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 100,
+    zIndex: 99,
+    borderBottomWidth: 1,
+  },
+  headerButtonContainer: {
+    borderRadius: 24,
     overflow: 'hidden',
   },
-  headerButtonBlur: {
-    borderRadius: RADIUS.full,
-    overflow: 'hidden',
-  },
-  headerButtonInner: {
+  headerButton: {
     width: 48,
     height: 48,
-    borderRadius: RADIUS.full,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
   },
-  
+  headerButtonBlur: {
+    overflow: 'hidden',
+  },
+
   // Scroll
   scrollView: {
     flex: 1,
   },
-  
+
   // Hero Image
   imageContainer: {
     position: 'relative',
-    height: 320,
+    width: '100%',
   },
   heroImage: {
     width: '100%',
@@ -1039,134 +1225,174 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  heroGradient: {
+  imageGradient: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: 120,
+    height: 150,
   },
-  badgesContainer: {
-    position: 'absolute',
-    bottom: SPACING.xl,
-    left: SPACING.lg,
-    right: SPACING.lg,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACING.sm,
-  },
+
+  // Badges
   categoryBadge: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: RADIUS.full,
+    position: 'absolute',
+    bottom: 40,
+    left: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
   },
   categoryBadgeText: {
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
+    letterSpacing: 0.3,
   },
   featuredBadge: {
+    position: 'absolute',
+    bottom: 40,
+    right: 16,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  featuredBadgeGradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: RADIUS.full,
-    gap: SPACING.xs,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 6,
   },
   featuredBadgeText: {
     color: '#000',
     fontSize: 12,
     fontWeight: '700',
+    letterSpacing: 0.3,
   },
-  
+
   // Content
   content: {
     flex: 1,
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.xl,
-    marginTop: -SPACING.xxl,
-    borderTopLeftRadius: RADIUS.xxl,
-    borderTopRightRadius: RADIUS.xxl,
+    paddingTop: 20,
+    marginTop: -28,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
   },
+
+  // Title
   title: {
-    fontSize: isSmallScreen ? 24 : 28,
     fontWeight: '700',
-    marginBottom: SPACING.lg,
-    lineHeight: isSmallScreen ? 32 : 36,
-    letterSpacing: -0.5,
+    marginBottom: 20,
+    lineHeight: 34,
+    letterSpacing: -0.3,
   },
-  
-  // Progress Section
-  progressSection: {
-    borderRadius: RADIUS.lg,
+
+  // Progress Card
+  progressCard: {
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
     borderWidth: 1,
-    padding: SPACING.lg,
-    marginBottom: SPACING.lg,
+    ...Platform.select({
+      ios: {
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
-  progressBarContainer: {
+  progressSection: {
+    marginBottom: 20,
+  },
+  progressHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: SPACING.md,
-    marginBottom: SPACING.lg,
+    marginBottom: 12,
   },
-  progressBarWrapper: {
-    flex: 1,
-    height: 12,
-    borderRadius: RADIUS.sm,
-    overflow: 'hidden',
-  },
-  progressBarTrack: {
-    flex: 1,
-    height: '100%',
-    borderRadius: RADIUS.sm,
-  },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: RADIUS.sm,
-    overflow: 'hidden',
-  },
-  progressPercentBadge: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: RADIUS.sm,
-    minWidth: 56,
-    alignItems: 'center',
+  progressLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    letterSpacing: 0.2,
   },
   progressPercent: {
-    fontSize: 15,
+    fontSize: 18,
     fontWeight: '700',
   },
-  amountContainer: {
-    marginBottom: SPACING.lg,
+  progressBarWrapper: {
+    height: 14,
+    borderRadius: 7,
+    overflow: 'hidden',
+    position: 'relative',
   },
-  amountMain: {},
+  progressTrack: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 7,
+  },
+  progressTrackInner: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    opacity: 0.3,
+  },
+  progressFillContainer: {
+    height: '100%',
+    borderRadius: 7,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    flex: 1,
+    borderRadius: 7,
+  },
+  progressGlow: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    bottom: -2,
+    width: 20,
+    borderRadius: 10,
+    opacity: 0.5,
+  },
+
+  // Amount Section
+  amountSection: {},
+  amountMain: {
+    marginBottom: 16,
+  },
   amountRaised: {
-    fontSize: isSmallScreen ? 28 : 32,
-    fontWeight: '800',
-    letterSpacing: -0.5,
+    fontWeight: '700',
+    marginBottom: 4,
   },
-  amountLabel: {
+  amountGoal: {
     fontSize: 14,
-    marginTop: SPACING.xs,
   },
+
+  // Stats Row
   statsRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
-    gap: SPACING.xxl,
-    paddingTop: SPACING.lg,
+    paddingTop: 16,
     borderTopWidth: 1,
+    gap: 24,
   },
   statItem: {
     alignItems: 'center',
-    gap: SPACING.xs,
+    gap: 6,
   },
   statIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: RADIUS.md,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: SPACING.xs,
+    marginBottom: 2,
   },
   statValue: {
     fontSize: 18,
@@ -1174,247 +1400,218 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 12,
+    fontWeight: '500',
   },
-  
-  // Donate Buttons
-  donateButtonsContainer: {
+
+  // Buttons
+  buttonsContainer: {
     flexDirection: 'row',
-    gap: SPACING.md,
-    marginBottom: SPACING.xxl,
+    marginBottom: 28,
   },
   donateButtonWrapper: {
     flex: 1,
+    position: 'relative',
   },
   donateButtonPressable: {
-    borderRadius: RADIUS.lg,
+    borderRadius: 14,
     overflow: 'hidden',
   },
-  donateButtonGradient: {
+  donateButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: SPACING.lg,
-    gap: SPACING.sm,
+    borderRadius: 14,
+    gap: 10,
   },
-  donateButtonTextPrimary: {
+  donateButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+    letterSpacing: 0.3,
   },
-  donateButtonSecondary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: SPACING.lg - 2,
-    borderRadius: RADIUS.lg,
+  secondaryButton: {
     borderWidth: 2,
-    gap: SPACING.sm,
   },
-  donateButtonTextSecondary: {
+  secondaryButtonText: {
     fontSize: 16,
     fontWeight: '700',
+    letterSpacing: 0.3,
   },
-  
+  buttonShadow: {
+    position: 'absolute',
+    bottom: -4,
+    left: 8,
+    right: 8,
+    height: 20,
+    borderRadius: 14,
+    opacity: 0.25,
+    zIndex: -1,
+  },
+
   // Sections
   section: {
-    marginBottom: SPACING.xxl,
+    marginBottom: 28,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SPACING.md,
+    marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 18,
     fontWeight: '700',
-    marginBottom: SPACING.md,
+    marginBottom: 14,
+    letterSpacing: -0.2,
   },
   viewAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.xs,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    marginRight: -8,
+    gap: 2,
   },
   viewAllText: {
     fontSize: 14,
     fontWeight: '600',
   },
   description: {
-    fontSize: 16,
     lineHeight: 26,
+    letterSpacing: 0.1,
   },
-  
+
   // Details Card
   detailsCard: {
-    borderRadius: RADIUS.lg,
+    borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
   },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SPACING.lg,
+    padding: 16,
+    gap: 14,
     borderBottomWidth: 1,
-    borderBottomColor: 'transparent',
-    gap: SPACING.md,
   },
   detailIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: RADIUS.md,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  detailTextContainer: {
+  detailLabel: {
+    fontSize: 14,
     flex: 1,
   },
-  detailLabel: {
-    fontSize: 13,
-    marginBottom: 2,
-  },
   detailValue: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
   },
-  
+
   // Donors
   donorsCard: {
-    borderRadius: RADIUS.lg,
+    borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
   },
   donorItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SPACING.lg,
-    gap: SPACING.md,
+    padding: 14,
+    gap: 14,
   },
-  donorAvatarAnonymous: {
+  anonymousAvatar: {
     width: 48,
     height: 48,
-    borderRadius: RADIUS.full,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
   },
   donorInfo: {
     flex: 1,
+    gap: 4,
   },
   donorName: {
     fontSize: 15,
     fontWeight: '600',
-    marginBottom: 2,
+    letterSpacing: 0.1,
   },
   donorMessage: {
     fontSize: 13,
     fontStyle: 'italic',
     lineHeight: 18,
   },
-  donorAmountBadge: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: RADIUS.sm,
+  amountBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
   donorAmount: {
     fontSize: 14,
     fontWeight: '700',
   },
-  
+  loadingDonors: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+
   // Empty State
-  emptyDonorsCard: {
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
-    padding: SPACING.xxxl,
+  emptyState: {
+    borderRadius: 16,
+    padding: 40,
     alignItems: 'center',
   },
   emptyIconContainer: {
     width: 72,
     height: 72,
-    borderRadius: RADIUS.full,
+    borderRadius: 36,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: SPACING.lg,
+    marginBottom: 16,
   },
   emptyTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '600',
-    marginBottom: SPACING.xs,
+    marginBottom: 6,
   },
   emptySubtitle: {
     fontSize: 14,
     textAlign: 'center',
   },
-  
-  // Loading
-  loadingDonors: {
-    paddingVertical: SPACING.xxxl,
-    alignItems: 'center',
-  },
-  
-  // Shimmer Skeleton
-  shimmerContainer: {
-    overflow: 'hidden',
-    borderRadius: RADIUS.sm,
-  },
-  shimmerBase: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  shimmerOverlay: {
-    ...StyleSheet.absoluteFillObject,
-  },
+
+  // Skeleton
   skeletonContainer: {
     flex: 1,
   },
   skeletonImage: {
-    height: 320,
-    borderRadius: 0,
+    width: '100%',
   },
   skeletonContent: {
-    padding: SPACING.lg,
-    marginTop: -SPACING.xxl,
-    borderTopLeftRadius: RADIUS.xxl,
-    borderTopRightRadius: RADIUS.xxl,
-    gap: SPACING.sm,
+    flex: 1,
   },
   skeletonTitle: {
     height: 28,
     width: '85%',
-    borderRadius: RADIUS.sm,
   },
-  skeletonCard: {
-    padding: SPACING.lg,
-    borderRadius: RADIUS.lg,
-    marginTop: SPACING.md,
-    gap: SPACING.md,
-  },
-  skeletonProgress: {
-    height: 12,
-    borderRadius: RADIUS.sm,
-  },
-  skeletonStatsRow: {
-    flexDirection: 'row',
-    gap: SPACING.lg,
-    marginTop: SPACING.sm,
-  },
-  skeletonStat: {
-    width: 60,
-    height: 60,
-    borderRadius: RADIUS.md,
+  skeletonProgressCard: {
+    height: 180,
+    width: '100%',
   },
   skeletonButtonRow: {
     flexDirection: 'row',
-    gap: SPACING.md,
-    marginTop: SPACING.lg,
+    gap: 12,
   },
   skeletonButton: {
     flex: 1,
     height: 52,
-    borderRadius: RADIUS.lg,
+  },
+  skeletonSectionTitle: {
+    height: 20,
+    width: '40%',
   },
   skeletonText: {
     height: 16,
-    borderRadius: RADIUS.sm,
-    marginTop: SPACING.sm,
+    width: '100%',
   },
 });
