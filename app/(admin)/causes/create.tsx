@@ -23,7 +23,6 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import CrossPlatformDateTimePicker from '../../../components/CrossPlatformDateTimePicker';
 import CustomAlert from '../../../components/CustomAlert';
 import {
@@ -399,13 +398,12 @@ export default function CreateCauseScreen() {
           // Don't fail the whole operation if notifications fail
         }
 
-        setAlertConfig({
-          type: 'success',
-          title: 'Success! 🎉',
-          message: `"${causeTitle}" has been created successfully. Volunteers will be notified.`,
-          onConfirm: undefined,
-        });
-        setAlertVisible(true);
+        showAlert(
+          'success',
+          'Success! 🎉',
+          `"${causeTitle}" has been created successfully. Volunteers will be notified.`,
+          () => router.back()
+        );
       } else {
         throw new Error(response.error || 'Failed to create cause');
       }
