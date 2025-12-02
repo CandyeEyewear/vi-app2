@@ -1,70 +1,133 @@
 import React from 'react';
-import { TouchableOpacity, Text, ActivityIndicator, ViewStyle, StyleSheet } from 'react-native';
+import { Text, ActivityIndicator, StyleSheet, StyleProp, ViewStyle, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { AnimatedPressable } from './AnimatedPressable';
+import { useThemeStyles } from '../hooks/useThemeStyles';
 
 interface ButtonProps {
   children: React.ReactNode;
-  variant?: 'primary' | 'outline';
+  variant?: 'primary' | 'outline' | 'ghost';
   size?: 'lg' | 'md';
   loading?: boolean;
   disabled?: boolean;
   onPress?: () => void;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   icon?: React.ReactNode;
 }
 
-export default function Button({ 
-  children, 
-  variant = 'primary', 
+export default function Button({
+  children,
+  variant = 'primary',
   size = 'md',
-  loading, 
-  disabled, 
-  onPress, 
-  style, 
+  loading,
+  disabled,
+  onPress,
+  style,
   icon,
-  ...props 
+  ...props
 }: ButtonProps) {
-  const backgroundColor = variant === 'primary' ? '#38B6FF' : 'transparent';
-  const textColor = variant === 'primary' ? 'white' : '#38B6FF';
-  const borderColor = variant === 'outline' ? '#38B6FF' : 'transparent';
-  
-  return (
-    <TouchableOpacity 
-      style={[
-        styles.button, 
-        { backgroundColor, borderColor, borderWidth: variant === 'outline' ? 2 : 0 },
-        size === 'lg' && styles.buttonLg,
-        style
-      ]} 
-      onPress={onPress}
-      disabled={disabled || loading}
-      {...props}
-    >
+  const { colors, responsive } = useThemeStyles();
+
+  const textColor =
+    variant === 'primary' ? colors.textOnPrimary : variant === 'outline' ? colors.text : colors.text;
+
+  const content = (
+    <>
       {loading ? (
         <ActivityIndicator color={textColor} />
       ) : (
         <>
-          {icon}
-          <Text style={[styles.text, { color: textColor }]}>{children}</Text>
+          {icon && <View>{icon}</View>}
+          <Text
+            style={[
+              styles.text,
+              {
+                color: textColor,
+                fontSize: size === 'lg' ? responsive.fontSize.lg : responsive.fontSize.md,
+              },
+            ]}
+          >
+            {children}
+          </Text>
         </>
       )}
-    </TouchableOpacity>
+    </>
+  );
+
+  if (variant === 'primary') {
+    return (
+      <AnimatedPressable
+        onPress={onPress}
+        disabled={disabled || loading}
+        style={({ pressed }) => [
+          styles.button,
+          {
+            opacity: pressed ? 0.9 : 1,
+            borderRadius: 14,
+          },
+          size === 'lg' && { height: responsive.buttonHeight },
+          style,
+        ]}
+        {...props}
+      >
+        <LinearGradient
+          colors={[colors.primary, colors.primaryDark]}
+          style={[
+            styles.gradient,
+            {
+              borderRadius: 14,
+              paddingHorizontal: responsive.spacing.xl,
+              height: size === 'lg' ? responsive.buttonHeight : responsive.buttonHeight - 4,
+            },
+          ]}
+        >
+          {content}
+        </LinearGradient>
+      </AnimatedPressable>
+    );
+  }
+
+  return (
+    <AnimatedPressable
+      onPress={onPress}
+      disabled={disabled || loading}
+      style={({ pressed }) => [
+        styles.button,
+        {
+          borderRadius: 14,
+          borderWidth: variant === 'outline' ? 1.5 : 0,
+          borderColor: colors.border,
+          backgroundColor: variant === 'ghost' ? 'transparent' : colors.surfaceElevated,
+          opacity: pressed ? 0.9 : 1,
+          paddingHorizontal: responsive.spacing.xl,
+          height: size === 'lg' ? responsive.buttonHeight : responsive.buttonHeight - 4,
+        },
+        style,
+      ]}
+      {...props}
+    >
+      {content}
+    </AnimatedPressable>
   );
 }
 
 const styles = StyleSheet.create({
   button: {
-    padding: 12,
-    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  gradient: {
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 8,
   },
-  buttonLg: {
-    padding: 16,
-  },
   text: {
     fontWeight: '600',
-    fontSize: 16,
+    textTransform: 'none',
+    letterSpacing: 0.3,
   },
 });

@@ -1,14 +1,31 @@
 import React from 'react';
-import { View, ViewStyle, StyleSheet } from 'react-native';
+import { View, StyleSheet, StyleProp, ViewStyle } from 'react-native';
+import { useThemeStyles } from '../hooks/useThemeStyles';
 
 interface CardProps {
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
+  padding?: number;
+  elevated?: boolean;
 }
 
-export default function Card({ children, style, ...props }: CardProps) {
+export default function Card({ children, style, padding, elevated = true, ...props }: CardProps) {
+  const { colors, cardShadow, responsive } = useThemeStyles();
+
   return (
-    <View style={[styles.card, style]} {...props}>
+    <View
+      style={[
+        styles.card,
+        {
+          backgroundColor: colors.card,
+          padding: padding ?? responsive.spacing.lg,
+          borderColor: colors.cardBorder || colors.border,
+        },
+        elevated && cardShadow,
+        style,
+      ]}
+      {...props}
+    >
       {children}
     </View>
   );
@@ -16,13 +33,7 @@ export default function Card({ children, style, ...props }: CardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: 'white',
     borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    borderWidth: 1,
   },
 });
