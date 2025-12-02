@@ -32,6 +32,7 @@ import {
   Shirt,
   Users,
   Zap,
+  RefreshCw,
 } from 'lucide-react-native';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
@@ -121,7 +122,7 @@ export default function SubscribeScreen() {
   const handleSubscribe = useCallback(async () => {
     console.log('=== SUBSCRIBE BUTTON CLICKED ===');
     console.log('User:', user?.email);
-    console.log('Plan:', selectedPlan);
+    console.log('Plan: yearly');
     console.log('Agreed to terms:', agreedToTerms);
 
     if (!user) {
