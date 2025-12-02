@@ -14,7 +14,6 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -114,33 +113,38 @@ export default function RegisterScreen() {
     }
   }, [user, authLoading, router]);
 
+  const showAlert = (title: string, message: string, type: 'success' | 'error' | 'warning' = 'error') => {
+    setAlertConfig({ title, message, type });
+    setAlertVisible(true);
+  };
+
   const handleIndividualRegister = async () => {
     const formData = individualFormData;
 
     // Validation
     if (!formData.fullName || !formData.email || !formData.phone || !formData.location || !formData.country || !formData.password) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      showAlert('Error', 'Please fill in all required fields');
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      showAlert('Error', 'Passwords do not match');
       return;
     }
 
     if (formData.password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+      showAlert('Error', 'Password must be at least 6 characters');
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
+      showAlert('Error', 'Please enter a valid email address');
       return;
     }
 
     if (!formData.dateOfBirth) {
-      Alert.alert('Error', 'Please enter your date of birth');
+      showAlert('Error', 'Please enter your date of birth');
       return;
     }
 
@@ -157,7 +161,7 @@ export default function RegisterScreen() {
 
     const age = calculateAge(formData.dateOfBirth);
     if (age < 18) {
-      Alert.alert('Age Restriction', 'You must be 18 or older to register for VIbe');
+      showAlert('Age Restriction', 'You must be 18 or older to register for VIbe', 'warning');
       return;
     }
 
@@ -183,46 +187,34 @@ export default function RegisterScreen() {
       } as any);
 
       if (!response.success) {
-        setAlertConfig({
-          title: 'Registration Failed',
-          message: response.error || 'An error occurred during registration',
-          type: 'error',
-        });
-        setAlertVisible(true);
+        showAlert('Registration Failed', response.error || 'An error occurred during registration');
         return;
       }
 
       if ((response as any).requiresEmailConfirmation || !response.data) {
-        setAlertConfig({
-          title: 'Check Your Email',
-          message: 'We sent you a confirmation email. Please verify your email address to complete registration.',
-          type: 'warning',
-        });
-        setAlertVisible(true);
+        showAlert(
+          'Account Created! 🎉',
+          'Your account has been created successfully! We sent you a confirmation email. Please verify your email address to complete registration and start using VIbe.',
+          'warning'
+        );
         
         setTimeout(() => {
           router.replace('/login');
-        }, 2000);
+        }, 3000);
       } else if (response.data) {
-        setAlertConfig({
-          title: 'Success!',
-          message: 'Your account has been created successfully. Welcome to VIbe!',
-          type: 'success',
-        });
-        setAlertVisible(true);
+        showAlert(
+          'Account Created Successfully! 🎉',
+          'Welcome to VIbe! Your account is now active and ready to use. You\'ll be redirected to your feed shortly.',
+          'success'
+        );
         
         setTimeout(() => {
           router.replace('/feed' as any);
-        }, 1500);
+        }, 2000);
       }
     } catch (error: any) {
       console.error('Unexpected error:', error);
-      setAlertConfig({
-        title: 'Error',
-        message: 'An unexpected error occurred. Please try again.',
-        type: 'error',
-      });
-      setAlertVisible(true);
+      showAlert('Error', 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -235,33 +227,33 @@ export default function RegisterScreen() {
     if (!formData.email || !formData.password || !formData.organizationName || 
         !formData.registrationNumber || !formData.organizationDescription ||
         !formData.contactPersonName || !formData.phone || !formData.location) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      showAlert('Error', 'Please fill in all required fields');
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      showAlert('Error', 'Passwords do not match');
       return;
     }
 
     if (formData.password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+      showAlert('Error', 'Password must be at least 6 characters');
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
+      showAlert('Error', 'Please enter a valid email address');
       return;
     }
 
     if (selectedFocus.length === 0) {
-      Alert.alert('Error', 'Please select at least one industry focus area');
+      showAlert('Error', 'Please select at least one industry focus area');
       return;
     }
 
     if (!formData.organizationSize) {
-      Alert.alert('Error', 'Please select your organization size');
+      showAlert('Error', 'Please select your organization size');
       return;
     }
 
@@ -308,27 +300,21 @@ export default function RegisterScreen() {
 
       if (updateError) throw updateError;
 
-      setAlertConfig({
-        title: 'Application Submitted!',
-        message: 'Your organization application has been submitted for review. Our team will review your application and contact you within 2-3 business days.',
-        type: 'success',
-      });
-      setAlertVisible(true);
+      showAlert(
+        'Application Submitted Successfully! 🎉',
+        'Your organization account has been created and submitted for review. Our team will review your application and contact you within 2-3 business days. You\'ll receive an email notification once your account is approved.',
+        'success'
+      );
       
       await supabase.auth.signOut();
       
       setTimeout(() => {
         router.replace('/login');
-      }, 3000);
+      }, 4000);
 
     } catch (error: any) {
       console.error('Registration error:', error);
-      setAlertConfig({
-        title: 'Registration Failed',
-        message: error.message || 'An error occurred during registration. Please try again.',
-        type: 'error',
-      });
-      setAlertVisible(true);
+      showAlert('Registration Failed', error.message || 'An error occurred during registration. Please try again.');
     } finally {
       setLoading(false);
     }
