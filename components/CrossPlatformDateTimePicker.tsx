@@ -92,7 +92,10 @@ export default function CrossPlatformDateTimePicker({
             onChange={(e) => {
               if (e.target.value) {
                 if (mode === 'date') {
-                  onChange(new Date(e.target.value));
+                  // Parse date parts to avoid timezone issues
+                  const [year, month, day] = e.target.value.split('-').map(Number);
+                  const newDate = new Date(year, month - 1, day);
+                  onChange(newDate);
                 } else {
                   // For time, combine with current date
                   const [hours, minutes] = e.target.value.split(':').map(Number);
@@ -110,12 +113,15 @@ export default function CrossPlatformDateTimePicker({
             style={{
               flex: 1,
               fontSize: 16,
-              paddingVertical: 14,
+              paddingTop: 14,
+              paddingBottom: 14,
               border: 'none',
               outline: 'none',
               backgroundColor: 'transparent',
               color: colors.text,
               cursor: disabled ? 'not-allowed' : 'pointer',
+              minHeight: 48,
+              WebkitAppearance: 'none' as any,
             }}
           />
         </View>
@@ -192,6 +198,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 16,
     gap: 12,
+    minHeight: 52,
   },
   inputText: {
     flex: 1,
