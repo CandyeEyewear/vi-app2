@@ -76,21 +76,25 @@ const formatTimestamp = (timestamp?: string) => {
   });
 };
 
+const MARKERS = ['__REPLY_TO__:', '__ATTACHMENTS__:'] as const;
+
+const stripAfterMarker = (text: string, marker: string) => {
+  const index = text.indexOf(marker);
+  return index >= 0 ? text.slice(0, index) : text;
+};
+
 const parseMessagePreview = (rawText?: string) => {
   if (!rawText) {
     return { text: '', hasAttachment: false, hasReply: false };
   }
 
-  const hasReply = rawText.includes('__REPLY_TO__:');
-  const hasAttachment = rawText.includes('__ATTACHMENTS__:');
+  const hasReply = rawText.includes('__REPLY_TO__');
+  const hasAttachment = rawText.includes('__ATTACHMENTS__');
 
   let cleaned = rawText;
-  if (hasReply) {
-    cleaned = cleaned.split('__REPLY_TO__:')[0];
-  }
-  if (hasAttachment) {
-    cleaned = cleaned.split('__ATTACHMENTS__:')[0];
-  }
+  MARKERS.forEach((marker) => {
+    cleaned = stripAfterMarker(cleaned, marker);
+  });
 
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
 
