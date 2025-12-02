@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '../config/supabase.config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Create Supabase client
+// Create Supabase client with Realtime configuration
 export const supabase = createClient(
   supabaseConfig.url,
   supabaseConfig.anonKey,
@@ -18,6 +18,18 @@ export const supabase = createClient(
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
+    },
+    realtime: {
+      // Enable presence tracking and broadcast features
+      params: {
+        eventsPerSecond: 10,
+      },
+    },
+    // Enable global realtime features
+    global: {
+      headers: {
+        'X-Client-Info': 'vibe-app',
+      },
     },
   }
 );

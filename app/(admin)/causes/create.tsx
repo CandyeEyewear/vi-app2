@@ -397,9 +397,22 @@ export default function CreateCauseScreen() {
       } else {
         throw new Error(response.error || 'Failed to create cause');
       }
-    } catch (error) {
-      console.error('Error creating cause:', error);
-      showAlert('error', 'Error', 'Failed to create cause. Please try again.');
+    } catch (error: any) {
+      // Improved error logging for debugging
+      console.error('❌ Error creating cause:', error);
+      console.error('Error details:', {
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+        hint: error?.hint,
+      });
+      
+      const errorMessage = error?.message || 'Failed to create cause';
+      showAlert(
+        'error',
+        'Error Creating Cause',
+        `${errorMessage}. Please try again or contact support if the problem persists.`
+      );
     } finally {
       setSubmitting(false);
     }

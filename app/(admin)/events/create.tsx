@@ -464,9 +464,22 @@ export default function CreateEventScreen() {
       } else {
         showAlert('error', 'Error', response.error || 'Failed to create event');
       }
-    } catch (error) {
-      console.error('Create event error:', error);
-      showAlert('error', 'Error', 'Something went wrong. Please try again.');
+    } catch (error: any) {
+      // Improved error logging for debugging
+      console.error('❌ Error creating event:', error);
+      console.error('Error details:', {
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+        hint: error?.hint,
+      });
+      
+      const errorMessage = error?.message || 'Failed to create event';
+      showAlert(
+        'error',
+        'Error Creating Event',
+        `${errorMessage}. Please try again or contact support if the problem persists.`
+      );
     } finally {
       setSubmitting(false);
     }
