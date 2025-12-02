@@ -25,6 +25,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import CrossPlatformDateTimePicker from '../../../../components/CrossPlatformDateTimePicker';
 import { geocodeLocation, GeocodeResult } from '../../../../services/geocoding';
 import {
   ArrowLeft,
@@ -121,11 +122,8 @@ export default function EditEventScreen() {
 
   // Date & Time
   const [eventDate, setEventDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [startTime, setStartTime] = useState(new Date());
-  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [endTime, setEndTime] = useState<Date | null>(null);
-  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   
   // Helper functions for time conversion
   const timeStringToDate = (timeString: string): Date => {
@@ -153,7 +151,6 @@ export default function EditEventScreen() {
   const [capacity, setCapacity] = useState('');
   const [registrationRequired, setRegistrationRequired] = useState(true);
   const [registrationDeadline, setRegistrationDeadline] = useState<Date | null>(null);
-  const [showRegistrationDeadlinePicker, setShowRegistrationDeadlinePicker] = useState(false);
 
   // Pricing
   const [isFree, setIsFree] = useState(true);
@@ -849,110 +846,35 @@ export default function EditEventScreen() {
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Date & Time</Text>
 
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Event Date *</Text>
-              <TouchableOpacity
-                style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Calendar size={20} color={colors.textSecondary} />
-                <Text style={[styles.input, { color: colors.text }]}>
-                  {dateToString(eventDate)}
-                </Text>
-              </TouchableOpacity>
-              {showDatePicker && (
-                <DateTimePicker
-                  value={eventDate}
-                  mode="date"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={(event, selectedDate) => {
-                    // Close picker on Android immediately
-                    if (Platform.OS === 'android') {
-                      setShowDatePicker(false);
-                    }
-                    
-                    if (selectedDate) {
-                      setEventDate(selectedDate);
-                      // Auto-close on iOS after selection (better UX)
-                      if (Platform.OS === 'ios') {
-                        setShowDatePicker(false);
-                      }
-                    }
-                  }}
-                  minimumDate={new Date()}
-                />
-              )}
-            </View>
+            <CrossPlatformDateTimePicker
+              mode="date"
+              value={eventDate}
+              onChange={(date) => date && setEventDate(date)}
+              minimumDate={new Date()}
+              label="Event Date *"
+              colors={colors}
+            />
 
             <View style={styles.row}>
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={[styles.inputLabel, { color: colors.text }]}>Start Time *</Text>
-                <TouchableOpacity
-                  style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={() => setShowStartTimePicker(true)}
-                >
-                  <Clock size={20} color={colors.textSecondary} />
-                  <Text style={[styles.input, { color: colors.text }]}>
-                    {dateToTimeString(startTime)}
-                  </Text>
-                </TouchableOpacity>
-                {showStartTimePicker && (
-                  <DateTimePicker
-                    value={startTime}
-                    mode="time"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={(event, selectedTime) => {
-                      // Close picker on Android immediately
-                      if (Platform.OS === 'android') {
-                        setShowStartTimePicker(false);
-                      }
-                      
-                      if (selectedTime) {
-                        setStartTime(selectedTime);
-                        // Auto-close on iOS after selection (better UX)
-                        if (Platform.OS === 'ios') {
-                          setShowStartTimePicker(false);
-                        }
-                      }
-                    }}
-                    is24Hour={true}
-                  />
-                )}
+              <View style={{ flex: 1 }}>
+                <CrossPlatformDateTimePicker
+                  mode="time"
+                  value={startTime}
+                  onChange={(date) => date && setStartTime(date)}
+                  label="Start Time *"
+                  colors={colors}
+                />
               </View>
 
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={[styles.inputLabel, { color: colors.text }]}>End Time</Text>
-                <TouchableOpacity
-                  style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={() => setShowEndTimePicker(true)}
-                >
-                  <Clock size={20} color={colors.textSecondary} />
-                  <Text style={[styles.input, { color: colors.text }]}>
-                    {endTime ? dateToTimeString(endTime) : 'Not set'}
-                  </Text>
-                </TouchableOpacity>
-                {showEndTimePicker && (
-                  <DateTimePicker
-                    value={endTime || new Date()}
-                    mode="time"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={(event, selectedTime) => {
-                      // Close picker on Android immediately
-                      if (Platform.OS === 'android') {
-                        setShowEndTimePicker(false);
-                      }
-                      
-                      if (selectedTime) {
-                        setEndTime(selectedTime);
-                        // Auto-close on iOS after selection (better UX)
-                        if (Platform.OS === 'ios') {
-                          setShowEndTimePicker(false);
-                        }
-                      }
-                    }}
-                    is24Hour={true}
-                  />
-                )}
+              <View style={{ flex: 1 }}>
+                <CrossPlatformDateTimePicker
+                  mode="time"
+                  value={endTime || new Date()}
+                  onChange={(date) => setEndTime(date)}
+                  label="End Time"
+                  placeholder="Not set"
+                  colors={colors}
+                />
               </View>
             </View>
           </View>
@@ -1012,40 +934,15 @@ export default function EditEventScreen() {
             </View>
 
             {registrationRequired && (
-              <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: colors.text }]}>Registration Deadline</Text>
-                <TouchableOpacity
-                  style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={() => setShowRegistrationDeadlinePicker(true)}
-                >
-                  <Calendar size={20} color={colors.textSecondary} />
-                  <Text style={[styles.input, { color: colors.text }]}>
-                    {registrationDeadline ? dateToString(registrationDeadline) : 'Not set (optional)'}
-                  </Text>
-                </TouchableOpacity>
-                {showRegistrationDeadlinePicker && (
-                  <DateTimePicker
-                    value={registrationDeadline || new Date()}
-                    mode="date"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={(event, selectedDate) => {
-                      // Close picker on Android immediately
-                      if (Platform.OS === 'android') {
-                        setShowRegistrationDeadlinePicker(false);
-                      }
-                      
-                      if (selectedDate) {
-                        setRegistrationDeadline(selectedDate);
-                        // Auto-close on iOS after selection (better UX)
-                        if (Platform.OS === 'ios') {
-                          setShowRegistrationDeadlinePicker(false);
-                        }
-                      }
-                    }}
-                    minimumDate={new Date()}
-                  />
-                )}
-              </View>
+              <CrossPlatformDateTimePicker
+                mode="date"
+                value={registrationDeadline || new Date()}
+                onChange={(date) => setRegistrationDeadline(date)}
+                minimumDate={new Date()}
+                label="Registration Deadline"
+                placeholder="Not set (optional)"
+                colors={colors}
+              />
             )}
           </View>
 

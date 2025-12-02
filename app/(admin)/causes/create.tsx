@@ -25,6 +25,7 @@ import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import CrossPlatformDateTimePicker from '../../../components/CrossPlatformDateTimePicker';
 import {
   ArrowLeft,
   Heart,
@@ -82,7 +83,6 @@ export default function CreateCauseScreen() {
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [goalAmount, setGoalAmount] = useState('');
   const [endDate, setEndDate] = useState<Date | null>(null);
-  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -567,51 +567,19 @@ export default function CreateCauseScreen() {
           </View>
 
           {/* End Date */}
-          <View style={styles.section}>
-            <Text style={[styles.label, { color: colors.text }]}>End Date (Optional)</Text>
-            <TouchableOpacity
-              style={[
-                styles.inputContainer, 
-                { backgroundColor: colors.card, borderColor: errors.endDate ? colors.error : colors.border }
-              ]}
-              onPress={() => setShowEndDatePicker(true)}
-            >
-              <Calendar size={20} color={colors.textSecondary} />
-              <Text style={[styles.input, { color: colors.text }]}>
-                {endDate ? dateToString(endDate) : 'Not set (optional)'}
-              </Text>
-            </TouchableOpacity>
-            {showEndDatePicker && (
-              <DateTimePicker
-                value={endDate || new Date()}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={(event, selectedDate) => {
-                  // Close picker on Android immediately
-                  if (Platform.OS === 'android') {
-                    setShowEndDatePicker(false);
-                  }
-                  
-                  if (selectedDate) {
-                    setEndDate(selectedDate);
-                    // Auto-close on iOS after selection (better UX)
-                    if (Platform.OS === 'ios') {
-                      setShowEndDatePicker(false);
-                    }
-                  } else if (Platform.OS === 'android' && event.type === 'dismissed') {
-                    setEndDate(null);
-                  }
-                }}
-                minimumDate={new Date()}
-              />
-            )}
-            {errors.endDate && (
-              <Text style={[styles.errorMessage, { color: colors.error }]}>{errors.endDate}</Text>
-            )}
-            <Text style={[styles.helperText, { color: colors.textSecondary }]}>
-              Leave empty for ongoing campaigns
-            </Text>
-          </View>
+          <CrossPlatformDateTimePicker
+            mode="date"
+            value={endDate || new Date()}
+            onChange={(date) => setEndDate(date)}
+            minimumDate={new Date()}
+            label="End Date (Optional)"
+            placeholder="Not set (optional)"
+            colors={colors}
+            error={errors.endDate}
+          />
+          <Text style={[styles.helperText, { color: colors.textSecondary }]}>
+            Leave empty for ongoing campaigns
+          </Text>
 
           {/* Minimum Donation */}
           <View style={styles.section}>
