@@ -404,25 +404,47 @@ export default function CreateEventScreen() {
             console.log('✅ Notifications created successfully');
             console.log('📊 Total notifications sent:', notifiedUsers?.length || 0);
 
-            if (notifiedUsers && notifiedUsers.length > 0) {
+            // Send push notifications to users with push tokens and events notifications enabled
+            console.log('🔔 Starting push notification process...');
+            
+            // Get all users with push tokens
+            const { data: users, error: usersError } = await supabase
+              .from('users')
+              .select('id, push_token')
+              .not('push_token', 'is', null);
 
-              // Send push notifications to users with push tokens and events notifications enabled
-              console.log('🔔 Starting push notification process...');
+            console.log('📊 Users query result:', { 
+              error: usersError, 
+              userCount: users?.length || 0 
+            });
+
+            if (!usersError && users) {
+              console.log('✅ Found', users.length, 'users with push tokens');
               
-              // Get users with push tokens from the notified users list
-              const { data: usersWithTokens, error: tokensError } = await supabase
-                .from('users')
-                .select('id, push_token')
-                .in('id', notifiedUsers.map((n: any) => n.user_id))
-                .not('push_token', 'is', null);
+              // Get notification settings for these users
+              const { data: settingsData, error: settingsError } = await supabase
+                .from('user_notification_settings')
+                .select('user_id, events_enabled')
+                .in('user_id', users.map(u => u.id));
 
-              console.log('📊 Users with push tokens:', usersWithTokens?.length || 0);
+              console.log('📊 Settings query result:', { 
+                error: settingsError, 
+                settingsCount: settingsData?.length || 0 
+              });
 
-              if (!tokensError && usersWithTokens && usersWithTokens.length > 0) {
-                console.log('✅ Found', usersWithTokens.length, 'users with push tokens');
+              if (!settingsError && settingsData) {
+                // Filter users who have events enabled
+                const settingsMap = new Map(settingsData.map(s => [s.user_id, s.events_enabled]));
+                
+                const enabledUsers = users.filter(user => {
+                  const setting = settingsMap.get(user.id);
+                  return setting === true || setting === undefined;
+                });
 
-                // Send push notifications
-                for (const userObj of usersWithTokens) {
+                console.log('✅ Found', enabledUsers.length, 'users with events notifications enabled');
+
+                for (const userObj of enabledUsers) {
+                  console.log('📤 Sending push to user:', userObj.id.substring(0, 8) + '...');
                   try {
                     await sendNotificationToUser(userObj.id, {
                       type: 'event',
