@@ -13,7 +13,6 @@ import {
   TouchableOpacity,
   TextInput,
   useColorScheme,
-  Alert,
   Dimensions,
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -25,6 +24,8 @@ import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import CrossPlatformDateTimePicker from '../../../components/CrossPlatformDateTimePicker';
+import CustomAlert from '../../../components/CustomAlert';
 import {
   ArrowLeft,
   Heart,
@@ -82,7 +83,6 @@ export default function CreateCauseScreen() {
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [goalAmount, setGoalAmount] = useState('');
   const [endDate, setEndDate] = useState<Date | null>(null);
-  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -95,6 +95,25 @@ export default function CreateCauseScreen() {
   
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Alert state
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({
+    type: 'info' as 'success' | 'error' | 'warning' | 'info',
+    title: '',
+    message: '',
+    onConfirm: undefined as (() => void) | undefined,
+  });
+
+  const showAlert = (
+    type: 'success' | 'error' | 'warning' | 'info',
+    title: string,
+    message: string,
+    onConfirm?: () => void
+  ) => {
+    setAlertConfig({ type, title, message, onConfirm });
+    setAlertVisible(true);
+  };
 
   // Helper function for date conversion
   const dateToString = (date: Date): string => {
@@ -112,7 +131,7 @@ export default function CreateCauseScreen() {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'We need access to your photos to upload an image.');
+        showAlert('warning', 'Permission Denied', 'We need access to your photos to upload an image.');
         return;
       }
 
@@ -128,7 +147,7 @@ export default function CreateCauseScreen() {
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      showAlert('error', 'Error', 'Failed to pick image. Please try again.');
     }
   }, []);
 
@@ -181,7 +200,7 @@ export default function CreateCauseScreen() {
       return urlData.publicUrl;
     } catch (error) {
       console.error('Error uploading image:', error);
-      Alert.alert('Upload Error', 'Failed to upload image. Please try again.');
+      showAlert('error', 'Upload Error', 'Failed to upload image. Please try again.');
       return null;
     } finally {
       setUploadingImage(false);
@@ -233,12 +252,12 @@ export default function CreateCauseScreen() {
   // Handle form submission
   const handleSubmit = useCallback(async () => {
     if (!validateForm()) {
-      Alert.alert('Validation Error', 'Please fix the errors in the form');
+      showAlert('warning', 'Validation Error', 'Please fix the errors in the form');
       return;
     }
 
     if (!user?.id) {
-      Alert.alert('Error', 'You must be logged in to create a cause');
+      showAlert('error', 'Error', 'You must be logged in to create a cause');
       return;
     }
 
@@ -252,7 +271,7 @@ export default function CreateCauseScreen() {
         if (uploadedUrl) {
           finalImageUrl = uploadedUrl;
         } else {
-          Alert.alert('Error', 'Failed to upload image. Please try again.');
+          showAlert('error', 'Error', 'Failed to upload image. Please try again.');
           setSubmitting(false);
           return;
         }
@@ -368,37 +387,18 @@ export default function CreateCauseScreen() {
           // Don't fail the whole operation if notifications fail
         }
 
-        Alert.alert(
-          'Success! 🎉',
-          `"${causeTitle}" has been created successfully. Volunteers will be notified.`,
-          [
-            {
-              text: 'View Cause',
-              onPress: () => router.replace(`/causes/${causeId}`),
-            },
-            {
-              text: 'Create Another',
-              onPress: () => {
-                // Reset form
-                setTitle('');
-                setDescription('');
-                setCategory('community');
-                setGoalAmount('');
-                setEndDate(null);  // FIX: Was '' (empty string), should be null
-                setImageUri(null);
-                setImageUrl('');
-                setIsDonationsPublic(true);
-                setAllowRecurring(true);
-                setMinimumDonation('');
-                setIsFeatured(false);
-              },
-            },
-          ]
-        );
+        setAlertConfig({
+          type: 'success',
+          title: 'Success! 🎉',
+          message: `"${causeTitle}" has been created successfully. Volunteers will be notified.`,
+          onConfirm: undefined,
+        });
+        setAlertVisible(true);
       } else {
         throw new Error(response.error || 'Failed to create cause');
       }
     } catch (error: any) {
+      // Improved error logging for debugging
       console.error('❌ Error creating cause:', error);
       console.error('Error details:', {
         message: error?.message,
@@ -408,15 +408,15 @@ export default function CreateCauseScreen() {
       });
       
       const errorMessage = error?.message || 'Failed to create cause';
-      Alert.alert(
+      showAlert(
+        'error',
         'Error Creating Cause',
-        `${errorMessage}. Please try again or contact support if the problem persists.`,
-        [{ text: 'OK' }]
+        `${errorMessage}. Please try again or contact support if the problem persists.`
       );
     } finally {
       setSubmitting(false);
     }
-  }, [validateForm, user, title, description, category, goalAmount, endDate, imageUri, imageUrl, isDonationsPublic, allowRecurring, minimumDonation, router, uploadImageToStorage]);
+  }, [validateForm, user, title, description, category, goalAmount, endDate, imageUri, imageUrl, isDonationsPublic, allowRecurring, minimumDonation, isFeatured, visibility, router, uploadImageToStorage]);
 
   // Access check
   if (!isAdmin) {
@@ -579,51 +579,19 @@ export default function CreateCauseScreen() {
           </View>
 
           {/* End Date */}
-          <View style={styles.section}>
-            <Text style={[styles.label, { color: colors.text }]}>End Date (Optional)</Text>
-            <TouchableOpacity
-              style={[
-                styles.inputContainer, 
-                { backgroundColor: colors.card, borderColor: errors.endDate ? colors.error : colors.border }
-              ]}
-              onPress={() => setShowEndDatePicker(true)}
-            >
-              <Calendar size={20} color={colors.textSecondary} />
-              <Text style={[styles.input, { color: colors.text }]}>
-                {endDate ? dateToString(endDate) : 'Not set (optional)'}
-              </Text>
-            </TouchableOpacity>
-            {showEndDatePicker && (
-              <DateTimePicker
-                value={endDate || new Date()}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={(event, selectedDate) => {
-                  // On Android, dismiss is automatic - just close picker
-                  if (Platform.OS === 'android') {
-                    setShowEndDatePicker(false);
-                    // Only set date if user didn't cancel
-                    if (event.type === 'set' && selectedDate) {
-                      setEndDate(selectedDate);
-                    }
-                  } else {
-                    // On iOS, keep picker open until user confirms
-                    if (selectedDate) {
-                      setEndDate(selectedDate);
-                      setShowEndDatePicker(false);  // Close after selection on iOS
-                    }
-                  }
-                }}
-                minimumDate={new Date()}
-              />
-            )}
-            {errors.endDate && (
-              <Text style={[styles.errorMessage, { color: colors.error }]}>{errors.endDate}</Text>
-            )}
-            <Text style={[styles.helperText, { color: colors.textSecondary }]}>
-              Leave empty for ongoing campaigns
-            </Text>
-          </View>
+          <CrossPlatformDateTimePicker
+            mode="date"
+            value={endDate || new Date()}
+            onChange={(date) => setEndDate(date)}
+            minimumDate={new Date()}
+            label="End Date (Optional)"
+            placeholder="Not set (optional)"
+            colors={colors}
+            error={errors.endDate}
+          />
+          <Text style={[styles.helperText, { color: colors.textSecondary }]}>
+            Leave empty for ongoing campaigns
+          </Text>
 
           {/* Minimum Donation */}
           <View style={styles.section}>
@@ -815,6 +783,17 @@ export default function CreateCauseScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Custom Alert */}
+      <CustomAlert
+        visible={alertVisible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        onClose={() => setAlertVisible(false)}
+        onConfirm={alertConfig.onConfirm}
+        showCancel={!!alertConfig.onConfirm}
+      />
     </View>
   );
 }

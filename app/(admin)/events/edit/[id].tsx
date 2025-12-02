@@ -13,7 +13,6 @@ import {
   TouchableOpacity,
   TextInput,
   useColorScheme,
-  Alert,
   Dimensions,
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -25,6 +24,8 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import CrossPlatformDateTimePicker from '../../../../components/CrossPlatformDateTimePicker';
+import CustomAlert from '../../../../components/CustomAlert';
 import { geocodeLocation, GeocodeResult } from '../../../../services/geocoding';
 import {
   ArrowLeft,
@@ -121,11 +122,8 @@ export default function EditEventScreen() {
 
   // Date & Time
   const [eventDate, setEventDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [startTime, setStartTime] = useState(new Date());
-  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [endTime, setEndTime] = useState<Date | null>(null);
-  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   
   // Helper functions for time conversion
   const timeStringToDate = (timeString: string): Date => {
@@ -153,7 +151,6 @@ export default function EditEventScreen() {
   const [capacity, setCapacity] = useState('');
   const [registrationRequired, setRegistrationRequired] = useState(true);
   const [registrationDeadline, setRegistrationDeadline] = useState<Date | null>(null);
-  const [showRegistrationDeadlinePicker, setShowRegistrationDeadlinePicker] = useState(false);
 
   // Pricing
   const [isFree, setIsFree] = useState(true);
@@ -164,6 +161,25 @@ export default function EditEventScreen() {
   const [contactName, setContactName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [contactPhone, setContactPhone] = useState('');
+
+  // Alert state
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({
+    type: 'info' as 'success' | 'error' | 'warning' | 'info',
+    title: '',
+    message: '',
+    onConfirm: undefined as (() => void) | undefined,
+  });
+
+  const showAlert = (
+    type: 'success' | 'error' | 'warning' | 'info',
+    title: string,
+    message: string,
+    onConfirm?: () => void
+  ) => {
+    setAlertConfig({ type, title, message, onConfirm });
+    setAlertVisible(true);
+  };
 
   // Load event data
   useEffect(() => {
@@ -210,7 +226,7 @@ export default function EditEventScreen() {
           setContactEmail(event.contactEmail || '');
           setContactPhone(event.contactPhone || '');
         } else {
-          Alert.alert('Error', 'Failed to load event');
+          showAlert('error', 'Error', 'Failed to load event');
           router.back();
         }
       } catch (error) {
@@ -229,7 +245,7 @@ export default function EditEventScreen() {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'We need access to your photos to upload an image.');
+        showAlert('warning', 'Permission Denied', 'We need access to your photos to upload an image.');
         return;
       }
 
@@ -245,7 +261,7 @@ export default function EditEventScreen() {
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      showAlert('error', 'Error', 'Failed to pick image. Please try again.');
     }
   }, []);
 
@@ -298,7 +314,7 @@ export default function EditEventScreen() {
       return urlData.publicUrl;
     } catch (error) {
       console.error('Error uploading image:', error);
-      Alert.alert('Error', 'Failed to upload image. Please try again.');
+      showAlert('error', 'Error', 'Failed to upload image. Please try again.');
       return null;
     } finally {
       setUploadingImage(false);
@@ -333,39 +349,39 @@ export default function EditEventScreen() {
   // Validate form
   const validateForm = useCallback((): boolean => {
     if (!title.trim()) {
-      Alert.alert('Required', 'Please enter an event title');
+      showAlert('warning', 'Required', 'Please enter an event title');
       return false;
     }
     if (!description.trim()) {
-      Alert.alert('Required', 'Please enter a description');
+      showAlert('warning', 'Required', 'Please enter a description');
       return false;
     }
     if (!isVirtual && !location.trim()) {
-      Alert.alert('Required', 'Please enter a location');
+      showAlert('warning', 'Required', 'Please enter a location');
       return false;
     }
     if (isVirtual && !virtualLink.trim()) {
-      Alert.alert('Required', 'Please enter a virtual meeting link');
+      showAlert('warning', 'Required', 'Please enter a virtual meeting link');
       return false;
     }
     if (!eventDate) {
-      Alert.alert('Required', 'Please enter the event date');
+      showAlert('warning', 'Required', 'Please enter the event date');
       return false;
     }
     if (!startTime) {
-      Alert.alert('Required', 'Please enter the start time');
+      showAlert('warning', 'Required', 'Please enter the start time');
       return false;
     }
     if (hasCapacity && (!capacity || parseInt(capacity) <= 0)) {
-      Alert.alert('Invalid', 'Please enter a valid capacity');
+      showAlert('warning', 'Invalid', 'Please enter a valid capacity');
       return false;
     }
     if (!isFree && (!ticketPrice || parseFloat(ticketPrice) <= 0)) {
-      Alert.alert('Invalid', 'Please enter a valid ticket price');
+      showAlert('warning', 'Invalid', 'Please enter a valid ticket price');
       return false;
     }
     if (!isFree && !paymentLink.trim()) {
-      Alert.alert('Required', 'Please enter a payment link for paid events');
+      showAlert('warning', 'Required', 'Please enter a payment link for paid events');
       return false;
     }
     return true;
@@ -420,15 +436,13 @@ export default function EditEventScreen() {
       });
 
       if (response.success) {
-        Alert.alert('Saved!', 'Event has been updated successfully.', [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
+        showAlert('success', 'Saved!', 'Event has been updated successfully.', () => router.back());
       } else {
-        Alert.alert('Error', response.error || 'Failed to update event');
+        showAlert('error', 'Error', response.error || 'Failed to update event');
       }
     } catch (error) {
       console.error('Update event error:', error);
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+      showAlert('error', 'Error', 'Something went wrong. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -436,27 +450,21 @@ export default function EditEventScreen() {
 
   // Handle delete
   const handleDelete = useCallback(() => {
-    Alert.alert(
-      'Delete Event',
-      'Are you sure you want to delete this event? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            if (!id) return;
-            const response = await deleteEvent(id);
-            if (response.success) {
-              Alert.alert('Deleted', 'Event has been deleted');
-              router.replace('/events');
-            } else {
-              Alert.alert('Error', response.error || 'Failed to delete event');
-            }
-          },
-        },
-      ]
-    );
+    setAlertConfig({
+      type: 'error',
+      title: 'Delete Event',
+      message: 'Are you sure you want to delete this event? This cannot be undone.',
+      onConfirm: async () => {
+        if (!id) return;
+        const response = await deleteEvent(id);
+        if (response.success) {
+          showAlert('success', 'Deleted', 'Event has been deleted', () => router.replace('/events'));
+        } else {
+          showAlert('error', 'Error', response.error || 'Failed to delete event');
+        }
+      },
+    });
+    setAlertVisible(true);
   }, [id, router]);
 
   const selectedCategory = CATEGORY_OPTIONS.find(c => c.value === category);
@@ -849,86 +857,35 @@ export default function EditEventScreen() {
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Date & Time</Text>
 
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Event Date *</Text>
-              <TouchableOpacity
-                style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Calendar size={20} color={colors.textSecondary} />
-                <Text style={[styles.input, { color: colors.text }]}>
-                  {dateToString(eventDate)}
-                </Text>
-              </TouchableOpacity>
-              {showDatePicker && (
-                <DateTimePicker
-                  value={eventDate}
-                  mode="date"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={(event, selectedDate) => {
-                    setShowDatePicker(Platform.OS === 'ios');
-                    if (selectedDate) {
-                      setEventDate(selectedDate);
-                    }
-                  }}
-                  minimumDate={new Date()}
-                />
-              )}
-            </View>
+            <CrossPlatformDateTimePicker
+              mode="date"
+              value={eventDate}
+              onChange={(date) => date && setEventDate(date)}
+              minimumDate={new Date()}
+              label="Event Date *"
+              colors={colors}
+            />
 
             <View style={styles.row}>
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={[styles.inputLabel, { color: colors.text }]}>Start Time *</Text>
-                <TouchableOpacity
-                  style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={() => setShowStartTimePicker(true)}
-                >
-                  <Clock size={20} color={colors.textSecondary} />
-                  <Text style={[styles.input, { color: colors.text }]}>
-                    {dateToTimeString(startTime)}
-                  </Text>
-                </TouchableOpacity>
-                {showStartTimePicker && (
-                  <DateTimePicker
-                    value={startTime}
-                    mode="time"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={(event, selectedTime) => {
-                      setShowStartTimePicker(Platform.OS === 'ios');
-                      if (selectedTime) {
-                        setStartTime(selectedTime);
-                      }
-                    }}
-                    is24Hour={true}
-                  />
-                )}
+              <View style={{ flex: 1 }}>
+                <CrossPlatformDateTimePicker
+                  mode="time"
+                  value={startTime}
+                  onChange={(date) => date && setStartTime(date)}
+                  label="Start Time *"
+                  colors={colors}
+                />
               </View>
 
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={[styles.inputLabel, { color: colors.text }]}>End Time</Text>
-                <TouchableOpacity
-                  style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={() => setShowEndTimePicker(true)}
-                >
-                  <Clock size={20} color={colors.textSecondary} />
-                  <Text style={[styles.input, { color: colors.text }]}>
-                    {endTime ? dateToTimeString(endTime) : 'Not set'}
-                  </Text>
-                </TouchableOpacity>
-                {showEndTimePicker && (
-                  <DateTimePicker
-                    value={endTime || new Date()}
-                    mode="time"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={(event, selectedTime) => {
-                      setShowEndTimePicker(Platform.OS === 'ios');
-                      if (selectedTime) {
-                        setEndTime(selectedTime);
-                      }
-                    }}
-                    is24Hour={true}
-                  />
-                )}
+              <View style={{ flex: 1 }}>
+                <CrossPlatformDateTimePicker
+                  mode="time"
+                  value={endTime || new Date()}
+                  onChange={(date) => setEndTime(date)}
+                  label="End Time"
+                  placeholder="Not set"
+                  colors={colors}
+                />
               </View>
             </View>
           </View>
@@ -988,32 +945,15 @@ export default function EditEventScreen() {
             </View>
 
             {registrationRequired && (
-              <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: colors.text }]}>Registration Deadline</Text>
-                <TouchableOpacity
-                  style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={() => setShowRegistrationDeadlinePicker(true)}
-                >
-                  <Calendar size={20} color={colors.textSecondary} />
-                  <Text style={[styles.input, { color: colors.text }]}>
-                    {registrationDeadline ? dateToString(registrationDeadline) : 'Not set (optional)'}
-                  </Text>
-                </TouchableOpacity>
-                {showRegistrationDeadlinePicker && (
-                  <DateTimePicker
-                    value={registrationDeadline || new Date()}
-                    mode="date"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={(event, selectedDate) => {
-                      setShowRegistrationDeadlinePicker(Platform.OS === 'ios');
-                      if (selectedDate) {
-                        setRegistrationDeadline(selectedDate);
-                      }
-                    }}
-                    minimumDate={new Date()}
-                  />
-                )}
-              </View>
+              <CrossPlatformDateTimePicker
+                mode="date"
+                value={registrationDeadline || new Date()}
+                onChange={(date) => setRegistrationDeadline(date)}
+                minimumDate={new Date()}
+                label="Registration Deadline"
+                placeholder="Not set (optional)"
+                colors={colors}
+              />
             )}
           </View>
 
@@ -1148,6 +1088,17 @@ export default function EditEventScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Custom Alert */}
+      <CustomAlert
+        visible={alertVisible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        onClose={() => setAlertVisible(false)}
+        onConfirm={alertConfig.onConfirm}
+        showCancel={!!alertConfig.onConfirm}
+      />
     </View>
   );
 }
