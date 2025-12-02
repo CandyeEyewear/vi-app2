@@ -13,7 +13,6 @@ import {
   TouchableOpacity,
   TextInput,
   useColorScheme,
-  Alert,
   Dimensions,
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -51,6 +50,8 @@ import { CauseCategory, CauseStatus, Cause, VisibilityType } from '../../../../t
 import { supabase } from '../../../../services/supabase';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { deleteCause } from '../../../../services/causesService';
+import CustomAlert from '../../../../components/CustomAlert';
+import { useAlert, showSuccessAlert, showErrorAlert, showWarningAlert } from '../../../../hooks/useAlert';
 import { decode } from 'base64-arraybuffer';
 import WebContainer from '../../../../components/WebContainer';
 
@@ -76,33 +77,6 @@ const STATUS_OPTIONS: { value: CauseStatus; label: string; color: string }[] = [
   { value: 'cancelled', label: 'Cancelled', color: '#F44336' },
 ];
 
-// ============================================
-// WEB-COMPATIBLE ALERT HELPERS
-// ============================================
-const showAlert = (title: string, message: string, onOk?: () => void) => {
-  if (Platform.OS === 'web') {
-    window.alert(`${title}\n\n${message}`);
-    if (onOk) onOk();
-  } else {
-    Alert.alert(title, message, [{ text: 'OK', onPress: onOk }]);
-  }
-};
-
-const showConfirm = (title: string, message: string, onConfirm: () => void, onCancel?: () => void) => {
-  if (Platform.OS === 'web') {
-    if (window.confirm(`${title}\n\n${message}`)) {
-      onConfirm();
-    } else if (onCancel) {
-      onCancel();
-    }
-  } else {
-    Alert.alert(title, message, [
-      { text: 'Cancel', style: 'cancel', onPress: onCancel },
-      { text: 'Delete', style: 'destructive', onPress: onConfirm },
-    ]);
-  }
-};
-
 export default function EditCauseScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -110,6 +84,7 @@ export default function EditCauseScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const { user, isAdmin } = useAuth();
+  const { alertProps, showAlert } = useAlert();
 
   // Loading state
   const [loading, setLoading] = useState(true);
@@ -175,7 +150,7 @@ export default function EditCauseScreen() {
         }
       } catch (error) {
         console.error('Error fetching cause:', error);
-        Alert.alert('Error', 'Failed to load cause details');
+        // Can't use showAlert here as component may not be fully mounted
         router.back();
       } finally {
         setLoading(false);
@@ -194,7 +169,7 @@ export default function EditCauseScreen() {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'We need access to your photos to upload an image.');
+        showAlert(showErrorAlert('Permission Denied', 'We need access to your photos to upload an image.'));
         return;
       }
 
@@ -210,9 +185,9 @@ export default function EditCauseScreen() {
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      showAlert(showErrorAlert('Error', 'Failed to pick image. Please try again.'));
     }
-  }, []);
+  }, [showAlert]);
 
   // Upload image to Supabase Storage
   const uploadImageToStorage = useCallback(async (uri: string): Promise<string | null> => {
@@ -263,12 +238,12 @@ export default function EditCauseScreen() {
       return urlData.publicUrl;
     } catch (error) {
       console.error('Error uploading image:', error);
-      Alert.alert('Upload Error', 'Failed to upload image. Please try again.');
+      showAlert(showErrorAlert('Upload Error', 'Failed to upload image. Please try again.'));
       return null;
     } finally {
       setUploadingImage(false);
     }
-  }, [user]);
+  }, [user, showAlert]);
 
   // Validate form
   const validateForm = useCallback((): boolean => {
@@ -317,7 +292,7 @@ export default function EditCauseScreen() {
   // Handle form submission
   const handleSubmit = useCallback(async () => {
     if (!validateForm() || !id) {
-      showAlert('Validation Error', 'Please fix the errors in the form');
+      showAlert(showErrorAlert('Validation Error', 'Please fix the errors in the form'));
       return;
     }
 
@@ -331,7 +306,7 @@ export default function EditCauseScreen() {
         if (uploadedUrl) {
           finalImageUrl = uploadedUrl;
         } else {
-          showAlert('Error', 'Failed to upload image. Please try again.');
+          showAlert(showErrorAlert('Error', 'Failed to upload image. Please try again.'));
           setSubmitting(false);
           return;
         }
@@ -358,35 +333,44 @@ export default function EditCauseScreen() {
 
       if (error) throw error;
 
-      showAlert(
+      showAlert(showSuccessAlert(
         'Success! ✅',
         'Cause has been updated successfully.',
-        () => router.back()
-      );
+        [{ text: 'OK', onPress: () => router.back() }]
+      ));
     } catch (error) {
       console.error('Error updating cause:', error);
-      showAlert('Error', 'Failed to update cause. Please try again.');
+      showAlert(showErrorAlert('Error', 'Failed to update cause. Please try again.'));
     } finally {
       setSubmitting(false);
     }
-  }, [validateForm, id, title, description, category, status, goalAmount, endDate, imageUri, imageUrl, isDonationsPublic, allowRecurring, minimumDonation, isFeatured, router, uploadImageToStorage]);
+  }, [validateForm, id, title, description, category, status, goalAmount, endDate, imageUri, imageUrl, isDonationsPublic, allowRecurring, minimumDonation, isFeatured, router, uploadImageToStorage, showAlert]);
 
   // Handle delete
   const handleDelete = useCallback(() => {
-    showConfirm(
+    showAlert(showWarningAlert(
       'Delete Cause',
       'Are you sure you want to delete this cause? This cannot be undone.',
-      async () => {
-        if (!id) return;
-        const response = await deleteCause(id);
-        if (response.success) {
-          showAlert('Deleted', 'Cause has been deleted', () => router.replace('/(admin)/causes'));
-        } else {
-          showAlert('Error', response.error || 'Failed to delete cause');
-        }
-      }
-    );
-  }, [id, router]);
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            if (!id) return;
+            const response = await deleteCause(id);
+            if (response.success) {
+              showAlert(showSuccessAlert('Deleted', 'Cause has been deleted', [
+                { text: 'OK', onPress: () => router.replace('/(admin)/causes') }
+              ]));
+            } else {
+              showAlert(showErrorAlert('Error', response.error || 'Failed to delete cause'));
+            }
+          },
+        },
+      ]
+    ));
+  }, [id, router, showAlert]);
 
   // Access check
   if (!isAdmin) {
@@ -817,6 +801,9 @@ export default function EditCauseScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Custom Alert */}
+      <CustomAlert {...alertProps} />
     </View>
   );
 }
@@ -846,6 +833,13 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: 44,
+  },
+  deleteButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: -8,
   },
   keyboardView: {
     flex: 1,
