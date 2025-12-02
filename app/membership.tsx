@@ -12,7 +12,6 @@ import {
   ScrollView,
   TouchableOpacity,
   useColorScheme,
-  Alert,
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
@@ -39,6 +38,7 @@ import { Colors } from '../constants/colors';
 import { useAuth } from '../contexts/AuthContext';
 import { MEMBERSHIP_PLANS, formatCurrency, cancelSubscription, isConfigured } from '../services/ezeepayService';
 import { supabase } from '../services/supabase';
+import CustomAlert from '../components/CustomAlert';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
@@ -75,6 +75,12 @@ export default function MembershipScreen() {
   const [membership, setMembership] = useState<MembershipData | null>(null);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [showSuccessAlert, setShowSuccessAlert] = useState(false);
+  const [showErrorAlert, setShowErrorAlert] = useState(false);
+  const [showPaymentMethodAlert, setShowPaymentMethodAlert] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertTitle, setAlertTitle] = useState('');
 
   // Fetch membership data
   const fetchMembership = useCallback(async () => {
@@ -137,115 +143,110 @@ export default function MembershipScreen() {
   }, [fetchMembership]);
 
   // Cancel subscription
-  const handleCancelSubscription = useCallback(async () => {
+  const handleCancelSubscription = useCallback(() => {
     if (!user?.id) return;
+    setShowCancelConfirm(true);
+  }, [user?.id]);
+
+  const confirmCancelSubscription = useCallback(async () => {
+    if (!user?.id || !membership) return;
+    
+    setShowCancelConfirm(false);
+    setCancelling(true);
     
     const isOrganization = user.account_type === 'organization';
     const membershipType = isOrganization ? 'partner organization membership' : 'premium membership';
     
-    Alert.alert(
-      `Cancel ${isOrganization ? 'Partner Membership' : 'Membership'}`,
-      `Are you sure you want to cancel your ${membershipType}? You will lose access to all benefits at the end of your billing period.${isOrganization ? ' Your golden badge will be removed.' : ''}`,
-      [
-        { text: 'Keep Membership', style: 'cancel' },
-        {
-          text: 'Cancel Membership',
-          style: 'destructive',
-          onPress: async () => {
-            setCancelling(true);
-            try {
-              // If payment system is not configured or no subscriptionId, update database directly
-              if (!isConfigured() || !membership.subscriptionId) {
-                // Demo mode or direct cancellation - update database directly
-                const updateData: any = {
-                  membership_status: 'cancelled',
-                  membership_tier: 'free',
-                };
-                
-                if (isOrganization) {
-                  updateData.is_partner_organization = false;
-                } else {
-                  updateData.is_premium = false;
-                }
-                
-                const { error: updateError } = await supabase
-                  .from('users')
-                  .update(updateData)
-                  .eq('id', user?.id);
+    try {
+      // If payment system is not configured or no subscriptionId, update database directly
+      if (!isConfigured() || !membership.subscriptionId) {
+        // Demo mode or direct cancellation - update database directly
+        const updateData: any = {
+          membership_status: 'cancelled',
+          membership_tier: 'free',
+        };
+        
+        if (isOrganization) {
+          updateData.is_partner_organization = false;
+        } else {
+          updateData.is_premium = false;
+        }
+        
+        const { error: updateError } = await supabase
+          .from('users')
+          .update(updateData)
+          .eq('id', user?.id);
 
-                if (updateError) throw updateError;
+        if (updateError) throw updateError;
 
-                // Refresh user context
-                if (refreshUser) await refreshUser();
-                
-                Alert.alert(
-                  'Membership Cancelled',
-                  isConfigured() 
-                    ? 'Your membership will remain active until the end of your current billing period.'
-                    : 'Your membership has been cancelled. In production, you would retain access until the end of your billing period.',
-                  [{ text: 'OK', onPress: fetchMembership }]
-                );
-                setCancelling(false);
-                return;
-              }
+        // Refresh user context
+        if (refreshUser) await refreshUser();
+        
+        setAlertTitle('Membership Cancelled');
+        setAlertMessage(
+          isConfigured() 
+            ? 'Your membership will remain active until the end of your current billing period.'
+            : 'Your membership has been cancelled. In production, you would retain access until the end of your billing period.'
+        );
+        setShowSuccessAlert(true);
+        await fetchMembership();
+        setCancelling(false);
+        return;
+      }
 
-              // Production mode with subscriptionId - cancel via payment provider
-              // Use paymentService for organization subscriptions
-              if (isOrganization) {
-                const { cancelSubscription: cancelSub } = await import('../services/paymentService');
-                const result = await cancelSub(membership.subscriptionId, user.id);
-                
-                if (result.success) {
-                  // Refresh user context
-                  if (refreshUser) await refreshUser();
+      // Production mode with subscriptionId - cancel via payment provider
+      // Use paymentService for organization subscriptions
+      if (isOrganization) {
+        const { cancelSubscription: cancelSub } = await import('../services/paymentService');
+        const result = await cancelSub(membership.subscriptionId, user.id);
+        
+        if (result.success) {
+          // Refresh user context
+          if (refreshUser) await refreshUser();
 
-                  Alert.alert(
-                    'Membership Cancelled',
-                    'Your partner membership will remain active until the end of your current billing period.',
-                    [{ text: 'OK', onPress: fetchMembership }]
-                  );
-                } else {
-                  throw new Error(result.error);
-                }
-              } else {
-                // Individual membership
-                const result = await cancelSubscription(membership.subscriptionId);
-                
-                if (result.success) {
-                  // Update local database
-                  const { error: updateError } = await supabase
-                    .from('users')
-                    .update({
-                      membership_status: 'cancelled',
-                      membership_tier: 'free',
-                      is_premium: false,
-                    })
-                    .eq('id', user?.id);
+          setAlertTitle('Membership Cancelled');
+          setAlertMessage('Your partner membership will remain active until the end of your current billing period.');
+          setShowSuccessAlert(true);
+          await fetchMembership();
+        } else {
+          throw new Error(result.error);
+        }
+      } else {
+        // Individual membership
+        const result = await cancelSubscription(membership.subscriptionId);
+        
+        if (result.success) {
+          // Update local database
+          const { error: updateError } = await supabase
+            .from('users')
+            .update({
+              membership_status: 'cancelled',
+              membership_tier: 'free',
+              is_premium: false,
+            })
+            .eq('id', user?.id);
 
-                  if (updateError) throw updateError;
+          if (updateError) throw updateError;
 
-                  // Refresh user context
-                  if (refreshUser) await refreshUser();
+          // Refresh user context
+          if (refreshUser) await refreshUser();
 
-                  Alert.alert(
-                    'Membership Cancelled',
-                    'Your membership will remain active until the end of your current billing period.',
-                    [{ text: 'OK', onPress: fetchMembership }]
-                  );
-                } else {
-                  throw new Error(result.error);
-                }
-              }
-            } catch (error) {
-              console.error('Error cancelling subscription:', error);
-              Alert.alert('Error', 'Failed to cancel membership. Please try again.');
-            } finally {
-              setCancelling(false);
-            }
-          },
-        },
-      ]
-    );
+          setAlertTitle('Membership Cancelled');
+          setAlertMessage('Your membership will remain active until the end of your current billing period.');
+          setShowSuccessAlert(true);
+          await fetchMembership();
+        } else {
+          throw new Error(result.error);
+        }
+      }
+    } catch (error) {
+      console.error('Error cancelling subscription:', error);
+      setAlertTitle('Error');
+      setAlertMessage('Failed to cancel membership. Please try again.');
+      setShowErrorAlert(true);
+    } finally {
+      setCancelling(false);
+    }
   }, [membership, user?.id, user?.account_type, fetchMembership, refreshUser]);
 
   // Navigate to subscribe
@@ -488,7 +489,7 @@ export default function MembershipScreen() {
             <View style={[styles.manageCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <TouchableOpacity
                 style={styles.manageItem}
-                onPress={() => Alert.alert('Payment Method', 'Payment method management coming soon!')}
+                onPress={() => setShowPaymentMethodAlert(true)}
               >
                 <CreditCard size={20} color={colors.textSecondary} />
                 <Text style={[styles.manageText, { color: colors.text }]}>Update Payment Method</Text>
@@ -531,6 +532,52 @@ export default function MembershipScreen() {
 
         <View style={{ height: 32 }} />
       </ScrollView>
+
+      {/* Cancel Confirmation Alert */}
+      <CustomAlert
+        visible={showCancelConfirm}
+        type="warning"
+        title={user?.account_type === 'organization' ? 'Cancel Partner Membership' : 'Cancel Membership'}
+        message={`Are you sure you want to cancel your ${user?.account_type === 'organization' ? 'partner organization membership' : 'premium membership'}? You will lose access to all benefits at the end of your billing period.${user?.account_type === 'organization' ? ' Your golden badge will be removed.' : ''}`}
+        showCancel={true}
+        onClose={() => setShowCancelConfirm(false)}
+        onConfirm={confirmCancelSubscription}
+      />
+
+      {/* Success Alert */}
+      <CustomAlert
+        visible={showSuccessAlert}
+        type="success"
+        title={alertTitle}
+        message={alertMessage}
+        onClose={() => {
+          setShowSuccessAlert(false);
+          setAlertTitle('');
+          setAlertMessage('');
+        }}
+      />
+
+      {/* Error Alert */}
+      <CustomAlert
+        visible={showErrorAlert}
+        type="error"
+        title={alertTitle}
+        message={alertMessage}
+        onClose={() => {
+          setShowErrorAlert(false);
+          setAlertTitle('');
+          setAlertMessage('');
+        }}
+      />
+
+      {/* Payment Method Alert */}
+      <CustomAlert
+        visible={showPaymentMethodAlert}
+        type="info"
+        title="Payment Method"
+        message="Payment method management coming soon!"
+        onClose={() => setShowPaymentMethodAlert(false)}
+      />
     </View>
   );
 }
