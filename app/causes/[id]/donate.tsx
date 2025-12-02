@@ -578,8 +578,8 @@ function SubmitButton({
       >
         <LinearGradient
           colors={isDisabled || isLoading 
-            ? [colors.textTertiary, colors.textSecondary]
-            : Colors.gradients.primary
+            ? [colors.textTertiary, colors.textSecondary] as const
+            : (Colors.gradients.primary as unknown as readonly [string, string])
           }
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
@@ -1044,7 +1044,7 @@ export default function DonateScreen() {
               {
                 paddingHorizontal: responsive.spacing.md,
                 paddingBottom: Platform.OS === 'web' ? 120 : insets.bottom + 120,
-                maxWidth: responsive.maxContentWidth,
+                maxWidth: typeof responsive.maxContentWidth === 'number' ? responsive.maxContentWidth : undefined,
                 alignSelf: 'center',
                 width: '100%',
               }
@@ -1327,7 +1327,7 @@ export default function DonateScreen() {
           paddingBottom: insets.bottom + 16,
         }
       ]}>
-        <View style={{ maxWidth: responsive.maxContentWidth, alignSelf: 'center', width: '100%' }}>
+        <View style={{ maxWidth: typeof responsive.maxContentWidth === 'number' ? responsive.maxContentWidth : undefined, alignSelf: 'center', width: '100%' }}>
           <SubmitButton
             onPress={handleSubmit}
             label={isRecurring 
