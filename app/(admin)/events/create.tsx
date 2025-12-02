@@ -13,7 +13,6 @@ import {
   TouchableOpacity,
   TextInput,
   useColorScheme,
-  Alert,
   Dimensions,
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -25,6 +24,8 @@ import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import CrossPlatformDateTimePicker from '../../../components/CrossPlatformDateTimePicker';
+import CustomAlert from '../../../components/CustomAlert';
 import { geocodeLocation, GeocodeResult } from '../../../services/geocoding';
 import {
   ArrowLeft,
@@ -100,11 +101,8 @@ export default function CreateEventScreen() {
   
   // Date & Time
   const [eventDate, setEventDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [startTime, setStartTime] = useState(new Date());
-  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [endTime, setEndTime] = useState<Date | null>(null);
-  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   
   // Helper functions for time conversion
   const timeStringToDate = (timeString: string): Date => {
@@ -132,7 +130,6 @@ export default function CreateEventScreen() {
   const [capacity, setCapacity] = useState('');
   const [registrationRequired, setRegistrationRequired] = useState(true);
   const [registrationDeadline, setRegistrationDeadline] = useState<Date | null>(null);
-  const [showRegistrationDeadlinePicker, setShowRegistrationDeadlinePicker] = useState(false);
   
   // Pricing
   const [isFree, setIsFree] = useState(true);
@@ -149,12 +146,31 @@ export default function CreateEventScreen() {
   const [visibility, setVisibility] = useState<VisibilityType>('public');
   const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
 
+  // Alert state
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({
+    type: 'info' as 'success' | 'error' | 'warning' | 'info',
+    title: '',
+    message: '',
+    onConfirm: undefined as (() => void) | undefined,
+  });
+
+  const showAlert = (
+    type: 'success' | 'error' | 'warning' | 'info',
+    title: string,
+    message: string,
+    onConfirm?: () => void
+  ) => {
+    setAlertConfig({ type, title, message, onConfirm });
+    setAlertVisible(true);
+  };
+
   // Handle image picker
   const handlePickImage = useCallback(async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'We need access to your photos to upload an image.');
+        showAlert('warning', 'Permission Denied', 'We need access to your photos to upload an image.');
         return;
       }
 
@@ -170,7 +186,7 @@ export default function CreateEventScreen() {
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      showAlert('error', 'Error', 'Failed to pick image. Please try again.');
     }
   }, []);
 
@@ -223,7 +239,7 @@ export default function CreateEventScreen() {
       return urlData.publicUrl;
     } catch (error) {
       console.error('Error uploading image:', error);
-      Alert.alert('Error', 'Failed to upload image. Please try again.');
+      showAlert('error', 'Error', 'Failed to upload image. Please try again.');
       return null;
     } finally {
       setUploadingImage(false);
@@ -258,39 +274,39 @@ export default function CreateEventScreen() {
   // Validate form
   const validateForm = useCallback((): boolean => {
     if (!title.trim()) {
-      Alert.alert('Required', 'Please enter an event title');
+      showAlert('warning', 'Required', 'Please enter an event title');
       return false;
     }
     if (!description.trim()) {
-      Alert.alert('Required', 'Please enter a description');
+      showAlert('warning', 'Required', 'Please enter a description');
       return false;
     }
     if (!isVirtual && !location.trim()) {
-      Alert.alert('Required', 'Please enter a location');
+      showAlert('warning', 'Required', 'Please enter a location');
       return false;
     }
     if (isVirtual && !virtualLink.trim()) {
-      Alert.alert('Required', 'Please enter a virtual meeting link');
+      showAlert('warning', 'Required', 'Please enter a virtual meeting link');
       return false;
     }
     if (!eventDate) {
-      Alert.alert('Required', 'Please enter the event date');
+      showAlert('warning', 'Required', 'Please enter the event date');
       return false;
     }
     if (!startTime) {
-      Alert.alert('Required', 'Please enter the start time');
+      showAlert('warning', 'Required', 'Please enter the start time');
       return false;
     }
     if (hasCapacity && (!capacity || parseInt(capacity) <= 0)) {
-      Alert.alert('Invalid', 'Please enter a valid capacity');
+      showAlert('warning', 'Invalid', 'Please enter a valid capacity');
       return false;
     }
     if (!isFree && (!ticketPrice || parseFloat(ticketPrice) <= 0)) {
-      Alert.alert('Invalid', 'Please enter a valid ticket price');
+      showAlert('warning', 'Invalid', 'Please enter a valid ticket price');
       return false;
     }
     if (!isFree && !paymentLink.trim()) {
-      Alert.alert('Required', 'Please enter a payment link for paid events');
+      showAlert('warning', 'Required', 'Please enter a payment link for paid events');
       return false;
     }
     return true;
@@ -439,20 +455,18 @@ export default function CreateEventScreen() {
           // Don't fail the whole operation if notifications fail
         }
 
-        Alert.alert(
+        showAlert(
+          'success',
           'Event Created! 🎉',
           `"${eventTitle}" has been created successfully. Volunteers will be notified.`,
-          [
-            { text: 'View Event', onPress: () => router.replace(`/events/${eventId}`) },
-            { text: 'Done', onPress: () => router.back() },
-          ]
+          () => router.back()
         );
       } else {
-        Alert.alert('Error', response.error || 'Failed to create event');
+        showAlert('error', 'Error', response.error || 'Failed to create event');
       }
     } catch (error) {
       console.error('Create event error:', error);
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+      showAlert('error', 'Error', 'Something went wrong. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -740,101 +754,35 @@ export default function CreateEventScreen() {
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Date & Time</Text>
 
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Event Date *</Text>
-              <TouchableOpacity
-                style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Calendar size={20} color={colors.textSecondary} />
-                <Text style={[styles.input, { color: colors.text }]}>
-                  {dateToString(eventDate)}
-                </Text>
-              </TouchableOpacity>
-              {showDatePicker && (
-                <DateTimePicker
-                  value={eventDate}
-                  mode="date"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={(event, selectedDate) => {
-                    if (Platform.OS === 'android') {
-                      setShowDatePicker(false);
-                    }
-                    if (selectedDate) {
-                      setEventDate(selectedDate);
-                      if (Platform.OS === 'ios') {
-                        setShowDatePicker(false);
-                      }
-                    }
-                  }}
-                  minimumDate={new Date()}
-                />
-              )}
-            </View>
+            <CrossPlatformDateTimePicker
+              mode="date"
+              value={eventDate}
+              onChange={(date) => date && setEventDate(date)}
+              minimumDate={new Date()}
+              label="Event Date *"
+              colors={colors}
+            />
 
             <View style={styles.row}>
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={[styles.inputLabel, { color: colors.text }]}>Start Time *</Text>
-                <TouchableOpacity
-                  style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={() => setShowStartTimePicker(true)}
-                >
-                  <Clock size={20} color={colors.textSecondary} />
-                  <Text style={[styles.input, { color: colors.text }]}>
-                    {dateToTimeString(startTime)}
-                  </Text>
-                </TouchableOpacity>
-                {showStartTimePicker && (
-                  <DateTimePicker
-                    value={startTime}
-                    mode="time"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={(event, selectedTime) => {
-                      if (Platform.OS === 'android') {
-                        setShowStartTimePicker(false);
-                      }
-                      if (selectedTime) {
-                        setStartTime(selectedTime);
-                        if (Platform.OS === 'ios') {
-                          setShowStartTimePicker(false);
-                        }
-                      }
-                    }}
-                    is24Hour={true}
-                  />
-                )}
+              <View style={{ flex: 1 }}>
+                <CrossPlatformDateTimePicker
+                  mode="time"
+                  value={startTime}
+                  onChange={(date) => date && setStartTime(date)}
+                  label="Start Time *"
+                  colors={colors}
+                />
               </View>
 
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={[styles.inputLabel, { color: colors.text }]}>End Time</Text>
-                <TouchableOpacity
-                  style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={() => setShowEndTimePicker(true)}
-                >
-                  <Clock size={20} color={colors.textSecondary} />
-                  <Text style={[styles.input, { color: colors.text }]}>
-                    {endTime ? dateToTimeString(endTime) : 'Not set'}
-                  </Text>
-                </TouchableOpacity>
-                {showEndTimePicker && (
-                  <DateTimePicker
-                    value={endTime || new Date()}
-                    mode="time"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={(event, selectedTime) => {
-                      if (Platform.OS === 'android') {
-                        setShowEndTimePicker(false);
-                      }
-                      if (selectedTime) {
-                        setEndTime(selectedTime);
-                        if (Platform.OS === 'ios') {
-                          setShowEndTimePicker(false);
-                        }
-                      }
-                    }}
-                    is24Hour={true}
-                  />
-                )}
+              <View style={{ flex: 1 }}>
+                <CrossPlatformDateTimePicker
+                  mode="time"
+                  value={endTime || new Date()}
+                  onChange={(date) => setEndTime(date)}
+                  label="End Time"
+                  placeholder="Not set"
+                  colors={colors}
+                />
               </View>
             </View>
           </View>
@@ -897,37 +845,15 @@ export default function CreateEventScreen() {
             </View>
 
             {registrationRequired && (
-              <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: colors.text }]}>Registration Deadline</Text>
-                <TouchableOpacity
-                  style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={() => setShowRegistrationDeadlinePicker(true)}
-                >
-                  <Calendar size={20} color={colors.textSecondary} />
-                  <Text style={[styles.input, { color: colors.text }]}>
-                    {registrationDeadline ? dateToString(registrationDeadline) : 'Not set (optional)'}
-                  </Text>
-                </TouchableOpacity>
-                {showRegistrationDeadlinePicker && (
-                  <DateTimePicker
-                    value={registrationDeadline || new Date()}
-                    mode="date"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={(event, selectedDate) => {
-                      if (Platform.OS === 'android') {
-                        setShowRegistrationDeadlinePicker(false);
-                      }
-                      if (selectedDate) {
-                        setRegistrationDeadline(selectedDate);
-                        if (Platform.OS === 'ios') {
-                          setShowRegistrationDeadlinePicker(false);
-                        }
-                      }
-                    }}
-                    minimumDate={new Date()}
-                  />
-                )}
-              </View>
+              <CrossPlatformDateTimePicker
+                mode="date"
+                value={registrationDeadline || new Date()}
+                onChange={(date) => setRegistrationDeadline(date)}
+                minimumDate={new Date()}
+                label="Registration Deadline"
+                placeholder="Not set (optional)"
+                colors={colors}
+              />
             )}
           </View>
 
@@ -1097,6 +1023,17 @@ export default function CreateEventScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Custom Alert */}
+      <CustomAlert
+        visible={alertVisible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        onClose={() => setAlertVisible(false)}
+        onConfirm={alertConfig.onConfirm}
+        showCancel={!!alertConfig.onConfirm}
+      />
     </View>
   );
 }
