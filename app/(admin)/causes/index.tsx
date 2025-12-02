@@ -13,7 +13,6 @@ import {
   TouchableOpacity,
   useColorScheme,
   RefreshControl,
-  Alert,
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
@@ -41,6 +40,7 @@ import { Cause, CauseStatus } from '../../../types';
 import { supabase } from '../../../services/supabase';
 import { formatCurrency, getCauseProgress } from '../../../services/causesService';
 import { useAuth } from '../../../contexts/AuthContext';
+import CustomAlert from '../../../components/CustomAlert';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -205,6 +205,42 @@ export default function ManageCausesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [statusFilter, setStatusFilter] = useState<CauseStatus | 'all'>('all');
 
+  // Custom Alert State
+  const [alertProps, setAlertProps] = useState({
+    visible: false,
+    type: 'info' as 'success' | 'error' | 'warning' | 'info',
+    title: '',
+    message: '',
+    onConfirm: undefined as (() => void) | undefined,
+    showCancel: false,
+  });
+
+  // Show alert helper
+  const showAlert = useCallback(
+    (
+      type: 'success' | 'error' | 'warning' | 'info',
+      title: string,
+      message: string,
+      onConfirm?: () => void,
+      showCancel: boolean = false
+    ) => {
+      setAlertProps({
+        visible: true,
+        type,
+        title,
+        message,
+        onConfirm,
+        showCancel,
+      });
+    },
+    []
+  );
+
+  // Close alert
+  const closeAlert = useCallback(() => {
+    setAlertProps((prev) => ({ ...prev, visible: false }));
+  }, []);
+
   // Fetch causes
   const fetchCauses = useCallback(async () => {
     try {
@@ -247,12 +283,12 @@ export default function ManageCausesScreen() {
       setCauses(transformedCauses);
     } catch (error) {
       console.error('Error fetching causes:', error);
-      Alert.alert('Error', 'Failed to load causes');
+      showAlert('error', 'Error', 'Failed to load causes');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, showAlert]);
 
   // Initial load
   useEffect(() => {
@@ -280,43 +316,41 @@ export default function ManageCausesScreen() {
         prev.map(c => (c.id === causeId ? { ...c, status: newStatus } : c))
       );
 
-      Alert.alert('Success', `Cause status updated to ${newStatus}`);
+      showAlert('success', 'Success', `Cause status updated to ${newStatus}`);
     } catch (error) {
       console.error('Error updating status:', error);
-      Alert.alert('Error', 'Failed to update cause status');
+      showAlert('error', 'Error', 'Failed to update cause status');
     }
-  }, []);
+  }, [showAlert]);
 
   // Delete cause
   const handleDelete = useCallback((cause: Cause) => {
-    Alert.alert(
+    const performDelete = async () => {
+      closeAlert();
+      try {
+        const { error } = await supabase
+          .from('causes')
+          .delete()
+          .eq('id', cause.id);
+
+        if (error) throw error;
+
+        setCauses(prev => prev.filter(c => c.id !== cause.id));
+        showAlert('success', 'Success', 'Cause deleted successfully');
+      } catch (error) {
+        console.error('Error deleting cause:', error);
+        showAlert('error', 'Error', 'Failed to delete cause');
+      }
+    };
+
+    showAlert(
+      'error',
       'Delete Cause',
       `Are you sure you want to delete "${cause.title}"? This action cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase
-                .from('causes')
-                .delete()
-                .eq('id', cause.id);
-
-              if (error) throw error;
-
-              setCauses(prev => prev.filter(c => c.id !== cause.id));
-              Alert.alert('Success', 'Cause deleted successfully');
-            } catch (error) {
-              console.error('Error deleting cause:', error);
-              Alert.alert('Error', 'Failed to delete cause');
-            }
-          },
-        },
-      ]
+      performDelete,
+      true
     );
-  }, []);
+  }, [showAlert, closeAlert]);
 
   // Navigate to edit
   const handleEdit = useCallback((causeId: string) => {
@@ -450,6 +484,17 @@ export default function ManageCausesScreen() {
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      {/* Custom Alert */}
+      <CustomAlert
+        visible={alertProps.visible}
+        type={alertProps.type}
+        title={alertProps.title}
+        message={alertProps.message}
+        onClose={closeAlert}
+        onConfirm={alertProps.onConfirm}
+        showCancel={alertProps.showCancel}
+      />
     </View>
   );
 }
