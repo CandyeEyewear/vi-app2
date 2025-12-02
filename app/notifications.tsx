@@ -13,7 +13,7 @@ import {
   ActivityIndicator,
   useColorScheme,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Bell, MessageCircle, Calendar, UserPlus, Megaphone, Trash2, Check, X, User, Heart, Ticket } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
@@ -64,6 +64,15 @@ export default function NotificationsScreen() {
       loadNotifications();
     }
   }, [user]);
+
+  // Refresh notifications when screen comes into focus (especially important for mobile web)
+  useFocusEffect(
+    React.useCallback(() => {
+      if (user) {
+        loadNotifications();
+      }
+    }, [user])
+  );
 
   const loadNotifications = async () => {
     try {

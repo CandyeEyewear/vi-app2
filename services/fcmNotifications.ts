@@ -105,6 +105,12 @@ function handleNotificationNavigation(
     case 'opportunity_rejected':
       navigate(`/opportunity/${data.id}`);
       break;
+    case 'cause':
+      navigate(`/causes/${data.id}`);
+      break;
+    case 'event':
+      navigate(`/events/${data.id}`);
+      break;
     default:
       console.log('[FCM] ⚠️ Unknown notification type:', data.type);
   }
