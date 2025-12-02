@@ -14,13 +14,12 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import CrossPlatformDateTimePicker from '../components/CrossPlatformDateTimePicker';
 import CustomAlert from '../components/CustomAlert';
 import { supabase } from '../services/supabase';
 
@@ -36,8 +35,20 @@ export default function RegisterScreen() {
   const [alertConfig, setAlertConfig] = useState({
     title: '',
     message: '',
-    type: 'error' as 'success' | 'error' | 'warning',
+    type: 'error' as 'success' | 'error' | 'warning' | 'info',
+    onConfirm: undefined as (() => void) | undefined,
   });
+
+  // Helper function to show alerts
+  const showAlert = (
+    type: 'success' | 'error' | 'warning' | 'info',
+    title: string,
+    message: string,
+    onConfirm?: () => void
+  ) => {
+    setAlertConfig({ type, title, message, onConfirm });
+    setAlertVisible(true);
+  };
 
   // Account type selection
   const [accountType, setAccountType] = useState<AccountType>('individual');
@@ -75,7 +86,6 @@ export default function RegisterScreen() {
   });
 
   const [showPassword, setShowPassword] = useState(false);
-  const [showDobPicker, setShowDobPicker] = useState(false);
   const [dobDate, setDobDate] = useState<Date>(() => {
     return individualFormData.dateOfBirth ? new Date(individualFormData.dateOfBirth) : new Date(2000, 0, 1);
   });
@@ -120,28 +130,28 @@ export default function RegisterScreen() {
 
     // Validation
     if (!formData.fullName || !formData.email || !formData.phone || !formData.location || !formData.country || !formData.password) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      showAlert('warning', 'Missing Information', 'Please fill in all required fields');
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      showAlert('error', 'Password Mismatch', 'Passwords do not match');
       return;
     }
 
     if (formData.password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+      showAlert('warning', 'Password Too Short', 'Password must be at least 6 characters');
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
+      showAlert('warning', 'Invalid Email', 'Please enter a valid email address');
       return;
     }
 
     if (!formData.dateOfBirth) {
-      Alert.alert('Error', 'Please enter your date of birth');
+      showAlert('warning', 'Date of Birth Required', 'Please enter your date of birth');
       return;
     }
 
@@ -158,7 +168,7 @@ export default function RegisterScreen() {
 
     const age = calculateAge(formData.dateOfBirth);
     if (age < 18) {
-      Alert.alert('Age Restriction', 'You must be 18 or older to register for VIbe');
+      showAlert('warning', 'Age Restriction', 'You must be 18 or older to register for VIbe');
       return;
     }
 
@@ -236,33 +246,33 @@ export default function RegisterScreen() {
     if (!formData.email || !formData.password || !formData.organizationName || 
         !formData.registrationNumber || !formData.organizationDescription ||
         !formData.contactPersonName || !formData.phone || !formData.location) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      showAlert('warning', 'Missing Information', 'Please fill in all required fields');
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      showAlert('error', 'Password Mismatch', 'Passwords do not match');
       return;
     }
 
     if (formData.password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+      showAlert('warning', 'Password Too Short', 'Password must be at least 6 characters');
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
+      showAlert('warning', 'Invalid Email', 'Please enter a valid email address');
       return;
     }
 
     if (selectedFocus.length === 0) {
-      Alert.alert('Error', 'Please select at least one industry focus area');
+      showAlert('warning', 'Industry Focus Required', 'Please select at least one industry focus area');
       return;
     }
 
     if (!formData.organizationSize) {
-      Alert.alert('Error', 'Please select your organization size');
+      showAlert('warning', 'Organization Size Required', 'Please select your organization size');
       return;
     }
 
@@ -515,39 +525,27 @@ export default function RegisterScreen() {
               </View>
 
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>Date of Birth*</Text>
-                <TouchableOpacity
-                  style={styles.input}
-                  onPress={() => setShowDobPicker(true)}
+                <CrossPlatformDateTimePicker
+                  mode="date"
+                  value={dobDate}
+                  onChange={(selectedDate) => {
+                    if (selectedDate) {
+                      setDobDate(selectedDate);
+                      const iso = selectedDate.toISOString().split('T')[0];
+                      updateIndividualField('dateOfBirth', iso);
+                    }
+                  }}
+                  maximumDate={new Date()}
+                  label="Date of Birth*"
+                  placeholder="Select your date of birth"
+                  colors={{
+                    card: Colors.light.card,
+                    border: Colors.light.border,
+                    text: Colors.light.text,
+                    textSecondary: Colors.light.textSecondary,
+                  }}
                   disabled={loading}
-                  activeOpacity={0.7}
-                >
-                  <Text style={{ color: individualFormData.dateOfBirth ? Colors.light.text : Colors.light.textSecondary }}>
-                    {individualFormData.dateOfBirth
-                      ? new Date(individualFormData.dateOfBirth).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })
-                      : 'Select your date of birth'}
-                  </Text>
-                </TouchableOpacity>
-                {showDobPicker && (
-                  <DateTimePicker
-                    value={dobDate}
-                    mode="date"
-                    display="default"
-                    onChange={(event, selectedDate) => {
-                      setShowDobPicker(false);
-                      if (selectedDate) {
-                        setDobDate(selectedDate);
-                        const iso = selectedDate.toISOString().split('T')[0];
-                        updateIndividualField('dateOfBirth', iso);
-                      }
-                    }}
-                    maximumDate={new Date()}
-                  />
-                )}
+                />
                 <Text style={styles.helperText}>You must be 18 or older to register</Text>
               </View>
 
@@ -905,6 +903,8 @@ export default function RegisterScreen() {
         message={alertConfig.message}
         type={alertConfig.type}
         onClose={() => setAlertVisible(false)}
+        onConfirm={alertConfig.onConfirm}
+        showCancel={!!alertConfig.onConfirm}
       />
     </KeyboardAvoidingView>
   );
