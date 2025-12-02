@@ -44,11 +44,13 @@ import {
   X,
   Globe,
   Lock,
+  Trash2,
 } from 'lucide-react-native';
 import { Colors } from '../../../../constants/colors';
 import { CauseCategory, CauseStatus, Cause, VisibilityType } from '../../../../types';
 import { supabase } from '../../../../services/supabase';
 import { useAuth } from '../../../../contexts/AuthContext';
+import { deleteCause } from '../../../../services/causesService';
 import { decode } from 'base64-arraybuffer';
 import WebContainer from '../../../../components/WebContainer';
 
@@ -73,6 +75,33 @@ const STATUS_OPTIONS: { value: CauseStatus; label: string; color: string }[] = [
   { value: 'completed', label: 'Completed', color: '#2196F3' },
   { value: 'cancelled', label: 'Cancelled', color: '#F44336' },
 ];
+
+// ============================================
+// WEB-COMPATIBLE ALERT HELPERS
+// ============================================
+const showAlert = (title: string, message: string, onOk?: () => void) => {
+  if (Platform.OS === 'web') {
+    window.alert(`${title}\n\n${message}`);
+    if (onOk) onOk();
+  } else {
+    Alert.alert(title, message, [{ text: 'OK', onPress: onOk }]);
+  }
+};
+
+const showConfirm = (title: string, message: string, onConfirm: () => void, onCancel?: () => void) => {
+  if (Platform.OS === 'web') {
+    if (window.confirm(`${title}\n\n${message}`)) {
+      onConfirm();
+    } else if (onCancel) {
+      onCancel();
+    }
+  } else {
+    Alert.alert(title, message, [
+      { text: 'Cancel', style: 'cancel', onPress: onCancel },
+      { text: 'Delete', style: 'destructive', onPress: onConfirm },
+    ]);
+  }
+};
 
 export default function EditCauseScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -288,7 +317,7 @@ export default function EditCauseScreen() {
   // Handle form submission
   const handleSubmit = useCallback(async () => {
     if (!validateForm() || !id) {
-      Alert.alert('Validation Error', 'Please fix the errors in the form');
+      showAlert('Validation Error', 'Please fix the errors in the form');
       return;
     }
 
@@ -302,7 +331,7 @@ export default function EditCauseScreen() {
         if (uploadedUrl) {
           finalImageUrl = uploadedUrl;
         } else {
-          Alert.alert('Error', 'Failed to upload image. Please try again.');
+          showAlert('Error', 'Failed to upload image. Please try again.');
           setSubmitting(false);
           return;
         }
@@ -329,18 +358,35 @@ export default function EditCauseScreen() {
 
       if (error) throw error;
 
-      Alert.alert(
+      showAlert(
         'Success! ✅',
         'Cause has been updated successfully.',
-        [{ text: 'OK', onPress: () => router.back() }]
+        () => router.back()
       );
     } catch (error) {
       console.error('Error updating cause:', error);
-      Alert.alert('Error', 'Failed to update cause. Please try again.');
+      showAlert('Error', 'Failed to update cause. Please try again.');
     } finally {
       setSubmitting(false);
     }
   }, [validateForm, id, title, description, category, status, goalAmount, endDate, imageUri, imageUrl, isDonationsPublic, allowRecurring, minimumDonation, isFeatured, router, uploadImageToStorage]);
+
+  // Handle delete
+  const handleDelete = useCallback(() => {
+    showConfirm(
+      'Delete Cause',
+      'Are you sure you want to delete this cause? This cannot be undone.',
+      async () => {
+        if (!id) return;
+        const response = await deleteCause(id);
+        if (response.success) {
+          showAlert('Deleted', 'Cause has been deleted', () => router.replace('/(admin)/causes'));
+        } else {
+          showAlert('Error', response.error || 'Failed to delete cause');
+        }
+      }
+    );
+  }, [id, router]);
 
   // Access check
   if (!isAdmin) {
@@ -392,7 +438,9 @@ export default function EditCauseScreen() {
           <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Edit Cause</Text>
-        <View style={styles.headerSpacer} />
+        <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+          <Trash2 size={22} color="#F44336" />
+        </TouchableOpacity>
       </View>
 
       <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
