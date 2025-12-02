@@ -702,7 +702,7 @@ export default function CreateEventScreen() {
                           if (text.trim()) {
                             handleLocationGeocode(text);
                           }
-                        }, 1000);
+                        }, 800);
                       }}
                     />
                     {isGeocodingLocation && (

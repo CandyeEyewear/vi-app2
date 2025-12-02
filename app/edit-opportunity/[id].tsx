@@ -150,7 +150,7 @@ export default function EditOpportunityScreen() {
     // Keep keyboard open for 1000ms or until user presses Enter
     setShowSuggestions(true);
     
-    // Set new timeout - geocode only after user stops typing (500ms)
+    // Set new timeout - geocode only after user stops typing (800ms)
     geocodeTimeoutRef.current = setTimeout(async () => {
       setIsGeocodingLocation(true);
       try {
@@ -178,7 +178,7 @@ export default function EditOpportunityScreen() {
       } finally {
         setIsGeocodingLocation(false);
       }
-    }, 500);
+    }, 800);
   };
 
   const handleSelectLocation = (suggestion: any) => {

@@ -45,7 +45,10 @@ export default {
         "android.permission.RECORD_AUDIO"
       ],
       config: {
-        googleMobileAdsAppId: "ca-app-pub-3940256099942544~3347511713"
+        googleMobileAdsAppId: "ca-app-pub-3940256099942544~3347511713",
+        googleMaps: {
+          apiKey: process.env.GOOGLE_MAPS_ANDROID_API_KEY || process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
+        }
       },
       softwareKeyboardLayoutMode: "pan",
       intentFilters: [
