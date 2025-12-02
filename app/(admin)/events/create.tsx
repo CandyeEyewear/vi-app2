@@ -366,87 +366,77 @@ export default function CreateEventScreen() {
         console.log('✅ Event created successfully!');
         console.log('📊 Event ID:', eventId);
 
-        // Create notifications for all users
+        // Create notifications using database function
         console.log('🔔 Starting notification process...');
+        console.log('🔧 Calling RPC function: create_event_notifications');
+        console.log('📦 Function parameters:', {
+          p_event_id: eventId,
+          p_title: eventTitle,
+          p_creator_id: user.id,
+        });
         
         try {
-          // Get all users (except the creator)
-          const { data: allUsers, error: usersError } = await supabase
-            .from('users')
-            .select('id')
-            .neq('id', user.id);
+          const { data: notifiedUsers, error: notifError } = await supabase.rpc(
+            'create_event_notifications',
+            {
+              p_event_id: eventId,
+              p_title: eventTitle,
+              p_creator_id: user.id,
+            }
+          );
 
-          if (!usersError && allUsers && allUsers.length > 0) {
-            console.log('✅ Found', allUsers.length, 'users to notify');
+          console.log('🔍 RPC function response:', {
+            notifiedUsers,
+            error: notifError,
+          });
 
-            // Create notifications for all users
-            const notifications = allUsers.map(u => ({
-              user_id: u.id,
-              type: 'event',
-              title: 'New Event',
-              message: `${eventTitle} - Join us!`,
-              link: `/events/${eventId}`,
-              related_id: eventId,
-              is_read: false,
-            }));
+          if (notifError) {
+            console.error('❌ Notification creation error:', notifError);
+            console.error('❌ Error details:', {
+              message: notifError.message,
+              code: notifError.code,
+              details: notifError.details,
+              hint: notifError.hint,
+            });
+            console.warn('⚠️ Event created but notifications failed');
+            // Don't throw - event was created successfully
+          } else {
+            console.log('✅ Notifications created successfully');
+            console.log('📊 Total notifications sent:', notifiedUsers?.length || 0);
 
-            const { error: notifError } = await supabase
-              .from('notifications')
-              .insert(notifications);
+            if (notifiedUsers && notifiedUsers.length > 0) {
 
-            if (notifError) {
-              console.error('❌ Error creating notifications:', notifError);
-            } else {
-              console.log('✅ Created', notifications.length, 'notifications');
-
-              // Send push notifications to users with events notifications enabled
+              // Send push notifications to users with push tokens and events notifications enabled
               console.log('🔔 Starting push notification process...');
               
-              // Get all users with push tokens
+              // Get users with push tokens from the notified users list
               const { data: usersWithTokens, error: tokensError } = await supabase
                 .from('users')
                 .select('id, push_token')
-                .neq('id', user.id)
+                .in('id', notifiedUsers.map((n: any) => n.user_id))
                 .not('push_token', 'is', null);
 
               console.log('📊 Users with push tokens:', usersWithTokens?.length || 0);
 
               if (!tokensError && usersWithTokens && usersWithTokens.length > 0) {
-                // Get notification settings for these users
-                const { data: settingsData, error: settingsError } = await supabase
-                  .from('user_notification_settings')
-                  .select('user_id, events_enabled')
-                  .in('user_id', usersWithTokens.map(u => u.id));
+                console.log('✅ Found', usersWithTokens.length, 'users with push tokens');
 
-                if (!settingsError && settingsData) {
-                  // Filter users who have events notifications enabled
-                  // Default to enabled if setting doesn't exist
-                  const settingsMap = new Map(settingsData.map(s => [s.user_id, s.events_enabled]));
-                  
-                  const enabledUsers = usersWithTokens.filter(userObj => {
-                    const setting = settingsMap.get(userObj.id);
-                    return setting === true || setting === undefined;
-                  });
-
-                  console.log('✅ Found', enabledUsers.length, 'users with events notifications enabled');
-
-                  // Send push notifications
-                  for (const userObj of enabledUsers) {
-                    try {
-                      await sendNotificationToUser(userObj.id, {
-                        type: 'event',
-                        id: eventId,
-                        title: 'New Event',
-                        body: `${eventTitle} - Join us!`,
-                      });
-                      console.log('✅ Push sent to user:', userObj.id.substring(0, 8) + '...');
-                    } catch (pushError) {
-                      console.error('❌ Failed to send push to user:', userObj.id, pushError);
-                    }
+                // Send push notifications
+                for (const userObj of usersWithTokens) {
+                  try {
+                    await sendNotificationToUser(userObj.id, {
+                      type: 'event',
+                      id: eventId,
+                      title: 'New Event',
+                      body: `${eventTitle} - Join us!`,
+                    });
+                    console.log('✅ Push sent to user:', userObj.id.substring(0, 8) + '...');
+                  } catch (pushError) {
+                    console.error('❌ Failed to send push to user:', userObj.id, pushError);
                   }
-                  
-                  console.log('🎉 Push notification process complete!');
                 }
+                
+                console.log('🎉 Push notification process complete!');
               }
             }
           }
