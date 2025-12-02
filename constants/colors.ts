@@ -525,18 +525,4 @@ export const withOpacity = (hex: string, opacity: number): string => {
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
 };
 
-export default Colors;    success: '#66BB6A',
-    warning: '#FFA726',
-    error: '#EF5350',
-    info: '#64B5F6',
-    
-    // Opportunity categories
-    environment: '#66BB6A',
-    education: '#64B5F6',
-    healthcare: '#EF5350',
-    poorRelief: '#FFA726',
-    community: '#BA68C8',
-  },
-};
-
-export type ColorScheme = keyof typeof Colors;
+export default Colors;
