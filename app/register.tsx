@@ -20,7 +20,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import CrossPlatformDateTimePicker from '../components/CrossPlatformDateTimePicker';
 import CustomAlert from '../components/CustomAlert';
 import { supabase } from '../services/supabase';
 
@@ -75,7 +75,6 @@ export default function RegisterScreen() {
   });
 
   const [showPassword, setShowPassword] = useState(false);
-  const [showDobPicker, setShowDobPicker] = useState(false);
   const [dobDate, setDobDate] = useState<Date>(() => {
     return individualFormData.dateOfBirth ? new Date(individualFormData.dateOfBirth) : new Date(2000, 0, 1);
   });
@@ -514,42 +513,28 @@ export default function RegisterScreen() {
                 />
               </View>
 
-              <View style={styles.inputContainer}>
-                <Text style={styles.label}>Date of Birth*</Text>
-                <TouchableOpacity
-                  style={styles.input}
-                  onPress={() => setShowDobPicker(true)}
-                  disabled={loading}
-                  activeOpacity={0.7}
-                >
-                  <Text style={{ color: individualFormData.dateOfBirth ? Colors.light.text : Colors.light.textSecondary }}>
-                    {individualFormData.dateOfBirth
-                      ? new Date(individualFormData.dateOfBirth).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })
-                      : 'Select your date of birth'}
-                  </Text>
-                </TouchableOpacity>
-                {showDobPicker && (
-                  <DateTimePicker
-                    value={dobDate}
-                    mode="date"
-                    display="default"
-                    onChange={(event, selectedDate) => {
-                      setShowDobPicker(false);
-                      if (selectedDate) {
-                        setDobDate(selectedDate);
-                        const iso = selectedDate.toISOString().split('T')[0];
-                        updateIndividualField('dateOfBirth', iso);
-                      }
-                    }}
-                    maximumDate={new Date()}
-                  />
-                )}
-                <Text style={styles.helperText}>You must be 18 or older to register</Text>
-              </View>
+              <CrossPlatformDateTimePicker
+                mode="date"
+                value={dobDate}
+                onChange={(date) => {
+                  if (date) {
+                    setDobDate(date);
+                    const iso = date.toISOString().split('T')[0];
+                    updateIndividualField('dateOfBirth', iso);
+                  }
+                }}
+                maximumDate={new Date()}
+                label="Date of Birth *"
+                placeholder="Select your date of birth"
+                colors={{
+                  card: '#FFFFFF',
+                  border: Colors.light.border,
+                  text: Colors.light.text,
+                  textSecondary: Colors.light.textSecondary,
+                }}
+                disabled={loading}
+              />
+              <Text style={styles.helperText}>You must be 18 or older to register</Text>
 
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Password*</Text>
