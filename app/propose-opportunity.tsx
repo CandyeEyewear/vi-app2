@@ -1035,9 +1035,10 @@ export default function ProposeOpportunityScreen() {
                     }
                     if (selectedTime) {
                       setStartTime(dateToTimeString(selectedTime));
-                    }
-                    if (Platform.OS === 'ios' && event.type === 'dismissed') {
-                      setShowStartTimePicker(false);
+                      // Auto-close on iOS after selection (better UX)
+                      if (Platform.OS === 'ios') {
+                        setShowStartTimePicker(false);
+                      }
                     }
                   }}
                   is24Hour={true}
@@ -1075,9 +1076,10 @@ export default function ProposeOpportunityScreen() {
                     }
                     if (selectedTime) {
                       setEndTime(dateToTimeString(selectedTime));
-                    }
-                    if (Platform.OS === 'ios' && event.type === 'dismissed') {
-                      setShowEndTimePicker(false);
+                      // Auto-close on iOS after selection (better UX)
+                      if (Platform.OS === 'ios') {
+                        setShowEndTimePicker(false);
+                      }
                     }
                   }}
                   is24Hour={true}

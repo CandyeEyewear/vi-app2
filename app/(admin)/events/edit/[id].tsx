@@ -866,9 +866,17 @@ export default function EditEventScreen() {
                   mode="date"
                   display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                   onChange={(event, selectedDate) => {
-                    setShowDatePicker(Platform.OS === 'ios');
+                    // Close picker on Android immediately
+                    if (Platform.OS === 'android') {
+                      setShowDatePicker(false);
+                    }
+                    
                     if (selectedDate) {
                       setEventDate(selectedDate);
+                      // Auto-close on iOS after selection (better UX)
+                      if (Platform.OS === 'ios') {
+                        setShowDatePicker(false);
+                      }
                     }
                   }}
                   minimumDate={new Date()}
@@ -894,9 +902,17 @@ export default function EditEventScreen() {
                     mode="time"
                     display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                     onChange={(event, selectedTime) => {
-                      setShowStartTimePicker(Platform.OS === 'ios');
+                      // Close picker on Android immediately
+                      if (Platform.OS === 'android') {
+                        setShowStartTimePicker(false);
+                      }
+                      
                       if (selectedTime) {
                         setStartTime(selectedTime);
+                        // Auto-close on iOS after selection (better UX)
+                        if (Platform.OS === 'ios') {
+                          setShowStartTimePicker(false);
+                        }
                       }
                     }}
                     is24Hour={true}
@@ -921,9 +937,17 @@ export default function EditEventScreen() {
                     mode="time"
                     display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                     onChange={(event, selectedTime) => {
-                      setShowEndTimePicker(Platform.OS === 'ios');
+                      // Close picker on Android immediately
+                      if (Platform.OS === 'android') {
+                        setShowEndTimePicker(false);
+                      }
+                      
                       if (selectedTime) {
                         setEndTime(selectedTime);
+                        // Auto-close on iOS after selection (better UX)
+                        if (Platform.OS === 'ios') {
+                          setShowEndTimePicker(false);
+                        }
                       }
                     }}
                     is24Hour={true}
@@ -1005,9 +1029,17 @@ export default function EditEventScreen() {
                     mode="date"
                     display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                     onChange={(event, selectedDate) => {
-                      setShowRegistrationDeadlinePicker(Platform.OS === 'ios');
+                      // Close picker on Android immediately
+                      if (Platform.OS === 'android') {
+                        setShowRegistrationDeadlinePicker(false);
+                      }
+                      
                       if (selectedDate) {
                         setRegistrationDeadline(selectedDate);
+                        // Auto-close on iOS after selection (better UX)
+                        if (Platform.OS === 'ios') {
+                          setShowRegistrationDeadlinePicker(false);
+                        }
                       }
                     }}
                     minimumDate={new Date()}
