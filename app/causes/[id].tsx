@@ -2,9 +2,19 @@
  * Cause Detail Screen
  * Displays full cause details with donation options
  * File: app/causes/[id].tsx
+ * 
+ * Visual Enhancements:
+ * - Shimmer skeleton loading
+ * - Glassmorphic floating header
+ * - Gradient progress bar with glow
+ * - Elevated cards with shadows
+ * - Premium donate buttons
+ * - Hero image gradient overlay
+ * - Polished donor list
+ * - 8px grid spacing system
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -19,9 +29,13 @@ import {
   Dimensions,
   ActivityIndicator,
   Platform,
+  Animated,
+  Pressable,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   ArrowLeft,
   Share2,
@@ -34,7 +48,7 @@ import {
   ChevronRight,
   RefreshCw,
   User,
-  MessageCircle,
+  Sparkles,
 } from 'lucide-react-native';
 import { Colors } from '../../constants/colors';
 import {
@@ -54,60 +68,430 @@ import { useAuth } from '../../contexts/AuthContext';
 import WebContainer from '../../components/WebContainer';
 import { UserAvatar } from '../../components';
 
-const screenWidth = Dimensions.get('window').width;
+const { width: screenWidth } = Dimensions.get('window');
 const isSmallScreen = screenWidth < 380;
 
-// Category configuration
-const CATEGORY_CONFIG: Record<CauseCategory, { label: string; color: string; emoji: string }> = {
-  disaster_relief: { label: 'Disaster Relief', color: '#E53935', emoji: '🆘' },
-  education: { label: 'Education', color: '#1E88E5', emoji: '📚' },
-  healthcare: { label: 'Healthcare', color: '#43A047', emoji: '🏥' },
-  environment: { label: 'Environment', color: '#7CB342', emoji: '🌱' },
-  community: { label: 'Community', color: '#FB8C00', emoji: '🏘️' },
-  poverty: { label: 'Poverty Relief', color: '#8E24AA', emoji: '💝' },
-  other: { label: 'Other', color: '#757575', emoji: '📋' },
+// ============================================================================
+// DESIGN TOKENS
+// ============================================================================
+const SPACING = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  xxl: 24,
+  xxxl: 32,
 };
 
-// Skeleton loader
-function DetailSkeleton({ colors }: { colors: any }) {
+const RADIUS = {
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  xxl: 24,
+  full: 9999,
+};
+
+const SHADOWS = {
+  sm: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  md: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  lg: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  glow: (color: string) => ({
+    shadowColor: color,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  }),
+};
+
+// ============================================================================
+// CATEGORY CONFIGURATION (Using new color system)
+// ============================================================================
+const getCategoryConfig = (category: CauseCategory, colors: typeof Colors.light) => {
+  const configs: Record<CauseCategory, { label: string; emoji: string; color: string; softColor: string }> = {
+    disaster_relief: { 
+      label: 'Disaster Relief', 
+      emoji: '🆘', 
+      color: colors.disaster,
+      softColor: colors.disasterSoft,
+    },
+    education: { 
+      label: 'Education', 
+      emoji: '📚', 
+      color: colors.education,
+      softColor: colors.educationSoft,
+    },
+    healthcare: { 
+      label: 'Healthcare', 
+      emoji: '🏥', 
+      color: colors.healthcare,
+      softColor: colors.healthcareSoft,
+    },
+    environment: { 
+      label: 'Environment', 
+      emoji: '🌱', 
+      color: colors.environment,
+      softColor: colors.environmentSoft,
+    },
+    community: { 
+      label: 'Community', 
+      emoji: '🏘️', 
+      color: colors.community,
+      softColor: colors.communitySoft,
+    },
+    poverty: { 
+      label: 'Poverty Relief', 
+      emoji: '💝', 
+      color: colors.poorRelief,
+      softColor: colors.poorReliefSoft,
+    },
+    other: { 
+      label: 'Other', 
+      emoji: '📋', 
+      color: colors.textSecondary,
+      softColor: colors.surfaceElevated,
+    },
+  };
+  return configs[category] || configs.other;
+};
+
+// ============================================================================
+// SHIMMER SKELETON COMPONENT
+// ============================================================================
+function ShimmerEffect({ colors, style }: { colors: typeof Colors.light; style?: any }) {
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.timing(shimmerAnim, {
+        toValue: 1,
+        duration: 1500,
+        useNativeDriver: true,
+      })
+    );
+    animation.start();
+    return () => animation.stop();
+  }, []);
+
+  const translateX = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-screenWidth, screenWidth],
+  });
+
+  return (
+    <View style={[styles.shimmerContainer, style]}>
+      <View style={[styles.shimmerBase, { backgroundColor: colors.skeleton }]} />
+      <Animated.View
+        style={[
+          styles.shimmerOverlay,
+          { transform: [{ translateX }] },
+        ]}
+      >
+        <LinearGradient
+          colors={['transparent', colors.skeletonHighlight, 'transparent']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
+    </View>
+  );
+}
+
+function DetailSkeleton({ colors }: { colors: typeof Colors.light }) {
   return (
     <View style={styles.skeletonContainer}>
-      <View style={[styles.skeletonImage, { backgroundColor: colors.border }]} />
-      <View style={styles.skeletonContent}>
-        <View style={[styles.skeletonTitle, { backgroundColor: colors.border }]} />
-        <View style={[styles.skeletonText, { backgroundColor: colors.border }]} />
-        <View style={[styles.skeletonText, { backgroundColor: colors.border, width: '60%' }]} />
-        <View style={[styles.skeletonProgress, { backgroundColor: colors.border }]} />
-        <View style={[styles.skeletonButton, { backgroundColor: colors.border }]} />
+      {/* Hero Image Skeleton */}
+      <ShimmerEffect colors={colors} style={styles.skeletonImage} />
+      
+      {/* Content Skeleton */}
+      <View style={[styles.skeletonContent, { backgroundColor: colors.background }]}>
+        {/* Title */}
+        <ShimmerEffect colors={colors} style={styles.skeletonTitle} />
+        <ShimmerEffect colors={colors} style={[styles.skeletonTitle, { width: '60%' }]} />
+        
+        {/* Progress Card */}
+        <View style={[styles.skeletonCard, { backgroundColor: colors.surface }]}>
+          <ShimmerEffect colors={colors} style={styles.skeletonProgress} />
+          <View style={styles.skeletonStatsRow}>
+            <ShimmerEffect colors={colors} style={styles.skeletonStat} />
+            <ShimmerEffect colors={colors} style={styles.skeletonStat} />
+            <ShimmerEffect colors={colors} style={styles.skeletonStat} />
+          </View>
+        </View>
+        
+        {/* Buttons */}
+        <View style={styles.skeletonButtonRow}>
+          <ShimmerEffect colors={colors} style={styles.skeletonButton} />
+          <ShimmerEffect colors={colors} style={styles.skeletonButton} />
+        </View>
+        
+        {/* Description */}
+        <ShimmerEffect colors={colors} style={styles.skeletonText} />
+        <ShimmerEffect colors={colors} style={styles.skeletonText} />
+        <ShimmerEffect colors={colors} style={[styles.skeletonText, { width: '80%' }]} />
       </View>
     </View>
   );
 }
 
-// Donor item component
-function DonorItem({ donation, colors }: { donation: Donation; colors: any }) {
-  const displayName = donation.isAnonymous 
-    ? 'Anonymous' 
-    : donation.donorName || donation.user?.fullName || 'Supporter';
+// ============================================================================
+// GLASSMORPHIC HEADER BUTTON
+// ============================================================================
+function HeaderButton({ 
+  onPress, 
+  icon: Icon, 
+  colors,
+  colorScheme,
+}: { 
+  onPress: () => void; 
+  icon: any; 
+  colors: typeof Colors.light;
+  colorScheme: 'light' | 'dark';
+}) {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.92,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      friction: 3,
+      useNativeDriver: true,
+    }).start();
+  };
 
   return (
-    <View style={[styles.donorItem, { borderBottomColor: colors.border }]}>
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={styles.headerButtonWrapper}
+      >
+        <BlurView
+          intensity={80}
+          tint={colorScheme === 'dark' ? 'dark' : 'light'}
+          style={styles.headerButtonBlur}
+        >
+          <View style={[
+            styles.headerButtonInner,
+            { 
+              backgroundColor: colorScheme === 'dark' 
+                ? 'rgba(30, 41, 59, 0.7)' 
+                : 'rgba(255, 255, 255, 0.8)',
+              borderColor: colors.border,
+            }
+          ]}>
+            <Icon size={22} color={colors.text} />
+          </View>
+        </BlurView>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+// ============================================================================
+// ANIMATED PROGRESS BAR
+// ============================================================================
+function AnimatedProgressBar({ 
+  progress, 
+  colors,
+  isComplete,
+}: { 
+  progress: number; 
+  colors: typeof Colors.light;
+  isComplete: boolean;
+}) {
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: progress,
+      duration: 1000,
+      useNativeDriver: false,
+    }).start();
+
+    if (progress >= 80) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, { toValue: 1, duration: 1000, useNativeDriver: false }),
+          Animated.timing(glowAnim, { toValue: 0.5, duration: 1000, useNativeDriver: false }),
+        ])
+      ).start();
+    }
+  }, [progress]);
+
+  const width = progressAnim.interpolate({
+    inputRange: [0, 100],
+    outputRange: ['0%', '100%'],
+    extrapolate: 'clamp',
+  });
+
+  const gradientColors = isComplete 
+    ? [colors.success, colors.successDark] as const
+    : [colors.primary, colors.primaryDark] as const;
+
+  return (
+    <View style={styles.progressBarWrapper}>
+      <View style={[styles.progressBarTrack, { backgroundColor: colors.surface2 }]}>
+        <Animated.View style={[styles.progressBarFill, { width }]}>
+          <LinearGradient
+            colors={gradientColors}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={StyleSheet.absoluteFill}
+          />
+        </Animated.View>
+      </View>
+    </View>
+  );
+}
+
+// ============================================================================
+// PREMIUM DONATE BUTTON
+// ============================================================================
+function DonateButton({ 
+  onPress, 
+  colors,
+  isPrimary = true,
+  icon: Icon,
+  label,
+}: { 
+  onPress: () => void; 
+  colors: typeof Colors.light;
+  isPrimary?: boolean;
+  icon: any;
+  label: string;
+}) {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.96,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      friction: 3,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  if (isPrimary) {
+    return (
+      <Animated.View style={[styles.donateButtonWrapper, { transform: [{ scale: scaleAnim }] }]}>
+        <Pressable
+          onPress={onPress}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          style={[styles.donateButtonPressable, SHADOWS.glow(colors.primary)]}
+        >
+          <LinearGradient
+            colors={[colors.primary, colors.primaryDark]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.donateButtonGradient}
+          >
+            <Icon size={20} color="#FFFFFF" />
+            <Text style={styles.donateButtonTextPrimary}>{label}</Text>
+          </LinearGradient>
+        </Pressable>
+      </Animated.View>
+    );
+  }
+
+  return (
+    <Animated.View style={[styles.donateButtonWrapper, { transform: [{ scale: scaleAnim }] }]}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={[
+          styles.donateButtonSecondary,
+          { 
+            backgroundColor: colors.primarySoft,
+            borderColor: colors.primary,
+          },
+          SHADOWS.sm,
+        ]}
+      >
+        <Icon size={20} color={colors.primary} />
+        <Text style={[styles.donateButtonTextSecondary, { color: colors.primary }]}>
+          {label}
+        </Text>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+// ============================================================================
+// DONOR ITEM COMPONENT
+// ============================================================================
+function DonorItem({ 
+  donation, 
+  colors,
+  isLast,
+}: { 
+  donation: Donation; 
+  colors: typeof Colors.light;
+  isLast: boolean;
+}) {
+  const displayName = donation.isAnonymous 
+    ? 'Anonymous Hero' 
+    : donation.donorName || donation.user?.fullName || 'Generous Supporter';
+
+  return (
+    <View style={[
+      styles.donorItem, 
+      !isLast && { borderBottomColor: colors.divider, borderBottomWidth: 1 }
+    ]}>
       {!donation.isAnonymous && donation.user ? (
         <UserAvatar
           avatarUrl={donation.user.avatarUrl || null}
           fullName={donation.user.fullName || displayName}
-          size={44}
+          size={48}
           role={donation.user.role || 'volunteer'}
           membershipTier={donation.user.membershipTier || 'free'}
           membershipStatus={donation.user.membershipStatus || 'inactive'}
         />
       ) : (
-        <View style={[styles.donorAvatar, { backgroundColor: colors.border }]}>
-          <User size={20} color={colors.textSecondary} />
+        <View style={[styles.donorAvatarAnonymous, { backgroundColor: colors.surface2 }]}>
+          <User size={22} color={colors.textTertiary} />
         </View>
       )}
+      
       <View style={styles.donorInfo}>
-        <Text style={[styles.donorName, { color: colors.text }]}>
+        <Text style={[styles.donorName, { color: colors.text }]} numberOfLines={1}>
           {displayName}
         </Text>
         {donation.message && (
@@ -116,19 +500,52 @@ function DonorItem({ donation, colors }: { donation: Donation; colors: any }) {
           </Text>
         )}
       </View>
-      <Text style={[styles.donorAmount, { color: '#38B6FF' }]}>
-        {formatCurrency(donation.amount)}
-      </Text>
+      
+      {/* Amount Badge */}
+      <View style={[styles.donorAmountBadge, { backgroundColor: colors.primarySoft }]}>
+        <Text style={[styles.donorAmount, { color: colors.primary }]}>
+          {formatCurrency(donation.amount)}
+        </Text>
+      </View>
     </View>
   );
 }
 
+// ============================================================================
+// STAT ITEM COMPONENT
+// ============================================================================
+function StatItem({ 
+  icon: Icon, 
+  value, 
+  label, 
+  colors,
+}: { 
+  icon: any; 
+  value: string | number; 
+  label: string; 
+  colors: typeof Colors.light;
+}) {
+  return (
+    <View style={styles.statItem}>
+      <View style={[styles.statIconContainer, { backgroundColor: colors.primarySoft }]}>
+        <Icon size={18} color={colors.primary} />
+      </View>
+      <Text style={[styles.statValue, { color: colors.text }]}>{value}</Text>
+      <Text style={[styles.statLabel, { color: colors.textTertiary }]}>{label}</Text>
+    </View>
+  );
+}
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
 export default function CauseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
+  const isDark = colorScheme === 'dark';
+  const colors = Colors[isDark ? 'dark' : 'light'];
   const { user } = useAuth();
 
   // State
@@ -225,13 +642,13 @@ export default function CauseDetailScreen() {
         <Stack.Screen options={{ headerShown: false }} />
         
         {/* Header */}
-        <View style={[styles.header, { paddingTop: insets.top + 8, backgroundColor: colors.background }]}>
-          <TouchableOpacity
-            style={[styles.headerButton, { backgroundColor: colors.card }]}
+        <View style={[styles.header, { paddingTop: insets.top + SPACING.sm }]}>
+          <HeaderButton
             onPress={() => router.back()}
-          >
-            <ArrowLeft size={24} color={colors.text} />
-          </TouchableOpacity>
+            icon={ArrowLeft}
+            colors={colors}
+            colorScheme={isDark ? 'dark' : 'light'}
+          />
         </View>
 
         <DetailSkeleton colors={colors} />
@@ -241,263 +658,338 @@ export default function CauseDetailScreen() {
 
   const progress = getCauseProgress(cause);
   const daysRemaining = getCauseDaysRemaining(cause);
-  const categoryConfig = CATEGORY_CONFIG[cause.category] || CATEGORY_CONFIG.other;
+  const categoryConfig = getCategoryConfig(cause.category, colors);
+  const isComplete = progress >= 100;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* Floating Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 8, backgroundColor: 'transparent' }]}>
-        <TouchableOpacity
-          style={[styles.headerButton, { backgroundColor: colors.card }]}
+      <View style={[styles.header, { paddingTop: insets.top + SPACING.sm }]}>
+        <HeaderButton
           onPress={() => router.back()}
-        >
-          <ArrowLeft size={24} color={colors.text} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.headerButton, { backgroundColor: colors.card }]}
+          icon={ArrowLeft}
+          colors={colors}
+          colorScheme={isDark ? 'dark' : 'light'}
+        />
+        <HeaderButton
           onPress={handleShare}
-        >
-          <Share2 size={24} color={colors.text} />
-        </TouchableOpacity>
+          icon={Share2}
+          colors={colors}
+          colorScheme={isDark ? 'dark' : 'light'}
+        />
       </View>
 
       <WebContainer>
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor="#38B6FF"
-          />
-        }
-      >
-        {/* Hero Image */}
-        <View style={styles.imageContainer}>
-          {cause.imageUrl ? (
-            <Image source={{ uri: cause.imageUrl }} style={styles.heroImage} resizeMode="cover" />
-          ) : (
-            <View style={[styles.imagePlaceholder, { backgroundColor: colors.border }]}>
-              <Heart size={60} color={colors.textSecondary} />
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
+        >
+          {/* Hero Image */}
+          <View style={styles.imageContainer}>
+            {cause.imageUrl ? (
+              <Image 
+                source={{ uri: cause.imageUrl }} 
+                style={styles.heroImage} 
+                resizeMode="cover" 
+              />
+            ) : (
+              <View style={[styles.imagePlaceholder, { backgroundColor: colors.surface2 }]}>
+                <Heart size={64} color={colors.textTertiary} />
+              </View>
+            )}
+            
+            {/* Gradient Overlay */}
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.4)']}
+              style={styles.heroGradient}
+            />
+            
+            {/* Category Badge */}
+            <View style={styles.badgesContainer}>
+              <View style={[styles.categoryBadge, { backgroundColor: categoryConfig.color }]}>
+                <Text style={styles.categoryBadgeText}>
+                  {categoryConfig.emoji} {categoryConfig.label}
+                </Text>
+              </View>
+
+              {/* Featured Badge */}
+              {cause.isFeatured && (
+                <View style={[styles.featuredBadge, { backgroundColor: colors.star }]}>
+                  <Sparkles size={14} color="#000" />
+                  <Text style={styles.featuredBadgeText}>Featured</Text>
+                </View>
+              )}
             </View>
-          )}
-          
-          {/* Category Badge */}
-          <View style={[styles.categoryBadge, { backgroundColor: categoryConfig.color }]}>
-            <Text style={styles.categoryBadgeText}>
-              {categoryConfig.emoji} {categoryConfig.label}
-            </Text>
           </View>
 
-          {/* Featured Badge */}
-          {cause.isFeatured && (
-            <View style={[styles.featuredBadge, { backgroundColor: '#FFD700' }]}>
-              <TrendingUp size={14} color="#000" />
-              <Text style={styles.featuredBadgeText}>Featured</Text>
-            </View>
-          )}
-        </View>
+          {/* Content */}
+          <View style={[
+            styles.content, 
+            { 
+              backgroundColor: colors.background,
+              ...SHADOWS.lg,
+            }
+          ]}>
+            {/* Title */}
+            <Text style={[styles.title, { color: colors.text }]}>
+              {cause.title}
+            </Text>
 
-        {/* Content */}
-        <View style={[styles.content, { backgroundColor: colors.background }]}>
-          {/* Title */}
-          <Text style={[styles.title, { color: colors.text }]}>
-            {cause.title}
-          </Text>
-
-          {/* Progress Section */}
-          <View style={[styles.progressSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            {/* Progress Bar */}
-            <View style={styles.progressBarContainer}>
-              <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    {
-                      width: `${progress}%`,
-                      backgroundColor: progress >= 100 ? '#4CAF50' : '#38B6FF',
-                    },
-                  ]}
+            {/* Progress Section */}
+            <View style={[
+              styles.progressSection, 
+              { 
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
+              SHADOWS.md,
+            ]}>
+              {/* Progress Bar */}
+              <View style={styles.progressBarContainer}>
+                <AnimatedProgressBar 
+                  progress={progress} 
+                  colors={colors}
+                  isComplete={isComplete}
                 />
+                <View style={[
+                  styles.progressPercentBadge, 
+                  { backgroundColor: isComplete ? colors.successSoft : colors.primarySoft }
+                ]}>
+                  <Text style={[
+                    styles.progressPercent, 
+                    { color: isComplete ? colors.success : colors.primary }
+                  ]}>
+                    {Math.round(progress)}%
+                  </Text>
+                </View>
               </View>
-              <Text style={[styles.progressPercent, { color: colors.text }]}>
-                {Math.round(progress)}%
+
+              {/* Amount Info */}
+              <View style={styles.amountContainer}>
+                <View style={styles.amountMain}>
+                  <Text style={[styles.amountRaised, { color: colors.text }]}>
+                    {formatCurrency(cause.amountRaised)}
+                  </Text>
+                  <Text style={[styles.amountLabel, { color: colors.textSecondary }]}>
+                    raised of {formatCurrency(cause.goalAmount)} goal
+                  </Text>
+                </View>
+              </View>
+
+              {/* Stats Row */}
+              <View style={[styles.statsRow, { borderTopColor: colors.divider }]}>
+                <StatItem 
+                  icon={Users} 
+                  value={cause.donorCount} 
+                  label="donors" 
+                  colors={colors}
+                />
+                {daysRemaining !== null && (
+                  <StatItem 
+                    icon={Clock} 
+                    value={daysRemaining} 
+                    label={daysRemaining === 1 ? 'day left' : 'days left'} 
+                    colors={colors}
+                  />
+                )}
+              </View>
+            </View>
+
+            {/* Donation Buttons */}
+            <View style={styles.donateButtonsContainer}>
+              <DonateButton
+                onPress={handleDonate}
+                colors={colors}
+                isPrimary={true}
+                icon={Heart}
+                label="Donate Now"
+              />
+
+              {cause.allowRecurring && (
+                <DonateButton
+                  onPress={handleRecurringDonate}
+                  colors={colors}
+                  isPrimary={false}
+                  icon={RefreshCw}
+                  label="Monthly"
+                />
+              )}
+            </View>
+
+            {/* Description */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                About this Cause
+              </Text>
+              <Text style={[styles.description, { color: colors.textSecondary }]}>
+                {cause.description}
               </Text>
             </View>
 
-            {/* Amount Info */}
-            <View style={styles.amountRow}>
-              <View>
-                <Text style={[styles.amountRaised, { color: colors.text }]}>
-                  {formatCurrency(cause.amountRaised)}
-                </Text>
-                <Text style={[styles.amountLabel, { color: colors.textSecondary }]}>
-                  raised of {formatCurrency(cause.goalAmount)}
-                </Text>
-              </View>
-              <View style={styles.amountDivider} />
-              <View style={styles.statItem}>
-                <Users size={18} color="#38B6FF" />
-                <Text style={[styles.statValue, { color: colors.text }]}>
-                  {cause.donorCount}
-                </Text>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-                  donors
-                </Text>
-              </View>
-              {daysRemaining !== null && (
-                <>
-                  <View style={styles.amountDivider} />
-                  <View style={styles.statItem}>
-                    <Clock size={18} color="#38B6FF" />
-                    <Text style={[styles.statValue, { color: colors.text }]}>
-                      {daysRemaining}
+            {/* Details */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                Campaign Details
+              </Text>
+              <View style={[
+                styles.detailsCard, 
+                { 
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+                SHADOWS.sm,
+              ]}>
+                {cause.endDate && (
+                  <View style={[styles.detailRow, { borderBottomColor: colors.divider }]}>
+                    <View style={[styles.detailIconContainer, { backgroundColor: colors.surface2 }]}>
+                      <Calendar size={18} color={colors.textSecondary} />
+                    </View>
+                    <View style={styles.detailTextContainer}>
+                      <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                        Campaign ends
+                      </Text>
+                      <Text style={[styles.detailValue, { color: colors.text }]}>
+                        {new Date(cause.endDate).toLocaleDateString('en-US', {
+                          month: 'long',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+                
+                <View style={[
+                  styles.detailRow, 
+                  cause.minimumDonation > 0 && { borderBottomColor: colors.divider }
+                ]}>
+                  <View style={[styles.detailIconContainer, { backgroundColor: colors.surface2 }]}>
+                    <Target size={18} color={colors.textSecondary} />
+                  </View>
+                  <View style={styles.detailTextContainer}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                      Fundraising goal
                     </Text>
-                    <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-                      {daysRemaining === 1 ? 'day left' : 'days left'}
+                    <Text style={[styles.detailValue, { color: colors.text }]}>
+                      {formatCurrency(cause.goalAmount)}
                     </Text>
                   </View>
-                </>
-              )}
-            </View>
-          </View>
-
-          {/* Donation Buttons */}
-          <View style={styles.donateButtonsContainer}>
-            <TouchableOpacity
-              style={[styles.donateButton, { backgroundColor: '#38B6FF' }]}
-              onPress={handleDonate}
-              activeOpacity={0.8}
-            >
-              <Heart size={20} color="#FFFFFF" />
-              <Text style={styles.donateButtonText}>Donate Now</Text>
-            </TouchableOpacity>
-
-            {cause.allowRecurring && (
-              <TouchableOpacity
-                style={[styles.recurringButton, { backgroundColor: colors.card, borderColor: '#38B6FF' }]}
-                onPress={handleRecurringDonate}
-                activeOpacity={0.8}
-              >
-                <RefreshCw size={20} color="#38B6FF" />
-                <Text style={[styles.recurringButtonText, { color: '#38B6FF' }]}>
-                  Monthly Giving
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Description */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              About this Cause
-            </Text>
-            <Text style={[styles.description, { color: colors.textSecondary }]}>
-              {cause.description}
-            </Text>
-          </View>
-
-          {/* Details */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Details
-            </Text>
-            <View style={[styles.detailsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              {cause.endDate && (
-                <View style={styles.detailRow}>
-                  <Calendar size={18} color={colors.textSecondary} />
-                  <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
-                    Campaign ends:
-                  </Text>
-                  <Text style={[styles.detailValue, { color: colors.text }]}>
-                    {new Date(cause.endDate).toLocaleDateString('en-US', {
-                      month: 'long',
-                      day: 'numeric',
-                      year: 'numeric',
-                    })}
-                  </Text>
                 </View>
-              )}
-              <View style={styles.detailRow}>
-                <Target size={18} color={colors.textSecondary} />
-                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
-                  Goal:
-                </Text>
-                <Text style={[styles.detailValue, { color: colors.text }]}>
-                  {formatCurrency(cause.goalAmount)}
-                </Text>
-              </View>
-              {cause.minimumDonation > 0 && (
-                <View style={styles.detailRow}>
-                  <Heart size={18} color={colors.textSecondary} />
-                  <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
-                    Minimum donation:
-                  </Text>
-                  <Text style={[styles.detailValue, { color: colors.text }]}>
-                    {formatCurrency(cause.minimumDonation)}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-
-          {/* Recent Donors */}
-          {cause.isDonationsPublic && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                  Recent Donors
-                </Text>
-                {donations.length > 0 && (
-                  <TouchableOpacity 
-                    style={styles.viewAllButton}
-                    onPress={() => router.push(`/causes/${id}/donors`)}
-                  >
-                    <Text style={[styles.viewAllText, { color: '#38B6FF' }]}>
-                      View All
-                    </Text>
-                    <ChevronRight size={16} color="#38B6FF" />
-                  </TouchableOpacity>
+                
+                {cause.minimumDonation > 0 && (
+                  <View style={styles.detailRow}>
+                    <View style={[styles.detailIconContainer, { backgroundColor: colors.surface2 }]}>
+                      <Heart size={18} color={colors.textSecondary} />
+                    </View>
+                    <View style={styles.detailTextContainer}>
+                      <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                        Minimum donation
+                      </Text>
+                      <Text style={[styles.detailValue, { color: colors.text }]}>
+                        {formatCurrency(cause.minimumDonation)}
+                      </Text>
+                    </View>
+                  </View>
                 )}
               </View>
-
-              {loadingDonations ? (
-                <ActivityIndicator size="small" color="#38B6FF" style={styles.loadingDonors} />
-              ) : donations.length > 0 ? (
-                <View style={[styles.donorsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  {donations.map((donation, index) => (
-                    <DonorItem
-                      key={donation.id}
-                      donation={donation}
-                      colors={colors}
-                    />
-                  ))}
-                </View>
-              ) : (
-                <View style={[styles.noDonorsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <Heart size={32} color={colors.textSecondary} />
-                  <Text style={[styles.noDonorsText, { color: colors.textSecondary }]}>
-                    Be the first to donate!
-                  </Text>
-                </View>
-              )}
             </View>
-          )}
 
-        </View>
-      </ScrollView>
+            {/* Recent Donors */}
+            {cause.isDonationsPublic && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>
+                    Recent Supporters
+                  </Text>
+                  {donations.length > 0 && (
+                    <Pressable 
+                      style={({ pressed }) => [
+                        styles.viewAllButton,
+                        pressed && { opacity: 0.7 }
+                      ]}
+                      onPress={() => router.push(`/causes/${id}/donors`)}
+                    >
+                      <Text style={[styles.viewAllText, { color: colors.primary }]}>
+                        View All
+                      </Text>
+                      <ChevronRight size={18} color={colors.primary} />
+                    </Pressable>
+                  )}
+                </View>
+
+                {loadingDonations ? (
+                  <View style={styles.loadingDonors}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  </View>
+                ) : donations.length > 0 ? (
+                  <View style={[
+                    styles.donorsCard, 
+                    { 
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
+                    SHADOWS.sm,
+                  ]}>
+                    {donations.map((donation, index) => (
+                      <DonorItem
+                        key={donation.id}
+                        donation={donation}
+                        colors={colors}
+                        isLast={index === donations.length - 1}
+                      />
+                    ))}
+                  </View>
+                ) : (
+                  <View style={[
+                    styles.emptyDonorsCard, 
+                    { 
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
+                    SHADOWS.sm,
+                  ]}>
+                    <View style={[styles.emptyIconContainer, { backgroundColor: colors.primarySoft }]}>
+                      <Heart size={32} color={colors.primary} />
+                    </View>
+                    <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                      Be the first to donate!
+                    </Text>
+                    <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                      Your support will kickstart this campaign
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Bottom Spacing */}
+            <View style={{ height: insets.bottom + SPACING.xxxl }} />
+          </View>
+        </ScrollView>
       </WebContainer>
     </View>
   );
 }
 
+// ============================================================================
+// STYLES
+// ============================================================================
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  
+  // Header
   header: {
     position: 'absolute',
     top: 0,
@@ -506,28 +998,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.sm,
     zIndex: 100,
   },
-  headerButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  headerButtonWrapper: {
+    borderRadius: RADIUS.full,
+    overflow: 'hidden',
+  },
+  headerButtonBlur: {
+    borderRadius: RADIUS.full,
+    overflow: 'hidden',
+  },
+  headerButtonInner: {
+    width: 48,
+    height: 48,
+    borderRadius: RADIUS.full,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
   },
+  
+  // Scroll
   scrollView: {
     flex: 1,
   },
+  
+  // Hero Image
   imageContainer: {
     position: 'relative',
-    height: 280,
+    height: 320,
   },
   heroImage: {
     width: '100%',
@@ -539,13 +1039,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  categoryBadge: {
+  heroGradient: {
     position: 'absolute',
-    bottom: 16,
-    left: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 120,
+  },
+  badgesContainer: {
+    position: 'absolute',
+    bottom: SPACING.xl,
+    left: SPACING.lg,
+    right: SPACING.lg,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+  },
+  categoryBadge: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.full,
   },
   categoryBadgeText: {
     color: '#FFFFFF',
@@ -553,83 +1066,107 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   featuredBadge: {
-    position: 'absolute',
-    bottom: 16,
-    right: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    gap: 4,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.full,
+    gap: SPACING.xs,
   },
   featuredBadgeText: {
     color: '#000',
     fontSize: 12,
     fontWeight: '700',
   },
+  
+  // Content
   content: {
     flex: 1,
-    padding: 16,
-    marginTop: -20,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.xl,
+    marginTop: -SPACING.xxl,
+    borderTopLeftRadius: RADIUS.xxl,
+    borderTopRightRadius: RADIUS.xxl,
   },
   title: {
-    fontSize: isSmallScreen ? 22 : 26,
+    fontSize: isSmallScreen ? 24 : 28,
     fontWeight: '700',
-    marginBottom: 16,
-    lineHeight: 32,
+    marginBottom: SPACING.lg,
+    lineHeight: isSmallScreen ? 32 : 36,
+    letterSpacing: -0.5,
   },
+  
+  // Progress Section
   progressSection: {
-    padding: 16,
-    borderRadius: 16,
+    borderRadius: RADIUS.lg,
     borderWidth: 1,
-    marginBottom: 16,
+    padding: SPACING.lg,
+    marginBottom: SPACING.lg,
   },
   progressBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-    gap: 12,
+    gap: SPACING.md,
+    marginBottom: SPACING.lg,
   },
-  progressBar: {
+  progressBarWrapper: {
     flex: 1,
     height: 12,
-    borderRadius: 6,
+    borderRadius: RADIUS.sm,
     overflow: 'hidden',
   },
-  progressFill: {
+  progressBarTrack: {
+    flex: 1,
     height: '100%',
-    borderRadius: 6,
+    borderRadius: RADIUS.sm,
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: RADIUS.sm,
+    overflow: 'hidden',
+  },
+  progressPercentBadge: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.sm,
+    minWidth: 56,
+    alignItems: 'center',
   },
   progressPercent: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    minWidth: 50,
-    textAlign: 'right',
   },
-  amountRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  amountContainer: {
+    marginBottom: SPACING.lg,
   },
+  amountMain: {},
   amountRaised: {
-    fontSize: isSmallScreen ? 20 : 24,
-    fontWeight: '700',
+    fontSize: isSmallScreen ? 28 : 32,
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
   amountLabel: {
-    fontSize: 13,
-    marginTop: 2,
+    fontSize: 14,
+    marginTop: SPACING.xs,
   },
-  amountDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: '#E0E0E0',
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    gap: SPACING.xxl,
+    paddingTop: SPACING.lg,
+    borderTopWidth: 1,
   },
   statItem: {
     alignItems: 'center',
-    gap: 4,
+    gap: SPACING.xs,
+  },
+  statIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: RADIUS.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
   },
   statValue: {
     fontSize: 18,
@@ -638,108 +1175,128 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 12,
   },
+  
+  // Donate Buttons
   donateButtonsContainer: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 24,
+    gap: SPACING.md,
+    marginBottom: SPACING.xxl,
   },
-  donateButton: {
+  donateButtonWrapper: {
     flex: 1,
+  },
+  donateButtonPressable: {
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
+  },
+  donateButtonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
-    gap: 8,
+    paddingVertical: SPACING.lg,
+    gap: SPACING.sm,
   },
-  donateButtonText: {
+  donateButtonTextPrimary: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
   },
-  recurringButton: {
-    flex: 1,
+  donateButtonSecondary: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: SPACING.lg - 2,
+    borderRadius: RADIUS.lg,
     borderWidth: 2,
-    gap: 8,
+    gap: SPACING.sm,
   },
-  recurringButtonText: {
+  donateButtonTextSecondary: {
     fontSize: 16,
     fontWeight: '700',
   },
+  
+  // Sections
   section: {
-    marginBottom: 24,
+    marginBottom: SPACING.xxl,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: SPACING.md,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    marginBottom: 12,
+    marginBottom: SPACING.md,
   },
   viewAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: SPACING.xs,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
   },
   viewAllText: {
     fontSize: 14,
     fontWeight: '600',
   },
   description: {
-    fontSize: 15,
-    lineHeight: 24,
+    fontSize: 16,
+    lineHeight: 26,
   },
+  
+  // Details Card
   detailsCard: {
-    borderRadius: 12,
+    borderRadius: RADIUS.lg,
     borderWidth: 1,
-    padding: 16,
-    gap: 16,
+    overflow: 'hidden',
   },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    padding: SPACING.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: 'transparent',
+    gap: SPACING.md,
   },
-  detailLabel: {
-    fontSize: 14,
+  detailIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: RADIUS.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detailTextContainer: {
     flex: 1,
   },
+  detailLabel: {
+    fontSize: 13,
+    marginBottom: 2,
+  },
   detailValue: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
   },
+  
+  // Donors
   donorsCard: {
-    borderRadius: 12,
+    borderRadius: RADIUS.lg,
     borderWidth: 1,
     overflow: 'hidden',
   },
   donorItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderBottomWidth: 1,
-    gap: 12,
+    padding: SPACING.lg,
+    gap: SPACING.md,
   },
-  donorAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  donorAvatarAnonymous: {
+    width: 48,
+    height: 48,
+    borderRadius: RADIUS.full,
     justifyContent: 'center',
     alignItems: 'center',
-    overflow: 'hidden',
-  },
-  donorAvatarImage: {
-    width: '100%',
-    height: '100%',
   },
   donorInfo: {
     flex: 1,
@@ -747,82 +1304,117 @@ const styles = StyleSheet.create({
   donorName: {
     fontSize: 15,
     fontWeight: '600',
+    marginBottom: 2,
   },
   donorMessage: {
     fontSize: 13,
-    marginTop: 2,
     fontStyle: 'italic',
+    lineHeight: 18,
+  },
+  donorAmountBadge: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.sm,
   },
   donorAmount: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  noDonorsCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 32,
-    alignItems: 'center',
-    gap: 8,
-  },
-  noDonorsText: {
     fontSize: 14,
-  },
-  loadingDonors: {
-    paddingVertical: 32,
-  },
-  bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 16,
-    borderTopWidth: 1,
-  },
-  fixedDonateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 12,
-    gap: 10,
-  },
-  fixedDonateButtonText: {
-    color: '#FFFFFF',
-    fontSize: 17,
     fontWeight: '700',
   },
-  // Skeleton styles
+  
+  // Empty State
+  emptyDonorsCard: {
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    padding: SPACING.xxxl,
+    alignItems: 'center',
+  },
+  emptyIconContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: RADIUS.full,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    marginBottom: SPACING.xs,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  
+  // Loading
+  loadingDonors: {
+    paddingVertical: SPACING.xxxl,
+    alignItems: 'center',
+  },
+  
+  // Shimmer Skeleton
+  shimmerContainer: {
+    overflow: 'hidden',
+    borderRadius: RADIUS.sm,
+  },
+  shimmerBase: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  shimmerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
   skeletonContainer: {
     flex: 1,
   },
   skeletonImage: {
-    height: 280,
-    width: '100%',
+    height: 320,
+    borderRadius: 0,
   },
   skeletonContent: {
-    padding: 16,
-    gap: 16,
+    padding: SPACING.lg,
+    marginTop: -SPACING.xxl,
+    borderTopLeftRadius: RADIUS.xxl,
+    borderTopRightRadius: RADIUS.xxl,
+    gap: SPACING.sm,
   },
   skeletonTitle: {
     height: 28,
-    borderRadius: 4,
-    width: '80%',
+    width: '85%',
+    borderRadius: RADIUS.sm,
   },
-  skeletonText: {
-    height: 16,
-    borderRadius: 4,
-    width: '100%',
+  skeletonCard: {
+    padding: SPACING.lg,
+    borderRadius: RADIUS.lg,
+    marginTop: SPACING.md,
+    gap: SPACING.md,
   },
   skeletonProgress: {
     height: 12,
-    borderRadius: 6,
-    width: '100%',
-    marginTop: 16,
+    borderRadius: RADIUS.sm,
+  },
+  skeletonStatsRow: {
+    flexDirection: 'row',
+    gap: SPACING.lg,
+    marginTop: SPACING.sm,
+  },
+  skeletonStat: {
+    width: 60,
+    height: 60,
+    borderRadius: RADIUS.md,
+  },
+  skeletonButtonRow: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+    marginTop: SPACING.lg,
   },
   skeletonButton: {
+    flex: 1,
     height: 52,
-    borderRadius: 12,
-    width: '100%',
-    marginTop: 16,
+    borderRadius: RADIUS.lg,
+  },
+  skeletonText: {
+    height: 16,
+    borderRadius: RADIUS.sm,
+    marginTop: SPACING.sm,
   },
 });
