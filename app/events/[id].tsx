@@ -10,12 +10,10 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
   Image,
-  useColorScheme,
   RefreshControl,
   Share,
-  Dimensions,
+  Animated,
   ActivityIndicator,
   Linking,
   Platform,
@@ -23,6 +21,7 @@ import {
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   ArrowLeft,
   Share2,
@@ -32,12 +31,10 @@ import {
   Users,
   Video,
   Ticket,
-  Star,
   ExternalLink,
   Phone,
   Mail,
   DollarSign,
-  Heart,
   Check,
   X,
   AlertCircle,
@@ -58,46 +55,14 @@ import {
   formatCurrency,
 } from '../../services/eventsService';
 import { useAuth } from '../../contexts/AuthContext';
+import { useThemeStyles } from '../../hooks/useThemeStyles';
 import { showToast } from '../../utils/toast';
 import ErrorBoundary from '../../components/ErrorBoundary';
+import { AnimatedPressable } from '../../components/AnimatedPressable';
 import Card from '../../components/Card';
-import Button from '../../components/Button';
 import { ShimmerSkeleton } from '../../components/ShimmerSkeleton';
 
-// Get screen width for responsive design
-const screenWidth = Dimensions.get('window').width;
-
-// Responsive System
-const getResponsiveValues = () => {
-  const width = Dimensions.get('window').width;
-  const isSmallMobile = width < 380;
-  const isMobile = width < 768;
-  const isTablet = width >= 768 && width < 1024;
-  const isDesktop = width >= 1024;
-  
-  return {
-    isSmallMobile, isMobile, isTablet, isDesktop,
-    spacing: {
-      xs: isSmallMobile ? 4 : 6,
-      sm: isSmallMobile ? 8 : 10,
-      md: isSmallMobile ? 12 : 16,
-      lg: isSmallMobile ? 16 : 20,
-      xl: isSmallMobile ? 20 : 24,
-      xxl: isSmallMobile ? 24 : 32,
-    },
-    fontSize: {
-      xs: isSmallMobile ? 10 : 11,
-      sm: isSmallMobile ? 12 : 13,
-      md: isSmallMobile ? 14 : 15,
-      lg: isSmallMobile ? 16 : 17,
-      xl: isSmallMobile ? 18 : 20,
-      xxl: isSmallMobile ? 22 : 26,
-      header: isSmallMobile ? 22 : isTablet ? 28 : 26,
-    },
-  };
-};
-
-// Modern Typography Scale (using responsive values)
+// Modern Typography Scale
 const Typography = {
   title1: { fontSize: 32, fontWeight: '800' as const, lineHeight: 38 },
   title2: { fontSize: 26, fontWeight: '700' as const, lineHeight: 32 },
@@ -107,20 +72,8 @@ const Typography = {
   caption: { fontSize: 12, fontWeight: '500' as const, lineHeight: 16 },
 };
 
-// Modern Spacing System (keeping for compatibility, but use responsive.spacing instead)
-const Spacing = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
-  xxxl: 32,
-};
-
 // Category configuration with theme colors
-const getCategoryConfig = (colorScheme: 'light' | 'dark'): Record<EventCategory, { label: string; color: string; emoji: string }> => {
-  const colors = Colors[colorScheme];
+const getCategoryConfig = (colors: any): Record<EventCategory, { label: string; color: string; emoji: string }> => {
   return {
     meetup: { label: 'Meetup', color: colors.primary, emoji: '🤝' },
     gala: { label: 'Gala', color: colors.community, emoji: '✨' },
@@ -200,11 +153,13 @@ function useEventDetails(eventId: string | undefined) {
 function EventHeader({ 
   onBack, 
   onShare, 
-  colors 
+  colors,
+  responsive,
 }: { 
   onBack: () => void; 
   onShare: () => void; 
   colors: any;
+  responsive: any;
 }) {
   const insets = useSafeAreaInsets();
 
@@ -212,17 +167,16 @@ function EventHeader({
     <View style={[
       styles.header, 
       { 
-        paddingTop: insets.top + Spacing.lg,
+        paddingTop: insets.top + responsive.spacing.lg,
         backgroundColor: colors.background,
         borderBottomColor: colors.border,
       }
     ]}>
-      <Pressable
+      <AnimatedPressable
         style={({ pressed }) => [
           styles.headerButton, 
           { 
-            backgroundColor: colors.card,
-            transform: [{ scale: pressed ? 0.95 : 1 }],
+            backgroundColor: pressed ? colors.surfacePressed : colors.surfaceElevated,
           }
         ]}
         onPress={onBack}
@@ -230,15 +184,14 @@ function EventHeader({
         accessibilityLabel="Go back"
         accessibilityHint="Returns to previous screen"
       >
-        <ArrowLeft size={24} color={colors.text} />
-      </Pressable>
+        <ArrowLeft size={responsive.iconSize.lg} color={colors.text} />
+      </AnimatedPressable>
 
-      <Pressable
+      <AnimatedPressable
         style={({ pressed }) => [
           styles.headerButton, 
           { 
-            backgroundColor: colors.card,
-            transform: [{ scale: pressed ? 0.95 : 1 }],
+            backgroundColor: pressed ? colors.surfacePressed : colors.surfaceElevated,
           }
         ]}
         onPress={onShare}
@@ -246,8 +199,8 @@ function EventHeader({
         accessibilityLabel="Share event"
         accessibilityHint="Opens share options for this event"
       >
-        <Share2 size={24} color={colors.text} />
-      </Pressable>
+        <Share2 size={responsive.iconSize.lg} color={colors.text} />
+      </AnimatedPressable>
     </View>
   );
 }
@@ -255,15 +208,16 @@ function EventHeader({
 // Event Image Component with modern loading
 function EventImage({ 
   event, 
-  colors 
+  colors,
+  responsive,
 }: { 
   event: Event; 
   colors: any;
+  responsive: any;
 }) {
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
-  const colorScheme = useColorScheme();
-  const CATEGORY_CONFIG = getCategoryConfig(colorScheme === 'dark' ? 'dark' : 'light');
+  const CATEGORY_CONFIG = getCategoryConfig(colors);
   const categoryConfig = CATEGORY_CONFIG[event.category] || CATEGORY_CONFIG.other;
 
   return (
@@ -322,7 +276,7 @@ function EventInfoCard({
   colors: any;
   badge?: React.ReactNode;
 }) {
-  const Component = onPress ? Pressable : View;
+  const Component = onPress ? AnimatedPressable : View;
 
   return (
     <Card style={styles.infoCard}>
@@ -334,7 +288,7 @@ function EventInfoCard({
         onPress={onPress}
         accessibilityRole={onPress ? "button" : undefined}
       >
-        <View style={[styles.infoIcon, { backgroundColor: colors.cardSecondary }]}>
+        <View style={[styles.infoIcon, { backgroundColor: colors.surfaceElevated }]}>
           {icon}
         </View>
         <View style={styles.infoContent}>
@@ -414,10 +368,11 @@ function ErrorScreen({
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
+  const { colors, responsive, cardShadow } = useThemeStyles();
   const { user } = useAuth();
 
+  const insets = useSafeAreaInsets();
+  
   const {
     event,
     registration,
@@ -603,7 +558,8 @@ export default function EventDetailScreen() {
         <EventHeader 
           onBack={() => router.back()} 
           onShare={() => {}} 
-          colors={colors} 
+          colors={colors}
+          responsive={responsive}
         />
         <ScrollView style={styles.scrollView}>
           {/* Image Skeleton */}
@@ -612,31 +568,31 @@ export default function EventDetailScreen() {
             style={{ width: '100%', height: 300, borderRadius: 0 }} 
           />
           
-          <View style={{ padding: Spacing.lg }}>
+          <View style={{ padding: responsive.spacing.lg }}>
             {/* Category Badge Skeleton */}
             <ShimmerSkeleton 
               colors={colors} 
-              style={{ width: 100, height: 28, borderRadius: 14, marginBottom: Spacing.md }} 
+              style={{ width: 100, height: 28, borderRadius: 14, marginBottom: responsive.spacing.md }} 
             />
             
             {/* Title Skeleton */}
             <ShimmerSkeleton 
               colors={colors} 
-              style={{ width: '90%', height: 32, borderRadius: 8, marginBottom: Spacing.sm }} 
+              style={{ width: '90%', height: 32, borderRadius: 8, marginBottom: responsive.spacing.sm }} 
             />
             <ShimmerSkeleton 
               colors={colors} 
-              style={{ width: '70%', height: 32, borderRadius: 8, marginBottom: Spacing.xxl }} 
+              style={{ width: '70%', height: 32, borderRadius: 8, marginBottom: responsive.spacing.xxl }} 
             />
             
             {/* Info Cards Grid */}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginBottom: Spacing.xxl }}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: responsive.spacing.md, marginBottom: responsive.spacing.xxl }}>
               {[...Array(4)].map((_, i) => (
                 <ShimmerSkeleton 
                   key={i}
                   colors={colors} 
                   style={{ 
-                    width: screenWidth > 600 ? '23%' : '48%', 
+                    width: responsive.isMobile ? '48%' : '23%', 
                     height: 100, 
                     borderRadius: 12 
                   }} 
@@ -647,7 +603,7 @@ export default function EventDetailScreen() {
             {/* Description Section */}
             <ShimmerSkeleton 
               colors={colors} 
-              style={{ width: 120, height: 24, borderRadius: 8, marginBottom: Spacing.md }} 
+              style={{ width: 120, height: 24, borderRadius: 8, marginBottom: responsive.spacing.md }} 
             />
             {[...Array(6)].map((_, i) => (
               <ShimmerSkeleton 
@@ -657,7 +613,7 @@ export default function EventDetailScreen() {
                   width: i === 5 ? '70%' : '100%', 
                   height: 16, 
                   borderRadius: 8, 
-                  marginBottom: Spacing.sm 
+                  marginBottom: responsive.spacing.sm 
                 }} 
               />
             ))}
@@ -675,7 +631,8 @@ export default function EventDetailScreen() {
         <EventHeader 
           onBack={() => router.back()} 
           onShare={() => {}} 
-          colors={colors} 
+          colors={colors}
+          responsive={responsive}
         />
         <ErrorBoundary>
           <ErrorScreen onRetry={refetch} colors={colors} />
@@ -690,10 +647,15 @@ export default function EventDetailScreen() {
 
   return (
     <ErrorBoundary>
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
 
-        <EventHeader onBack={() => router.back()} onShare={handleShare} colors={colors} />
+        <EventHeader 
+          onBack={() => router.back()} 
+          onShare={handleShare} 
+          colors={colors}
+          responsive={responsive}
+        />
 
         <ScrollView
           style={styles.scrollView}
@@ -709,7 +671,7 @@ export default function EventDetailScreen() {
           }
         >
           {/* Event Image */}
-          <EventImage event={event} colors={colors} />
+          <EventImage event={event} colors={colors} responsive={responsive} />
 
           {/* Content */}
           <View style={[styles.content, { backgroundColor: colors.background }]}>
@@ -858,25 +820,70 @@ export default function EventDetailScreen() {
             { 
               backgroundColor: colors.background,
               borderTopColor: colors.border,
+              paddingBottom: insets.bottom + responsive.spacing.md,
             }
           ]}>
-            <Button
-              variant={registration ? "outline" : "primary"}
-              size="lg"
-              loading={registering}
-              disabled={!registration && isSoldOut}
-              onPress={handleRegister}
-              style={styles.actionButton}
-              icon={registration ? 
-                <X size={20} color={colors.error} /> : 
-                event.isFree ? <Ticket size={20} color={colors.textOnPrimary} /> : <DollarSign size={20} color={colors.textOnPrimary} />
-              }
-            >
-              {registering ? 'Processing...' :
-               registration ? 'Cancel Registration' :
-               isSoldOut ? 'Sold Out' :
-               event.isFree ? 'Register for Free' : `Buy Tickets - ${formatCurrency(event.ticketPrice)}`}
-            </Button>
+            {registration ? (
+              <AnimatedPressable
+                onPress={handleRegister}
+                disabled={registering}
+                style={({ pressed }) => [
+                  styles.actionButton,
+                  { opacity: pressed ? 0.9 : 1 }
+                ]}
+              >
+                <LinearGradient
+                  colors={[colors.error, colors.errorDark]}
+                  style={[
+                    styles.gradientButton,
+                    { 
+                      height: responsive.buttonHeight,
+                      paddingHorizontal: responsive.spacing.xl,
+                      opacity: registering ? 0.7 : 1,
+                    }
+                  ]}
+                >
+                  <X size={20} color={colors.textOnPrimary} />
+                  <Text style={[styles.actionButtonText, { color: colors.textOnPrimary }]}>
+                    {registering ? 'Cancelling...' : 'Cancel Registration'}
+                  </Text>
+                </LinearGradient>
+              </AnimatedPressable>
+            ) : (
+              <AnimatedPressable
+                onPress={handleRegister}
+                disabled={registering || isSoldOut}
+                style={({ pressed }) => [
+                  styles.actionButton,
+                  { opacity: pressed ? 0.9 : 1 }
+                ]}
+              >
+                <LinearGradient
+                  colors={
+                    registering || isSoldOut
+                      ? [colors.textSecondary, colors.textSecondary]
+                      : [colors.primary, colors.primaryDark]
+                  }
+                  style={[
+                    styles.gradientButton,
+                    { 
+                      height: responsive.buttonHeight,
+                      paddingHorizontal: responsive.spacing.xl,
+                      opacity: registering || isSoldOut ? 0.7 : 1,
+                    }
+                  ]}
+                >
+                  {!isSoldOut && (
+                    event.isFree ? <Ticket size={20} color={colors.textOnPrimary} /> : <DollarSign size={20} color={colors.textOnPrimary} />
+                  )}
+                  <Text style={[styles.actionButtonText, { color: colors.textOnPrimary }]}>
+                    {registering ? 'Processing...' :
+                     isSoldOut ? 'Sold Out' :
+                     event.isFree ? 'Register for Free' : `Buy Tickets - ${formatCurrency(event.ticketPrice)}`}
+                  </Text>
+                </LinearGradient>
+              </AnimatedPressable>
+            )}
           </View>
         )}
       </SafeAreaView>
@@ -892,8 +899,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     position: 'relative',
     zIndex: 1000,
@@ -949,8 +956,8 @@ const styles = StyleSheet.create({
   },
   categoryBadge: {
     position: 'absolute',
-    top: Spacing.lg,
-    left: Spacing.lg,
+    top: 16,
+    left: 16,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -961,7 +968,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: Spacing.lg,
+    padding: 16,
     marginTop: -20,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
@@ -988,8 +995,8 @@ const styles = StyleSheet.create({
   infoCardContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: Spacing.lg,
-    gap: Spacing.lg,
+    padding: 16,
+    gap: 16,
   },
   infoIcon: {
     width: 48,
@@ -1004,7 +1011,7 @@ const styles = StyleSheet.create({
   infoTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    gap: 8,
   },
   infoTitle: {
     ...Typography.body1,
@@ -1015,7 +1022,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   todayBadge: {
-    paddingHorizontal: Spacing.sm,
+    paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 10,
   },
@@ -1025,14 +1032,14 @@ const styles = StyleSheet.create({
   },
   statsRow: {
     flexDirection: 'row',
-    gap: Spacing.md,
-    marginBottom: Spacing.xl,
+    gap: 12,
+    marginBottom: 20,
   },
   statCard: {
     flex: 1,
     alignItems: 'center',
-    padding: Spacing.lg,
-    gap: Spacing.xs,
+    padding: 16,
+    gap: 4,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -1053,21 +1060,21 @@ const styles = StyleSheet.create({
     ...Typography.caption,
   },
   statusBanner: {
-    marginBottom: Spacing.lg,
+    marginBottom: 16,
   },
   statusContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: Spacing.lg,
-    gap: Spacing.md,
+    padding: 16,
+    gap: 12,
   },
   statusText: {
     fontSize: 15,
     fontWeight: '600',
   },
   section: {
-    marginBottom: Spacing.xl,
-    padding: Spacing.lg,
+    marginBottom: 20,
+    padding: 16,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -1083,19 +1090,19 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    marginBottom: Spacing.md,
+    marginBottom: 12,
   },
   description: {
     ...Typography.body1,
   },
   contactActions: {
     flexDirection: 'row',
-    gap: Spacing.xl,
+    gap: 20,
   },
   contactButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs,
+    gap: 4,
   },
   contactButtonText: {
     fontSize: 14,
@@ -1109,7 +1116,8 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    padding: Spacing.lg,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
     ...Platform.select({
       ios: {
@@ -1128,12 +1136,26 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     width: '100%',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  gradientButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    gap: 10,
+  },
+  actionButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: Spacing.xxxl,
+    padding: 32,
   },
   errorTitle: {
     ...Typography.title3,
