@@ -57,6 +57,15 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
   const [imageLoading, setImageLoading] = useState(true);
   const { shareEventToFeed } = useFeed();
 
+  // Debug: Log image URL
+  React.useEffect(() => {
+    if (event.imageUrl) {
+      console.log('[EventCard] Event:', event.title, 'Image URL:', event.imageUrl);
+    } else {
+      console.log('[EventCard] Event:', event.title, 'No image URL');
+    }
+  }, [event.imageUrl, event.title]);
+
   const categoryConfig = EVENT_CATEGORY_CONFIG[event.category] || EVENT_CATEGORY_CONFIG.other;
   const daysUntil = getDaysUntilEvent(event.eventDate);
   const isToday = isEventToday(event.eventDate);
@@ -109,9 +118,16 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
               source={{ uri: event.imageUrl }}
               style={styles.image}
               resizeMode="cover"
-              onLoadStart={() => setImageLoading(true)}
-              onLoadEnd={() => setImageLoading(false)}
-              onError={() => {
+              onLoadStart={() => {
+                console.log('[EventCard] Image load started:', event.imageUrl);
+                setImageLoading(true);
+              }}
+              onLoadEnd={() => {
+                console.log('[EventCard] Image load ended successfully:', event.imageUrl);
+                setImageLoading(false);
+              }}
+              onError={(error) => {
+                console.error('[EventCard] Image load error:', event.imageUrl, error.nativeEvent);
                 setImageError(true);
                 setImageLoading(false);
               }}

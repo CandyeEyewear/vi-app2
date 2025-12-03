@@ -255,6 +255,15 @@ function EventImage({
   const [imageError, setImageError] = useState(false);
   const categoryConfig = EVENT_CATEGORY_CONFIG[event.category] || EVENT_CATEGORY_CONFIG.other;
 
+  // Debug: Log image URL
+  React.useEffect(() => {
+    if (event.imageUrl) {
+      console.log('[EventImage] Event:', event.title, 'Image URL:', event.imageUrl);
+    } else {
+      console.log('[EventImage] Event:', event.title, 'No image URL');
+    }
+  }, [event.imageUrl, event.title]);
+
   return (
     <View style={styles.imageContainer}>
       {event.imageUrl && !imageError ? (
@@ -262,9 +271,16 @@ function EventImage({
           <Image
             source={{ uri: event.imageUrl }}
             style={styles.eventImage}
-            onLoadStart={() => setImageLoading(true)}
-            onLoadEnd={() => setImageLoading(false)}
-            onError={() => {
+            onLoadStart={() => {
+              console.log('[EventImage] Image load started:', event.imageUrl);
+              setImageLoading(true);
+            }}
+            onLoadEnd={() => {
+              console.log('[EventImage] Image load ended successfully:', event.imageUrl);
+              setImageLoading(false);
+            }}
+            onError={(error) => {
+              console.error('[EventImage] Image load error:', event.imageUrl, error.nativeEvent);
               setImageError(true);
               setImageLoading(false);
             }}
