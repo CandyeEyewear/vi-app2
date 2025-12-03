@@ -64,8 +64,6 @@ import ErrorBoundary from '../../components/ErrorBoundary';
 import Button from '../../components/Button';
 import { ShimmerSkeleton } from '../../components/ShimmerSkeleton';
 
-// Screen width constant
-const screenWidth = Dimensions.get('window').width;
 const AnimatedExpoImage = Animated.createAnimatedComponent(Image);
 
 const getPremiumShadow = (colors: any) =>
