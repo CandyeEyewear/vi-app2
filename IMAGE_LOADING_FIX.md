@@ -1,7 +1,9 @@
 # Event Image Loading Fix - Summary
 
 ## Problem
-Images were not loading properly in events (and potentially causes as well).
+Images were not loading properly in events on **mobile web** browsers (and potentially causes as well).
+
+> **Note:** This is specifically for the mobile web version of the app. See `MOBILE_WEB_IMAGE_FIX.md` for mobile web-specific troubleshooting.
 
 ## Root Cause Analysis
 The issue was related to how image URLs were being stored and retrieved from the Supabase storage bucket. There were several potential problems:
@@ -168,14 +170,16 @@ https://{supabase-project}.supabase.co/storage/v1/object/public/{bucket}/{path}
 
 ## Files Modified
 
-1. ✅ `utils/storageHelpers.ts` (new)
-2. ✅ `scripts/verify-storage.ts` (new)
-3. ✅ `services/eventsService.ts`
-4. ✅ `services/causesService.ts`
-5. ✅ `components/cards/EventCard.tsx`
-6. ✅ `app/events/[id].tsx`
-7. ✅ `app/(admin)/events/create.tsx`
-8. ✅ `app/(admin)/events/edit/[id].tsx`
+1. ✅ `utils/storageHelpers.ts` (new - storage URL utilities)
+2. ✅ `utils/webImageDebug.ts` (new - mobile web debugging tools)
+3. ✅ `scripts/verify-storage.ts` (new - verification script)
+4. ✅ `services/eventsService.ts` (URL formatting)
+5. ✅ `services/causesService.ts` (URL formatting)
+6. ✅ `components/cards/EventCard.tsx` (logging & debugging)
+7. ✅ `app/events/[id].tsx` (logging & debugging)
+8. ✅ `app/(admin)/events/create.tsx` (upload logging)
+9. ✅ `app/(admin)/events/edit/[id].tsx` (upload logging)
+10. ✅ `MOBILE_WEB_IMAGE_FIX.md` (new - mobile web guide)
 
 ## Testing Checklist
 

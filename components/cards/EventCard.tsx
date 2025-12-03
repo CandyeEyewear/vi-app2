@@ -38,6 +38,7 @@ import {
 import { useFeed } from '../../contexts/FeedContext';
 import ShareEventModal from '../ShareEventModal';
 import { showToast } from '../../utils/toast';
+import { logImageDebugInfo } from '../../utils/webImageDebug';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
@@ -60,7 +61,7 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
   // Debug: Log image URL
   React.useEffect(() => {
     if (event.imageUrl) {
-      console.log('[EventCard] Event:', event.title, 'Image URL:', event.imageUrl);
+      logImageDebugInfo(event.imageUrl, `EventCard: ${event.title}`);
     } else {
       console.log('[EventCard] Event:', event.title, 'No image URL');
     }
@@ -127,7 +128,10 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
                 setImageLoading(false);
               }}
               onError={(error) => {
-                console.error('[EventCard] Image load error:', event.imageUrl, error.nativeEvent);
+                console.error('[EventCard] Image load error for:', event.title);
+                console.error('  URL:', event.imageUrl);
+                console.error('  Error:', error.nativeEvent);
+                console.error('  Tip: Check if image URL is accessible in browser');
                 setImageError(true);
                 setImageLoading(false);
               }}

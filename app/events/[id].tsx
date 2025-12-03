@@ -62,6 +62,7 @@ import {
 } from '../../services/eventsService';
 import { useAuth } from '../../contexts/AuthContext';
 import { showToast } from '../../utils/toast';
+import { logImageDebugInfo } from '../../utils/webImageDebug';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import Card from '../../components/Card';
 import Button from '../../components/Button';
@@ -258,7 +259,7 @@ function EventImage({
   // Debug: Log image URL
   React.useEffect(() => {
     if (event.imageUrl) {
-      console.log('[EventImage] Event:', event.title, 'Image URL:', event.imageUrl);
+      logImageDebugInfo(event.imageUrl, `EventImage: ${event.title}`);
     } else {
       console.log('[EventImage] Event:', event.title, 'No image URL');
     }
@@ -280,7 +281,10 @@ function EventImage({
               setImageLoading(false);
             }}
             onError={(error) => {
-              console.error('[EventImage] Image load error:', event.imageUrl, error.nativeEvent);
+              console.error('[EventImage] Image load error for:', event.title);
+              console.error('  URL:', event.imageUrl);
+              console.error('  Error:', error.nativeEvent);
+              console.error('  Tip: Open URL in new tab to test if accessible');
               setImageError(true);
               setImageLoading(false);
             }}
