@@ -42,6 +42,7 @@ import OnlineStatusDot from '../../components/OnlineStatusDot';
 import SwipeableMessage from '../../components/SwipeableMessage';
 import { UserAvatar, UserNameWithBadge } from '../../components/index';
 import { isUserOnline } from '../../utils/userStatus';
+import { isWeb } from '../../utils/platform';
 
 export default function ConversationScreen() {
   const router = useRouter();
@@ -70,7 +71,6 @@ export default function ConversationScreen() {
   const flatListRef = useRef<FlatList<Message>>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const presenceChannelRef = useRef<any>(null);
-  const keyboardAnim = useRef(new Animated.Value(0)).current;
 
   const conversation = conversations.find((c) => c.id === id);
   const otherUser = conversation?.participantDetails.find((p) => p.id !== user?.id);
@@ -131,20 +131,13 @@ export default function ConversationScreen() {
     return { text: messageText, attachments, replyTo };
   };
 
-  // Smooth keyboard animations for both iOS and Android
+  // Keyboard event listeners - for scrolling messages list
   useEffect(() => {
+    // Only track keyboard for scrolling, not for positioning (KeyboardAvoidingView handles that)
     const showSubscription = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
       (e) => {
-        const height = e.endCoordinates.height;
-        setKeyboardHeight(height);
-        
-        // Ultra smooth animation - no gaps
-        Animated.timing(keyboardAnim, {
-          toValue: height,
-          duration: Platform.OS === 'ios' ? 250 : 150,
-          useNativeDriver: false,
-        }).start();
+        setKeyboardHeight(e.endCoordinates.height);
         
         // Scroll to bottom when keyboard appears
         setTimeout(() => {
@@ -157,13 +150,6 @@ export default function ConversationScreen() {
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
       () => {
         setKeyboardHeight(0);
-        
-        // Ultra smooth animation - smooth transition back
-        Animated.timing(keyboardAnim, {
-          toValue: 0,
-          duration: Platform.OS === 'ios' ? 250 : 150,
-          useNativeDriver: false,
-        }).start();
       }
     );
 
@@ -171,7 +157,7 @@ export default function ConversationScreen() {
       showSubscription.remove();
       hideSubscription.remove();
     };
-  }, [keyboardAnim]);
+  }, []);
 
   useEffect(() => {
     if (!id || !user) return;
@@ -966,16 +952,13 @@ export default function ConversationScreen() {
     );
   }
 
-  // Calculate header height for keyboard offset
-  const headerHeight = insets.top + 60; // insets.top + header content height
-
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined}
         keyboardVerticalOffset={0}
-        enabled={Platform.OS === 'ios'}
+        enabled={!isWeb}
       >
         {/* Header */}
         <View style={[styles.header, { paddingTop: 12 }]}>
@@ -1035,13 +1018,21 @@ export default function ConversationScreen() {
             renderItem={renderMessage}
             contentContainerStyle={[
               styles.messagesList,
-              { paddingBottom: 16 } // Fixed padding, keyboard handled by input container
+              { 
+                paddingBottom: 16,
+                // Ensure content doesn't go behind elements on any screen
+                flexGrow: 1,
+              }
             ]}
             inverted={true}
             onEndReached={handleLoadMore}
             onEndReachedThreshold={0.5}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
+            maintainVisibleContentPosition={{
+              minIndexForVisible: 0,
+              autoscrollToTopThreshold: 10,
+            }}
             ListFooterComponent={
               loadingMore ? (
                 <View style={styles.loadingMoreContainer}>
@@ -1091,16 +1082,12 @@ export default function ConversationScreen() {
         </View>
       )}
 
-      {/* Input Container - WhatsApp Style with ultra smooth keyboard transition */}
-      <Animated.View
+      {/* Input Container - Responsive keyboard positioning */}
+      <View
         style={[
           styles.inputContainer,
           {
-            paddingBottom: keyboardAnim.interpolate({
-              inputRange: [0, 1000],
-              outputRange: [insets.bottom, 0],
-              extrapolate: 'clamp',
-            }),
+            paddingBottom: isWeb ? 8 : Math.max(insets.bottom, 8),
           },
         ]}
       >
@@ -1159,7 +1146,7 @@ export default function ConversationScreen() {
             </TouchableOpacity>
           )}
         </View>
-      </Animated.View>
+      </View>
 
       {/* Image Preview Modal */}
       <Modal

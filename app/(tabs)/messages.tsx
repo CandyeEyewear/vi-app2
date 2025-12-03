@@ -390,6 +390,7 @@ export default function MessagesScreen() {
               contentContainerStyle={[
                 styles.listContent,
                 filteredConversations.length === 0 && styles.emptyListContent,
+                { paddingBottom: Math.max(insets.bottom + 16, 32) },
               ]}
               refreshControl={
                 <RefreshControl
