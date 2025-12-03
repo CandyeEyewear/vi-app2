@@ -36,7 +36,8 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
   const colors = Colors[colorScheme];
   const router = useRouter();
   const [imageError, setImageError] = useState(false);
-  const [imageLoading, setImageLoading] = useState(true);
+  const [showLoader, setShowLoader] = useState(true);
+  const imageLoadingRef = React.useRef(true);
 
   const categoryConfig = EVENT_CATEGORY_CONFIG[event.category] || EVENT_CATEGORY_CONFIG.other;
   const daysUntil = event.eventDate ? getDaysUntilEvent(event.eventDate) : null;
@@ -44,14 +45,34 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
   const spotsLeft = event.spotsRemaining ?? event.capacity;
   const hasLimitedSpots = spotsLeft !== undefined && spotsLeft <= 10 && spotsLeft > 0;
 
+  // Memoize image source to prevent recreation
+  const imageSource = React.useMemo(() => {
+    return event.imageUrl ? { uri: event.imageUrl } : null;
+  }, [event.imageUrl]);
+
   const handlePress = () => {
     router.push(`/events/${event.id}` as any);
   };
 
+  // Memoize callbacks to prevent recreation
+  const handleLoadStart = React.useCallback(() => {
+    imageLoadingRef.current = true;
+  }, []);
+
+  const handleLoadEnd = React.useCallback(() => {
+    imageLoadingRef.current = false;
+    setShowLoader(false);
+  }, []);
+
+  const handleImageError = React.useCallback(() => {
+    setImageError(true);
+    setShowLoader(false);
+  }, []);
+
   // Cleaner image rendering logic
   const renderEventImage = () => {
     // No image URL provided
-    if (!event.imageUrl) {
+    if (!imageSource) {
       return null;
     }
 
@@ -68,17 +89,14 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
     return (
       <View style={styles.imageContainer}>
         <Image 
-          source={{ uri: event.imageUrl }} 
+          source={imageSource}
           style={styles.image}
           resizeMode="cover"
-          onLoadStart={() => setImageLoading(true)}
-          onLoadEnd={() => setImageLoading(false)}
-          onError={() => {
-            setImageError(true);
-            setImageLoading(false);
-          }}
+          onLoadStart={handleLoadStart}
+          onLoadEnd={handleLoadEnd}
+          onError={handleImageError}
         />
-        {imageLoading && (
+        {showLoader && (
           <View style={[styles.imageLoadingOverlay, { backgroundColor: colors.imageOverlayLight }]}>
             <ActivityIndicator size="small" color={colors.primary} />
           </View>

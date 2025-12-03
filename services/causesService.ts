@@ -15,6 +15,7 @@ import {
   DonorBadge,
   ApiResponse,
 } from '../types';
+import { formatStorageUrl } from '../utils/storageHelpers';
 
 // ==================== HELPER FUNCTIONS ====================
 
@@ -27,7 +28,7 @@ function transformCause(row: any): Cause {
     title: row.title,
     description: row.description,
     category: row.category,
-    imageUrl: row.image_url,
+    imageUrl: formatStorageUrl(row.image_url),
     goalAmount: parseFloat(row.goal_amount) || 0,
     amountRaised: parseFloat(row.amount_raised) || 0,
     currency: row.currency || 'JMD',

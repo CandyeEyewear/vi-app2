@@ -13,6 +13,7 @@ import {
   EventRegistrationStatus,
   ApiResponse,
 } from '../types';
+import { formatStorageUrl } from '../utils/storageHelpers';
 
 // ==================== HELPER FUNCTIONS ====================
 
@@ -20,12 +21,22 @@ import {
  * Transform database row (snake_case) to Event object (camelCase)
  */
 function transformEvent(row: any): Event {
+  // Ensure proper image URL format
+  const imageUrl = formatStorageUrl(row.image_url);
+  
+  // Log image URL for debugging
+  if (row.image_url) {
+    console.log('[transformEvent] Event:', row.title);
+    console.log('  - Raw image_url:', row.image_url);
+    console.log('  - Processed imageUrl:', imageUrl);
+  }
+  
   return {
     id: row.id,
     title: row.title,
     description: row.description,
     category: row.category,
-    imageUrl: row.image_url,
+    imageUrl: imageUrl,
     location: row.location,
     locationAddress: row.location_address,
     latitude: row.latitude,

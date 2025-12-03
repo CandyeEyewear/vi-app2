@@ -315,6 +315,10 @@ export default function EditEventScreen() {
         .from('post-images')
         .getPublicUrl(data.path);
 
+      console.log('[EditEvent] Image uploaded successfully:');
+      console.log('  - Path:', data.path);
+      console.log('  - Public URL:', urlData.publicUrl);
+
       return urlData.publicUrl;
     } catch (error) {
       console.error('Error uploading image:', error);
