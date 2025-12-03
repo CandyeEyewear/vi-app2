@@ -45,6 +45,7 @@ import {
   AlertCircle,
 } from 'lucide-react-native';
 import { Colors } from '../../constants/colors';
+import { EVENT_CATEGORY_CONFIG } from '../../constants/eventCategories';
 import { Event, EventCategory, EventRegistration } from '../../types';
 import {
   getEventById,
@@ -120,19 +121,7 @@ const Spacing = {
   xxxl: 32,
 };
 
-// Category configuration with theme colors
-const getCategoryConfig = (colorScheme: 'light' | 'dark'): Record<EventCategory, { label: string; color: string; emoji: string }> => {
-  const colors = Colors[colorScheme];
-  return {
-    meetup: { label: 'Meetup', color: colors.primary, emoji: '🤝' },
-    gala: { label: 'Gala', color: colors.community, emoji: '✨' },
-    fundraiser: { label: 'Fundraiser', color: colors.elderly, emoji: '💝' },
-    workshop: { label: 'Workshop', color: colors.warning, emoji: '🛠️' },
-    celebration: { label: 'Celebration', color: colors.success, emoji: '🎉' },
-    networking: { label: 'Networking', color: colors.youth, emoji: '🔗' },
-    other: { label: 'Event', color: colors.textSecondary, emoji: '📅' },
-  };
-};
+// Note: Category configuration now imported from shared constants
 
 // Custom Hook for Event Data
 function useEventDetails(eventId: string | undefined) {
@@ -264,9 +253,7 @@ function EventImage({
 }) {
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
-  const colorScheme = useColorScheme();
-  const CATEGORY_CONFIG = getCategoryConfig(colorScheme === 'dark' ? 'dark' : 'light');
-  const categoryConfig = CATEGORY_CONFIG[event.category];
+  const categoryConfig = EVENT_CATEGORY_CONFIG[event.category] || EVENT_CATEGORY_CONFIG.other;
 
   return (
     <View style={styles.imageContainer}>
@@ -304,6 +291,14 @@ function EventImage({
           {categoryConfig.emoji} {categoryConfig.label}
         </Text>
       </View>
+      
+      {/* Featured Badge */}
+      {event.isFeatured && (
+        <View style={[styles.featuredBadge, { backgroundColor: colors.eventFeaturedGold }]}>
+          <Star size={14} color="#000" fill="#000" />
+          <Text style={[styles.featuredText, { color: '#000' }]}>Featured</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -814,7 +809,7 @@ export default function EventDetailScreen() {
               title={formatEventDate(event.eventDate)}
               subtitle={`${formatEventTime(event.startTime)}${event.endTime ? ` - ${formatEventTime(event.endTime)}` : ''}`}
               badge={eventStatus === 'today' && (
-                <View style={[styles.todayBadge, { backgroundColor: colors.accent }]}>
+                <View style={[styles.todayBadge, { backgroundColor: colors.eventTodayRed }]}>
                   <Text style={[styles.todayBadgeText, { color: colors.textOnPrimary }]}>TODAY</Text>
                 </View>
               )}
@@ -1015,7 +1010,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)', // Keep visible for detail screen
   },
   placeholderImage: {
     width: '100%',
@@ -1100,6 +1095,32 @@ const styles = StyleSheet.create({
   },
   todayBadgeText: {
     fontSize: 10,
+    fontWeight: '700',
+  },
+  featuredBadge: {
+    position: 'absolute',
+    top: Spacing.lg,
+    right: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  featuredText: {
+    fontSize: 12,
     fontWeight: '700',
   },
   statsRow: {

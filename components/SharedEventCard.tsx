@@ -16,6 +16,7 @@ import {
 import { Calendar, Clock, MapPin, Users, Video, Ticket, Star, ExternalLink } from 'lucide-react-native';
 import { Event, EventCategory } from '../types';
 import { Colors } from '../constants/colors';
+import { EVENT_CATEGORY_CONFIG } from '../constants/eventCategories';
 import { useRouter } from 'expo-router';
 import {
   formatEventDate,
@@ -30,16 +31,6 @@ interface SharedEventCardProps {
   event: Event;
 }
 
-const CATEGORY_CONFIG: Record<EventCategory, { label: string; color: string; emoji: string }> = {
-  meetup: { label: 'Meetup', color: '#2196F3', emoji: '🤝' },
-  gala: { label: 'Gala', color: '#9C27B0', emoji: '✨' },
-  fundraiser: { label: 'Fundraiser', color: '#E91E63', emoji: '💝' },
-  workshop: { label: 'Workshop', color: '#FF9800', emoji: '🛠️' },
-  celebration: { label: 'Celebration', color: '#4CAF50', emoji: '🎉' },
-  networking: { label: 'Networking', color: '#00BCD4', emoji: '🔗' },
-  other: { label: 'Event', color: '#757575', emoji: '📅' },
-};
-
 export default function SharedEventCard({ event }: SharedEventCardProps) {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
@@ -47,7 +38,7 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
 
-  const categoryConfig = CATEGORY_CONFIG[event.category] || CATEGORY_CONFIG.other;
+  const categoryConfig = EVENT_CATEGORY_CONFIG[event.category] || EVENT_CATEGORY_CONFIG.other;
   const daysUntil = event.eventDate ? getDaysUntilEvent(event.eventDate) : null;
   const isToday = event.eventDate ? isEventToday(event.eventDate) : false;
   const spotsLeft = event.spotsRemaining ?? event.capacity;
@@ -57,34 +48,51 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
     router.push(`/events/${event.id}` as any);
   };
 
+  // Cleaner image rendering logic
+  const renderEventImage = () => {
+    // No image URL provided
+    if (!event.imageUrl) {
+      return null;
+    }
+
+    // Image failed to load - show placeholder
+    if (imageError) {
+      return (
+        <View style={[styles.imagePlaceholder, { backgroundColor: categoryConfig.color }]}>
+          <Text style={styles.placeholderEmoji}>{categoryConfig.emoji}</Text>
+        </View>
+      );
+    }
+
+    // Show image with loading state
+    return (
+      <View style={styles.imageContainer}>
+        <Image 
+          source={{ uri: event.imageUrl }} 
+          style={styles.image}
+          resizeMode="cover"
+          onLoadStart={() => setImageLoading(true)}
+          onLoadEnd={() => setImageLoading(false)}
+          onError={() => {
+            setImageError(true);
+            setImageLoading(false);
+          }}
+        />
+        {imageLoading && (
+          <View style={[styles.imageLoadingOverlay, { backgroundColor: colors.imageOverlayLight }]}>
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        )}
+      </View>
+    );
+  };
+
   return (
     <AnimatedPressable
       style={[styles.container, { backgroundColor: colors.card, borderColor: colors.border }]}
       onPress={handlePress}
     >
-      {event.imageUrl && !imageError ? (
-        <View style={styles.imageContainer}>
-          <Image 
-            source={{ uri: event.imageUrl }} 
-            style={styles.image}
-            onLoadStart={() => setImageLoading(true)}
-            onLoadEnd={() => setImageLoading(false)}
-            onError={() => {
-              setImageError(true);
-              setImageLoading(false);
-            }}
-          />
-          {imageLoading && (
-            <View style={styles.imageLoadingOverlay}>
-              <ActivityIndicator size="small" color={colors.primary} />
-            </View>
-          )}
-        </View>
-      ) : event.imageUrl ? (
-        <View style={[styles.imagePlaceholder, { backgroundColor: categoryConfig.color }]}>
-          <Text style={styles.placeholderEmoji}>{categoryConfig.emoji}</Text>
-        </View>
-      ) : null}
+      {renderEventImage()}
       
       <View style={styles.content}>
         <View style={styles.header}>
@@ -94,8 +102,8 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
             </Text>
           </View>
           {event.isFeatured && (
-            <View style={[styles.featuredBadge, { backgroundColor: '#FFD700' }]}>
-              <Star size={12} color="#000" />
+            <View style={[styles.featuredBadge, { backgroundColor: colors.eventFeaturedGold }]}>
+              <Star size={12} color="#000" fill="#000" />
               <Text style={styles.featuredBadgeText}>Featured</Text>
             </View>
           )}
@@ -112,7 +120,7 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
             {event.eventDate ? formatEventDate(event.eventDate) : 'Date TBA'}
           </Text>
           {isToday && (
-            <View style={styles.todayBadge}>
+            <View style={[styles.todayBadge, { backgroundColor: colors.eventTodayRed }]}>
               <Text style={styles.todayBadgeText}>TODAY</Text>
             </View>
           )}
@@ -130,8 +138,8 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
         <View style={styles.infoRow}>
           {event.isVirtual ? (
             <>
-              <Video size={14} color="#38B6FF" />
-              <Text style={[styles.infoText, { color: '#38B6FF' }]}>
+              <Video size={14} color={colors.primary} />
+              <Text style={[styles.infoText, { color: colors.primary }]}>
                 Virtual Event
               </Text>
             </>
@@ -148,7 +156,7 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
         <View style={styles.footer}>
           <View style={styles.statsRow}>
             {event.isFree ? (
-              <Text style={[styles.freeText, { color: '#4CAF50' }]}>FREE</Text>
+              <Text style={[styles.freeText, { color: colors.success }]}>FREE</Text>
             ) : (
               <Text style={[styles.priceText, { color: colors.text }]}>
                 {formatCurrency(event.ticketPrice || 0)}
@@ -156,11 +164,11 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
             )}
             {event.capacity && (
               <View style={styles.spotsContainer}>
-                <Users size={14} color={hasLimitedSpots ? '#FF9800' : colors.textSecondary} />
+                <Users size={14} color={hasLimitedSpots ? colors.warning : colors.textSecondary} />
                 <Text
                   style={[
                     styles.spotsText,
-                    { color: hasLimitedSpots ? '#FF9800' : colors.textSecondary },
+                    { color: hasLimitedSpots ? colors.warning : colors.textSecondary },
                   ]}
                 >
                   {spotsLeft === 0
@@ -273,7 +281,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   todayBadge: {
-    backgroundColor: '#FF5722',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 10,

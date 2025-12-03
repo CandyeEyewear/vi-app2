@@ -281,6 +281,16 @@ export const Colors = {
     verified: '#3B82F6',
     star: '#FBBF24',
     heart: '#EF4444',
+    
+    // Event-specific colors
+    eventFeaturedGold: '#FFD700',
+    eventTodayRed: '#FF5722',
+    eventSoldOutGray: '#9CA3AF',
+    
+    // Image overlays (theme-aware)
+    imageOverlayLight: 'rgba(255, 255, 255, 0.8)',
+    imageOverlayDark: 'rgba(0, 0, 0, 0.5)',
+    imageOverlayHeavy: 'rgba(0, 0, 0, 0.7)',
   },
 
   // -------------------------------------------------------------------------
@@ -444,6 +454,16 @@ export const Colors = {
     verified: '#60A5FA',
     star: '#FBBF24',
     heart: '#F87171',
+    
+    // Event-specific colors (dark mode)
+    eventFeaturedGold: '#FFD700',
+    eventTodayRed: '#FF5722',
+    eventSoldOutGray: '#64748B',
+    
+    // Image overlays (dark mode)
+    imageOverlayLight: 'rgba(255, 255, 255, 0.1)',
+    imageOverlayDark: 'rgba(0, 0, 0, 0.7)',
+    imageOverlayHeavy: 'rgba(0, 0, 0, 0.85)',
   },
 
   // -------------------------------------------------------------------------

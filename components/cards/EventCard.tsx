@@ -27,6 +27,7 @@ import {
 } from 'lucide-react-native';
 import { Event, EventCategory } from '../../types';
 import { Colors } from '../../constants/colors';
+import { EVENT_CATEGORY_CONFIG } from '../../constants/eventCategories';
 import {
   formatEventDate,
   formatEventTime,
@@ -47,17 +48,6 @@ interface EventCardProps {
   onRegisterPress?: () => void;
 }
 
-// Category colors and labels
-const CATEGORY_CONFIG: Record<EventCategory, { label: string; color: string; emoji: string }> = {
-  meetup: { label: 'Meetup', color: '#2196F3', emoji: '🤝' },
-  gala: { label: 'Gala', color: '#9C27B0', emoji: '✨' },
-  fundraiser: { label: 'Fundraiser', color: '#E91E63', emoji: '💝' },
-  workshop: { label: 'Workshop', color: '#FF9800', emoji: '🛠️' },
-  celebration: { label: 'Celebration', color: '#4CAF50', emoji: '🎉' },
-  networking: { label: 'Networking', color: '#00BCD4', emoji: '🔗' },
-  other: { label: 'Event', color: '#757575', emoji: '📅' },
-};
-
 export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
@@ -67,7 +57,7 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
   const [imageLoading, setImageLoading] = useState(true);
   const { shareEventToFeed } = useFeed();
 
-  const categoryConfig = CATEGORY_CONFIG[event.category] || CATEGORY_CONFIG.other;
+  const categoryConfig = EVENT_CATEGORY_CONFIG[event.category] || EVENT_CATEGORY_CONFIG.other;
   const daysUntil = getDaysUntilEvent(event.eventDate);
   const isToday = isEventToday(event.eventDate);
   const spotsLeft = event.spotsRemaining ?? event.capacity;
@@ -159,8 +149,8 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
 
         {/* Featured Badge */}
         {event.isFeatured && (
-          <View style={[styles.featuredBadge, { backgroundColor: '#FFD700' }]}>
-            <Star size={12} color="#000" />
+          <View style={[styles.featuredBadge, { backgroundColor: colors.eventFeaturedGold }]}>
+            <Star size={12} color="#000" fill="#000" />
             <Text style={styles.featuredBadgeText}>Featured</Text>
           </View>
         )}
@@ -190,7 +180,7 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
             {formatEventDate(event.eventDate)}
           </Text>
           {isToday && (
-            <View style={styles.todayBadge}>
+            <View style={[styles.todayBadge, { backgroundColor: colors.eventTodayRed }]}>
               <Text style={styles.todayBadgeText}>TODAY</Text>
             </View>
           )}
@@ -228,7 +218,7 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
           {/* Price */}
           <View style={styles.priceContainer}>
             {event.isFree ? (
-              <Text style={[styles.freeText, { color: '#4CAF50' }]}>FREE</Text>
+              <Text style={[styles.freeText, { color: colors.success }]}>FREE</Text>
             ) : (
               <Text style={[styles.priceText, { color: colors.text }]}>
                 {formatCurrency(event.ticketPrice || 0)}
@@ -239,11 +229,11 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
           {/* Spots Remaining */}
           {event.capacity && (
             <View style={styles.spotsContainer}>
-              <Users size={14} color={hasLimitedSpots ? '#FF9800' : colors.textSecondary} />
+              <Users size={14} color={hasLimitedSpots ? colors.warning : colors.textSecondary} />
               <Text
                 style={[
                   styles.spotsText,
-                  { color: hasLimitedSpots ? '#FF9800' : colors.textSecondary },
+                  { color: hasLimitedSpots ? colors.warning : colors.textSecondary },
                 ]}
               >
                 {spotsLeft === 0
@@ -324,7 +314,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    backgroundColor: 'rgba(0, 0, 0, 0.1)', // Keep subtle for cards
   },
   imagePlaceholder: {
     width: '100%',
@@ -422,7 +412,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   todayBadge: {
-    backgroundColor: '#FF5722',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 10,
