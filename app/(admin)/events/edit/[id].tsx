@@ -73,13 +73,13 @@ const CATEGORY_OPTIONS: { value: EventCategory; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
-// Status options
-const STATUS_OPTIONS: { value: EventStatus; label: string; color: string }[] = [
-  { value: 'draft', label: 'Draft', color: '#757575' },
-  { value: 'upcoming', label: 'Upcoming', color: '#2196F3' },
-  { value: 'ongoing', label: 'Ongoing', color: '#4CAF50' },
-  { value: 'completed', label: 'Completed', color: '#9E9E9E' },
-  { value: 'cancelled', label: 'Cancelled', color: '#F44336' },
+// Status options - colors will be retrieved from theme
+const getStatusOptions = (colors: any): { value: EventStatus; label: string; color: string }[] => [
+  { value: 'draft', label: 'Draft', color: colors.textSecondary },
+  { value: 'upcoming', label: 'Upcoming', color: colors.primary },
+  { value: 'ongoing', label: 'Ongoing', color: colors.success },
+  { value: 'completed', label: 'Completed', color: colors.textTertiary },
+  { value: 'cancelled', label: 'Cancelled', color: colors.error },
 ];
 
 export default function EditEventScreen() {
@@ -471,6 +471,7 @@ export default function EditEventScreen() {
     setAlertVisible(true);
   }, [id, router]);
 
+  const STATUS_OPTIONS = getStatusOptions(colors);
   const selectedCategory = CATEGORY_OPTIONS.find(c => c.value === category);
   const selectedStatus = STATUS_OPTIONS.find(s => s.value === status);
 
@@ -487,7 +488,7 @@ export default function EditEventScreen() {
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#38B6FF" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       </View>
     );
@@ -504,7 +505,7 @@ export default function EditEventScreen() {
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Edit Event</Text>
         <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
-          <Trash2 size={22} color="#F44336" />
+          <Trash2 size={22} color={colors.error} />
         </TouchableOpacity>
       </View>
 
@@ -554,7 +555,7 @@ export default function EditEventScreen() {
                           {option.label}
                         </Text>
                       </View>
-                      {status === option.value && <Check size={18} color="#38B6FF" />}
+                      {status === option.value && <Check size={18} color={colors.primary} />}
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -565,9 +566,9 @@ export default function EditEventScreen() {
             <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.toggleInfo}>
                 {visibility === 'public' ? (
-                  <Globe size={20} color="#4CAF50" />
+                  <Globe size={20} color={colors.success} />
                 ) : (
-                  <Lock size={20} color="#FF9800" />
+                  <Lock size={20} color={colors.warning} />
                 )}
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.toggleLabel, { color: colors.text }]}>
@@ -583,15 +584,15 @@ export default function EditEventScreen() {
               <Switch
                 value={visibility === 'members_only'}
                 onValueChange={(value) => setVisibility(value ? 'members_only' : 'public')}
-                trackColor={{ false: colors.border, true: '#FF9800' }}
-                thumbColor="#FFFFFF"
+                trackColor={{ false: colors.border, true: colors.warning }}
+                thumbColor={colors.textOnPrimary}
               />
             </View>
 
             {/* Featured Toggle */}
             <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.toggleInfo}>
-                <Star size={20} color={isFeatured ? '#FFD700' : colors.textSecondary} fill={isFeatured ? '#FFD700' : 'none'} />
+                <Star size={20} color={isFeatured ? colors.eventFeaturedGold : colors.textSecondary} fill={isFeatured ? colors.eventFeaturedGold : 'none'} />
                 <View>
                   <Text style={[styles.toggleLabel, { color: colors.text }]}>Featured Event</Text>
                   <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
@@ -602,8 +603,8 @@ export default function EditEventScreen() {
               <Switch
                 value={isFeatured}
                 onValueChange={setIsFeatured}
-                trackColor={{ false: colors.border, true: '#FFD700' }}
-                thumbColor="#FFFFFF"
+                trackColor={{ false: colors.border, true: colors.eventFeaturedGold }}
+                thumbColor={colors.textOnPrimary}
               />
             </View>
           </View>
@@ -655,7 +656,7 @@ export default function EditEventScreen() {
                       <Text style={[styles.pickerOptionText, { color: colors.text }]}>
                         {option.label}
                       </Text>
-                      {category === option.value && <Check size={18} color="#38B6FF" />}
+                      {category === option.value && <Check size={18} color={colors.primary} />}
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -693,11 +694,11 @@ export default function EditEventScreen() {
                   disabled={uploadingImage}
                 >
                   {uploadingImage ? (
-                    <ActivityIndicator size="small" color="#38B6FF" />
+                    <ActivityIndicator size="small" color={colors.primary} />
                   ) : (
                     <>
-                      <Upload size={20} color="#38B6FF" />
-                      <Text style={[styles.uploadButtonText, { color: '#38B6FF' }]}>Upload Image</Text>
+                      <Upload size={20} color={colors.primary} />
+                      <Text style={[styles.uploadButtonText, { color: colors.primary }]}>Upload Image</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -715,7 +716,7 @@ export default function EditEventScreen() {
                       setImageUrl('');
                     }}
                   >
-                    <X size={18} color="#FFFFFF" />
+                    <X size={18} color={colors.textOnPrimary} />
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.changeImageButton, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -723,11 +724,11 @@ export default function EditEventScreen() {
                     disabled={uploadingImage}
                   >
                     {uploadingImage ? (
-                      <ActivityIndicator size="small" color="#38B6FF" />
+                      <ActivityIndicator size="small" color={colors.primary} />
                     ) : (
                       <>
-                        <ImageIcon size={16} color="#38B6FF" />
-                        <Text style={[styles.changeImageText, { color: '#38B6FF' }]}>Change</Text>
+                        <ImageIcon size={16} color={colors.primary} />
+                        <Text style={[styles.changeImageText, { color: colors.primary }]}>Change</Text>
                       </>
                     )}
                   </TouchableOpacity>
@@ -742,7 +743,7 @@ export default function EditEventScreen() {
 
             <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.toggleInfo}>
-                <Video size={20} color={isVirtual ? '#38B6FF' : colors.textSecondary} />
+                <Video size={20} color={isVirtual ? colors.primary : colors.textSecondary} />
                 <View>
                   <Text style={[styles.toggleLabel, { color: colors.text }]}>Virtual Event</Text>
                   <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
@@ -753,8 +754,8 @@ export default function EditEventScreen() {
               <Switch
                 value={isVirtual}
                 onValueChange={setIsVirtual}
-                trackColor={{ false: colors.border, true: '#38B6FF' }}
-                thumbColor="#FFFFFF"
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={colors.textOnPrimary}
               />
             </View>
 
@@ -800,16 +801,16 @@ export default function EditEventScreen() {
                       }}
                     />
                     {isGeocodingLocation && (
-                      <ActivityIndicator size="small" color="#38B6FF" />
+                      <ActivityIndicator size="small" color={colors.primary} />
                     )}
                   </View>
                   {geocodingLocation && !geocodingLocation.success && (
-                    <Text style={[styles.errorText, { color: '#F44336' }]}>
+                    <Text style={[styles.errorText, { color: colors.error }]}>
                       {geocodingLocation.error}
                     </Text>
                   )}
                   {geocodingLocation?.success && geocodingLocation.formattedAddress && (
-                    <Text style={[styles.successText, { color: '#4CAF50' }]}>
+                    <Text style={[styles.successText, { color: colors.success }]}>
                       ✓ {geocodingLocation.formattedAddress}
                     </Text>
                   )}
@@ -900,7 +901,7 @@ export default function EditEventScreen() {
 
             <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.toggleInfo}>
-                <Users size={20} color={hasCapacity ? '#38B6FF' : colors.textSecondary} />
+                <Users size={20} color={hasCapacity ? colors.primary : colors.textSecondary} />
                 <View>
                   <Text style={[styles.toggleLabel, { color: colors.text }]}>Limited Capacity</Text>
                 </View>
@@ -908,8 +909,8 @@ export default function EditEventScreen() {
               <Switch
                 value={hasCapacity}
                 onValueChange={setHasCapacity}
-                trackColor={{ false: colors.border, true: '#38B6FF' }}
-                thumbColor="#FFFFFF"
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={colors.textOnPrimary}
               />
             </View>
 
@@ -932,7 +933,7 @@ export default function EditEventScreen() {
 
             <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.toggleInfo}>
-                <FileText size={20} color={registrationRequired ? '#38B6FF' : colors.textSecondary} />
+                <FileText size={20} color={registrationRequired ? colors.primary : colors.textSecondary} />
                 <View>
                   <Text style={[styles.toggleLabel, { color: colors.text }]}>Require Registration</Text>
                   <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
@@ -943,8 +944,8 @@ export default function EditEventScreen() {
               <Switch
                 value={registrationRequired}
                 onValueChange={setRegistrationRequired}
-                trackColor={{ false: colors.border, true: '#38B6FF' }}
-                thumbColor="#FFFFFF"
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={colors.textOnPrimary}
               />
             </View>
 
@@ -967,7 +968,7 @@ export default function EditEventScreen() {
 
             <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.toggleInfo}>
-                <DollarSign size={20} color={isFree ? '#4CAF50' : colors.textSecondary} />
+                <DollarSign size={20} color={isFree ? colors.success : colors.textSecondary} />
                 <View>
                   <Text style={[styles.toggleLabel, { color: colors.text }]}>Free Event</Text>
                 </View>
@@ -975,8 +976,8 @@ export default function EditEventScreen() {
               <Switch
                 value={isFree}
                 onValueChange={setIsFree}
-                trackColor={{ false: colors.border, true: '#4CAF50' }}
-                thumbColor="#FFFFFF"
+                trackColor={{ false: colors.border, true: colors.success }}
+                thumbColor={colors.textOnPrimary}
               />
             </View>
 
@@ -1077,16 +1078,16 @@ export default function EditEventScreen() {
       {/* Save Button */}
       <View style={[styles.bottomBar, { backgroundColor: colors.background, paddingBottom: insets.bottom + 16, borderTopColor: colors.border }]}>
         <TouchableOpacity
-          style={[styles.submitButton, { backgroundColor: '#38B6FF' }, submitting && styles.submitButtonDisabled]}
+          style={[styles.submitButton, { backgroundColor: colors.primary }, submitting && styles.submitButtonDisabled]}
           onPress={handleSave}
           disabled={submitting}
           activeOpacity={0.8}
         >
           {submitting ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
+            <ActivityIndicator size="small" color={colors.textOnPrimary} />
           ) : (
             <>
-              <Save size={22} color="#FFFFFF" />
+              <Save size={22} color={colors.textOnPrimary} />
               <Text style={styles.submitButtonText}>Save Changes</Text>
             </>
           )}
@@ -1290,7 +1291,6 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   submitButtonText: {
-    color: '#FFFFFF',
     fontSize: 17,
     fontWeight: '700',
   },
@@ -1317,7 +1317,6 @@ const styles = StyleSheet.create({
   imagePreview: {
     width: '100%',
     height: 200,
-    backgroundColor: '#E0E0E0',
   },
   removeImageButton: {
     position: 'absolute',
