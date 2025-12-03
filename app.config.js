@@ -11,6 +11,15 @@ export default {
       resizeMode: "cover",
       backgroundColor: "#38B6FF"
     },
+    runtimeVersion: {
+      policy: "appVersion" // Uses app version (1.0.1) as runtime version
+    },
+    updates: {
+      url: "https://u.expo.dev/af48b690-5cb4-44ef-bd25-e8bcc1c31f0b",
+      enabled: true,
+      checkAutomatically: "ON_LOAD", // Check for updates when app loads
+      fallbackToCacheTimeout: 0 // Immediately fall back to cached version if no network
+    },
     assetBundlePatterns: [
       "**/*"
     ],
@@ -91,7 +100,8 @@ export default {
       "expo-image-picker",
       "expo-location",
       "expo-video",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-updates"
     ],
     extra: {
       router: {
