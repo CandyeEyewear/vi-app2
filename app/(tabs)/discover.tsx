@@ -269,7 +269,7 @@ const AnimatedTabBar = React.memo(({
               <Text
                 style={[
                   styles.tabText,
-                  { color: isActive ? '#FFFFFF' : colors.textSecondary, fontSize: responsive.fontSize.md },
+                  { color: isActive ? colors.textOnPrimary : colors.textSecondary, fontSize: responsive.fontSize.md },
                   isActive && styles.tabTextActive,
                 ]}
               >
@@ -520,17 +520,17 @@ const AnimatedFilterChip = React.memo(({
         >
           {isSelected && (
             <View style={styles.chipCheckmark}>
-              <Check size={12} color="#FFFFFF" strokeWidth={3} />
+              <Check size={12} color={colors.textOnPrimary} strokeWidth={3} />
             </View>
           )}
-          {showMapPin && <MapPin size={14} color={isSelected ? '#FFFFFF' : colors.text} style={{ marginRight: 4 }} />}
-          {Icon && <Icon size={14} color={isSelected ? '#FFFFFF' : colors.text} style={{ marginRight: 4 }} />}
-          <Text style={[styles.filterChipText, { color: isSelected ? '#FFFFFF' : colors.text }, isSelected && styles.filterChipTextSelected]}>
+          {showMapPin && <MapPin size={14} color={isSelected ? colors.textOnPrimary : colors.text} style={{ marginRight: 4 }} />}
+          {Icon && <Icon size={14} color={isSelected ? colors.textOnPrimary : colors.text} style={{ marginRight: 4 }} />}
+          <Text style={[styles.filterChipText, { color: isSelected ? colors.textOnPrimary : colors.text }, isSelected && styles.filterChipTextSelected]}>
             {label}
           </Text>
           {count !== undefined && count > 0 && (
             <View style={[styles.filterChipBadge, { backgroundColor: isSelected ? 'rgba(255,255,255,0.3)' : colors.primary }]}>
-              <Text style={styles.filterChipBadgeText}>{count}</Text>
+              <Text style={[styles.filterChipBadgeText, { color: colors.textOnPrimary }]}>{count}</Text>
             </View>
           )}
         </Animated.View>
@@ -672,7 +672,7 @@ const LocationBanner = React.memo(({ type, colors, onEnable }: { type: 'permissi
       <Text style={[styles.locationBannerText, { color: colors.warningText }]}>Enable location to see nearby opportunities</Text>
       <Pressable onPress={onEnable} style={({ pressed }) => [styles.enableLocationButton, pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }]}>
         <LinearGradient colors={[colors.warning, colors.warningDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.enableLocationGradient}>
-          <Text style={styles.enableLocationButtonText}>Enable</Text>
+          <Text style={[styles.enableLocationButtonText, { color: colors.textOnPrimary }]}>Enable</Text>
         </LinearGradient>
       </Pressable>
     </View>
@@ -686,14 +686,14 @@ const SwipeActions = React.memo(({ isSaved, onSave, onShare, colors }: { isSaved
   <View style={styles.swipeActionsContainer}>
     <Pressable style={({ pressed }) => [styles.swipeAction, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]} onPress={onSave}>
       <LinearGradient colors={isSaved ? [colors.warning, colors.warningDark] : [colors.primary, colors.primaryDark]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.swipeActionGradient}>
-        <Bookmark size={24} color="#FFFFFF" fill={isSaved ? "#FFFFFF" : "none"} />
-        <Text style={styles.swipeActionText}>{isSaved ? 'Saved' : 'Save'}</Text>
+        <Bookmark size={24} color={colors.textOnPrimary} fill={isSaved ? colors.textOnPrimary : "none"} />
+        <Text style={[styles.swipeActionText, { color: colors.textOnPrimary }]}>{isSaved ? 'Saved' : 'Save'}</Text>
       </LinearGradient>
     </Pressable>
     <Pressable style={({ pressed }) => [styles.swipeAction, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]} onPress={onShare}>
       <LinearGradient colors={[colors.success, colors.successDark]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.swipeActionGradient}>
-        <Share2 size={24} color="#FFFFFF" />
-        <Text style={styles.swipeActionText}>Share</Text>
+        <Share2 size={24} color={colors.textOnPrimary} />
+        <Text style={[styles.swipeActionText, { color: colors.textOnPrimary }]}>Share</Text>
       </LinearGradient>
     </Pressable>
   </View>
@@ -1083,7 +1083,7 @@ const styles = StyleSheet.create({
   filterChipText: { fontSize: 13, fontWeight: '500' },
   filterChipTextSelected: { fontWeight: '600' },
   filterChipBadge: { minWidth: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginLeft: 6, paddingHorizontal: 6 },
-  filterChipBadgeText: { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
+  filterChipBadgeText: { fontSize: 11, fontWeight: '700' },
   filterPanel: { marginBottom: 16, padding: 16, borderRadius: 16, borderWidth: 1, overflow: 'hidden', ...Platform.select({ ios: { shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12 }, android: { elevation: 4 } }) },
   filterPanelHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   filterPanelTitleContainer: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -1104,11 +1104,11 @@ const styles = StyleSheet.create({
   locationBannerText: { fontSize: 14, flex: 1, fontWeight: '500' },
   enableLocationButton: { borderRadius: 10, overflow: 'hidden' },
   enableLocationGradient: { paddingHorizontal: 16, paddingVertical: 8 },
-  enableLocationButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  enableLocationButtonText: { fontSize: 14, fontWeight: '600' },
   swipeActionsContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, marginLeft: 16, gap: 8 },
   swipeAction: { borderRadius: 14, overflow: 'hidden' },
   swipeActionGradient: { width: 72, height: '100%', justifyContent: 'center', alignItems: 'center', paddingVertical: 16 },
-  swipeActionText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600', marginTop: 4 },
+  swipeActionText: { fontSize: 12, fontWeight: '600', marginTop: 4 },
   listContent: { padding: 8, flexGrow: 1 },
   listContentGrid: { padding: 8 },
   columnWrapper: { gap: 0 },

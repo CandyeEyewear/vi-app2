@@ -10,11 +10,12 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
+  Pressable,
   useColorScheme,
   RefreshControl,
   Dimensions,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -45,8 +46,33 @@ import { useAuth } from '../../../contexts/AuthContext';
 import CustomAlert from '../../../components/CustomAlert';
 import { ShimmerSkeleton } from '../../../components/ShimmerSkeleton';
 
-const screenWidth = Dimensions.get('window').width;
-const isSmallScreen = screenWidth < 380;
+// Responsive System
+const getResponsiveValues = () => {
+  const width = Dimensions.get('window').width;
+  const isSmallMobile = width < 380;
+  const isMobile = width < 768;
+  const isTablet = width >= 768 && width < 1024;
+  const isDesktop = width >= 1024;
+  
+  return {
+    isSmallMobile, isMobile, isTablet, isDesktop,
+    spacing: {
+      xs: isSmallMobile ? 4 : 6,
+      sm: isSmallMobile ? 8 : 10,
+      md: isSmallMobile ? 12 : 16,
+      lg: isSmallMobile ? 16 : 20,
+      xl: isSmallMobile ? 20 : 24,
+    },
+    fontSize: {
+      xs: isSmallMobile ? 10 : 11,
+      sm: isSmallMobile ? 12 : 13,
+      md: isSmallMobile ? 14 : 15,
+      lg: isSmallMobile ? 16 : 17,
+      xl: isSmallMobile ? 18 : 20,
+      header: isSmallMobile ? 22 : isTablet ? 28 : 26,
+    },
+  };
+};
 
 // Modern Loading Skeleton
 function EventsLoadingSkeleton({ colors }: { colors: any }) {
@@ -79,13 +105,16 @@ function EventsLoadingSkeleton({ colors }: { colors: any }) {
   );
 }
 
-// Status badge colors
-const STATUS_CONFIG: Record<EventStatus, { label: string; color: string; bgColor: string }> = {
-  draft: { label: 'Draft', color: '#757575', bgColor: '#F5F5F5' },
-  upcoming: { label: 'Upcoming', color: '#2196F3', bgColor: '#E3F2FD' },
-  ongoing: { label: 'Ongoing', color: '#4CAF50', bgColor: '#E8F5E9' },
-  completed: { label: 'Completed', color: '#9E9E9E', bgColor: '#FAFAFA' },
-  cancelled: { label: 'Cancelled', color: '#F44336', bgColor: '#FFEBEE' },
+// Status badge colors - using theme colors
+const getStatusConfig = (colorScheme: 'light' | 'dark'): Record<EventStatus, { label: string; color: string; bgColor: string }> => {
+  const colors = Colors[colorScheme];
+  return {
+    draft: { label: 'Draft', color: colors.textSecondary, bgColor: colors.surfaceElevated },
+    upcoming: { label: 'Upcoming', color: colors.primary, bgColor: colors.primarySoft },
+    ongoing: { label: 'Ongoing', color: colors.success, bgColor: colors.successSoft },
+    completed: { label: 'Completed', color: colors.textTertiary, bgColor: colors.surfaceElevated },
+    cancelled: { label: 'Cancelled', color: colors.error, bgColor: colors.errorSoft },
+  };
 };
 
 // Filter tabs
@@ -108,13 +137,22 @@ interface EventItemProps {
 
 function EventItem({ event, colors, onView, onEdit, onDelete, onRegistrations }: EventItemProps) {
   const [showActions, setShowActions] = useState(false);
+  const colorScheme = useColorScheme();
+  const STATUS_CONFIG = getStatusConfig(colorScheme === 'dark' ? 'dark' : 'light');
   const statusConfig = STATUS_CONFIG[event.status] || STATUS_CONFIG.draft;
+  const responsive = getResponsiveValues();
 
   return (
-    <TouchableOpacity
-      style={[styles.eventItem, { backgroundColor: colors.card, borderColor: colors.border }]}
+    <Pressable
+      style={({ pressed }) => [
+        styles.eventItem, 
+        { 
+          backgroundColor: pressed ? colors.surfacePressed : colors.card, 
+          borderColor: colors.border,
+          transform: [{ scale: pressed ? 0.98 : 1 }],
+        }
+      ]}
       onPress={onView}
-      activeOpacity={0.7}
     >
       <View style={styles.eventHeader}>
         <View style={styles.eventTitleRow}>
@@ -122,15 +160,18 @@ function EventItem({ event, colors, onView, onEdit, onDelete, onRegistrations }:
             {event.title}
           </Text>
           {event.isFeatured && (
-            <Star size={16} color="#FFD700" fill="#FFD700" />
+            <Star size={16} color={colors.star} fill={colors.star} />
           )}
         </View>
-        <TouchableOpacity
-          style={styles.moreButton}
+        <Pressable
+          style={({ pressed }) => [
+            styles.moreButton,
+            { opacity: pressed ? 0.6 : 1 }
+          ]}
           onPress={() => setShowActions(!showActions)}
         >
           <MoreVertical size={20} color={colors.textSecondary} />
-        </TouchableOpacity>
+        </Pressable>
       </View>
 
       {/* Status Badge */}
@@ -156,7 +197,7 @@ function EventItem({ event, colors, onView, onEdit, onDelete, onRegistrations }:
         </View>
         <View style={styles.detailRow}>
           {event.isVirtual ? (
-            <Video size={14} color="#38B6FF" />
+            <Video size={14} color={colors.primary} />
           ) : (
             <MapPin size={14} color={colors.textSecondary} />
           )}
@@ -177,28 +218,52 @@ function EventItem({ event, colors, onView, onEdit, onDelete, onRegistrations }:
       {/* Actions Dropdown */}
       {showActions && (
         <View style={[styles.actionsDropdown, { backgroundColor: colors.background, borderColor: colors.border }]}>
-          <TouchableOpacity style={styles.actionItem} onPress={onView}>
+          <Pressable 
+            style={({ pressed }) => [
+              styles.actionItem,
+              { backgroundColor: pressed ? colors.surfacePressed : 'transparent' }
+            ]}
+            onPress={onView}
+          >
             <Eye size={18} color={colors.text} />
             <Text style={[styles.actionText, { color: colors.text }]}>View</Text>
-          </TouchableOpacity>
+          </Pressable>
           
-          <TouchableOpacity style={styles.actionItem} onPress={onRegistrations}>
-            <List size={18} color="#9C27B0" />
-            <Text style={[styles.actionText, { color: '#9C27B0' }]}>Registrations</Text>
-          </TouchableOpacity>
+          <Pressable 
+            style={({ pressed }) => [
+              styles.actionItem,
+              { backgroundColor: pressed ? colors.surfacePressed : 'transparent' }
+            ]}
+            onPress={onRegistrations}
+          >
+            <List size={18} color={colors.community} />
+            <Text style={[styles.actionText, { color: colors.community }]}>Registrations</Text>
+          </Pressable>
           
-          <TouchableOpacity style={styles.actionItem} onPress={onEdit}>
-            <Edit3 size={18} color="#38B6FF" />
-            <Text style={[styles.actionText, { color: '#38B6FF' }]}>Edit</Text>
-          </TouchableOpacity>
+          <Pressable 
+            style={({ pressed }) => [
+              styles.actionItem,
+              { backgroundColor: pressed ? colors.surfacePressed : 'transparent' }
+            ]}
+            onPress={onEdit}
+          >
+            <Edit3 size={18} color={colors.primary} />
+            <Text style={[styles.actionText, { color: colors.primary }]}>Edit</Text>
+          </Pressable>
           
-          <TouchableOpacity style={styles.actionItem} onPress={onDelete}>
-            <Trash2 size={18} color="#F44336" />
-            <Text style={[styles.actionText, { color: '#F44336' }]}>Delete</Text>
-          </TouchableOpacity>
+          <Pressable 
+            style={({ pressed }) => [
+              styles.actionItem,
+              { backgroundColor: pressed ? colors.surfacePressed : 'transparent' }
+            ]}
+            onPress={onDelete}
+          >
+            <Trash2 size={18} color={colors.error} />
+            <Text style={[styles.actionText, { color: colors.error }]}>Delete</Text>
+          </Pressable>
         </View>
       )}
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -208,6 +273,7 @@ export default function AdminEventsScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const { user } = useAuth();
+  const responsive = getResponsiveValues();
 
   // State
   const [events, setEvents] = useState<Event[]>([]);
@@ -354,13 +420,19 @@ export default function AdminEventsScreen() {
         <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
           Create your first event to get started
         </Text>
-        <TouchableOpacity
-          style={[styles.createButtonEmpty, { backgroundColor: '#38B6FF' }]}
+        <Pressable
+          style={({ pressed }) => [
+            styles.createButtonEmpty, 
+            { 
+              backgroundColor: colors.primary,
+              transform: [{ scale: pressed ? 0.97 : 1 }],
+            }
+          ]}
           onPress={() => router.push('/events/create')}
         >
-          <Plus size={20} color="#FFFFFF" />
-          <Text style={styles.createButtonEmptyText}>Create Event</Text>
-        </TouchableOpacity>
+          <Plus size={20} color={colors.textOnPrimary} />
+          <Text style={[styles.createButtonEmptyText, { color: colors.textOnPrimary }]}>Create Event</Text>
+        </Pressable>
       </View>
     );
   }, [loading, colors, router]);
@@ -371,16 +443,28 @@ export default function AdminEventsScreen() {
 
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top, borderBottomColor: colors.border }]}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <Pressable 
+          style={({ pressed }) => [
+            styles.backButton,
+            { opacity: pressed ? 0.6 : 1 }
+          ]}
+          onPress={() => router.back()}
+        >
           <ArrowLeft size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Manage Events</Text>
-        <TouchableOpacity
-          style={[styles.addButton, { backgroundColor: '#38B6FF' }]}
+        </Pressable>
+        <Text style={[styles.headerTitle, { color: colors.text, fontSize: responsive.fontSize.xl }]}>Manage Events</Text>
+        <Pressable
+          style={({ pressed }) => [
+            styles.addButton, 
+            { 
+              backgroundColor: colors.primary,
+              transform: [{ scale: pressed ? 0.95 : 1 }],
+            }
+          ]}
           onPress={() => router.push('/events/create')}
         >
-          <Plus size={20} color="#FFFFFF" />
-        </TouchableOpacity>
+          <Plus size={20} color={colors.textOnPrimary} />
+        </Pressable>
       </View>
 
       {/* Status Filter Tabs */}
@@ -392,23 +476,27 @@ export default function AdminEventsScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterContent}
           renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[
+            <Pressable
+              style={({ pressed }) => [
                 styles.filterTab,
-                selectedStatus === item.value && { backgroundColor: '#38B6FF' },
+                selectedStatus === item.value && { backgroundColor: colors.primary },
                 selectedStatus !== item.value && { backgroundColor: colors.card, borderColor: colors.border },
+                pressed && { transform: [{ scale: 0.97 }] },
               ]}
               onPress={() => setSelectedStatus(item.value)}
             >
               <Text
                 style={[
                   styles.filterTabText,
-                  { color: selectedStatus === item.value ? '#FFFFFF' : colors.textSecondary },
+                  { 
+                    color: selectedStatus === item.value ? colors.textOnPrimary : colors.textSecondary,
+                    fontSize: responsive.fontSize.sm,
+                  },
                 ]}
               >
                 {item.label}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           )}
         />
       </View>
@@ -436,7 +524,8 @@ export default function AdminEventsScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              tintColor="#38B6FF"
+              tintColor={colors.primary}
+              colors={[colors.primary]}
             />
           }
           showsVerticalScrollIndicator={false}
@@ -486,6 +575,17 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   filterContainer: {
     borderBottomWidth: 1,
@@ -529,6 +629,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 16,
     marginBottom: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
   eventHeader: {
     flexDirection: 'row',
@@ -579,6 +690,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   actionItem: {
     flexDirection: 'row',
@@ -617,7 +739,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   createButtonEmptyText: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
   },
