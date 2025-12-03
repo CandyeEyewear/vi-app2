@@ -51,6 +51,7 @@ import { Opportunity } from '../types';
 import { supabase } from '../services/supabase';
 import CustomAlert from '../components/CustomAlert';
 import { showToast } from '../utils/toast';
+import { Colors } from '../constants/colors';
 
 export default function OpportunityDetailsScreen() {
   const { colors, responsive, cardShadow } = useThemeStyles();
