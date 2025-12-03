@@ -108,7 +108,7 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
       ]}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Event: ${event.title}. ${formatEventDate(event.eventDate)}`}
+      accessibilityLabel={`Event: ${event.title}. ${event.eventDate ? formatEventDate(event.eventDate) : 'Date TBA'}`}
     >
       {/* Image Section */}
       <View style={styles.imageContainer}>
@@ -187,8 +187,8 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
         <View style={styles.infoRow}>
           <Clock size={14} color={colors.textSecondary} />
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-            {formatEventTime(event.startTime)}
-            {event.endTime && ` - ${formatEventTime(event.endTime)}`}
+            {event.startTime ? formatEventTime(event.startTime) : 'TBA'}
+            {event.endTime && event.startTime && ` - ${formatEventTime(event.endTime)}`}
           </Text>
         </View>
 
@@ -205,7 +205,7 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
             <>
               <MapPin size={14} color={colors.textSecondary} />
               <Text style={[styles.infoText, { color: colors.textSecondary }]} numberOfLines={1}>
-                {event.location}
+                {event.location || 'Location TBA'}
               </Text>
             </>
           )}
