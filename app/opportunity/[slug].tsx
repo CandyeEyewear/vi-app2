@@ -82,6 +82,64 @@ const getCategoryColor = (category: string): string => {
 };
 
 // ============================================================================
+// MEMOIZED HERO IMAGE (Prevents reload/flicker loop)
+// ============================================================================
+interface MemoizedHeroImageProps {
+  imageUrl: string | null | undefined;
+  categoryColor: string;
+  category: string;
+  isVerified: boolean;
+  successColor: string;
+}
+
+const MemoizedHeroImage = React.memo<MemoizedHeroImageProps>(
+  ({ imageUrl, categoryColor, category, isVerified, successColor }) => {
+    if (!imageUrl) return null;
+    
+    return (
+      <View style={memoImageStyles.heroContainer}>
+        <Image 
+          source={{ uri: imageUrl }} 
+          style={memoImageStyles.heroImage}
+        />
+        <LinearGradient 
+          colors={['transparent', 'rgba(0,0,0,0.7)']} 
+          style={memoImageStyles.heroGradient} 
+        />
+        <View style={[memoImageStyles.heroBadge, { backgroundColor: categoryColor }]}>
+          <Text style={memoImageStyles.heroBadgeText}>{category.toUpperCase()}</Text>
+        </View>
+        {isVerified && (
+          <View style={[memoImageStyles.heroVerified, { backgroundColor: successColor }]}>
+            <CheckCircle size={12} color="#FFF" />
+            <Text style={memoImageStyles.heroVerifiedText}>Verified</Text>
+          </View>
+        )}
+      </View>
+    );
+  },
+  // Custom comparison - only re-render if these specific props change
+  (prevProps, nextProps) => {
+    return (
+      prevProps.imageUrl === nextProps.imageUrl &&
+      prevProps.category === nextProps.category &&
+      prevProps.isVerified === nextProps.isVerified
+    );
+  }
+);
+
+// Styles for memoized hero image (defined outside to prevent recreation)
+const memoImageStyles = StyleSheet.create({
+  heroContainer: { height: 260, position: 'relative' },
+  heroImage: { width: '100%', height: '100%', resizeMode: 'cover' },
+  heroGradient: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '60%' },
+  heroBadge: { position: 'absolute', top: 16, left: 16, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  heroBadgeText: { color: '#FFF', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  heroVerified: { position: 'absolute', top: 16, right: 16, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16 },
+  heroVerifiedText: { color: '#FFF', fontSize: 11, fontWeight: '600' },
+});
+
+// ============================================================================
 // ANIMATED COMPONENTS
 // ============================================================================
 
@@ -205,7 +263,17 @@ export default function OpportunityDetailsScreen() {
   const { user, isAdmin } = useAuth();
   const { shareOpportunityToFeed } = useFeed();
   const params = useLocalSearchParams();
-  const opportunityId = params.id as string;
+  
+  // Support both [slug].tsx route and legacy [id].tsx route
+  // The route param will be in params.slug for [slug].tsx or params.id for [id].tsx
+  const identifier = (params.slug || params.id) as string;
+  
+  // Helper to check if string is a valid UUID
+  const isValidUUID = (str: string): boolean => {
+    if (!str) return false;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(str);
+  };
 
   // State
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
@@ -229,11 +297,9 @@ export default function OpportunityDetailsScreen() {
   const [savingBookmark, setSavingBookmark] = useState(false);
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertConfig, setAlertConfig] = useState({ title: '', message: '', type: 'success' as const });
-
-  // Memoized image source to prevent flickering
-  const imageSource = useMemo(() => {
-    return opportunity?.imageUrl ? { uri: opportunity.imageUrl } : null;
-  }, [opportunity?.imageUrl]);
+  
+  // Flag to prevent unnecessary reloading
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   const showAlert = useCallback((title: string, message: string, type: 'success' | 'error' | 'warning' = 'success') => {
     setAlertConfig({ title, message, type });
@@ -241,16 +307,30 @@ export default function OpportunityDetailsScreen() {
   }, []);
 
   // ============================================================================
-  // DATA LOADING
+  // DATA LOADING - Protected against reload loops
   // ============================================================================
+  
+  // Step 1: Load opportunity details first (by slug or UUID)
   useEffect(() => {
-    if (opportunityId) {
+    if (identifier && !dataLoaded) {
       loadOpportunityDetails();
-      checkSignupStatus();
-      checkSaveStatus();
-      if (isAdmin) loadAdminStats();
     }
-  }, [opportunityId, isAdmin, user?.id]);
+  }, [identifier, dataLoaded]);
+
+  // Step 2: After opportunity is loaded, check signup/save status using the REAL UUID
+  useEffect(() => {
+    if (opportunity?.id && user) {
+      checkSignupStatus(opportunity.id);
+      checkSaveStatus(opportunity.id);
+    }
+  }, [opportunity?.id, user?.id]);
+
+  // Step 3: Load admin stats separately when admin status is confirmed
+  useEffect(() => {
+    if (isAdmin && opportunity?.id && dataLoaded) {
+      loadAdminStats(opportunity.id);
+    }
+  }, [isAdmin, opportunity?.id, dataLoaded]);
 
   useEffect(() => {
     if (activeTab === 'chat') setChatMessageCount(0);
@@ -259,13 +339,44 @@ export default function OpportunityDetailsScreen() {
   const loadOpportunityDetails = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('opportunities')
-        .select('*')
-        .eq('id', opportunityId)
-        .single();
+      
+      // Query by UUID if valid, otherwise query by slug (with UUID fallback)
+      let data = null;
+      let error = null;
+      
+      if (isValidUUID(identifier)) {
+        // It's a UUID, query by id directly
+        const result = await supabase
+          .from('opportunities')
+          .select('*')
+          .eq('id', identifier)
+          .single();
+        data = result.data;
+        error = result.error;
+      } else {
+        // It's a slug, try slug first
+        const slugResult = await supabase
+          .from('opportunities')
+          .select('*')
+          .eq('slug', identifier)
+          .maybeSingle();
+        
+        if (slugResult.data) {
+          data = slugResult.data;
+        } else {
+          // Fallback: maybe it's a UUID that failed the regex (shouldn't happen, but safe)
+          const idResult = await supabase
+            .from('opportunities')
+            .select('*')
+            .eq('id', identifier)
+            .single();
+          data = idResult.data;
+          error = idResult.error;
+        }
+      }
 
       if (error) throw error;
+      if (!data) throw new Error('Opportunity not found');
 
       setOpportunity({
         id: data.id,
@@ -300,7 +411,7 @@ export default function OpportunityDetailsScreen() {
         updatedAt: data.updated_at,
       });
 
-      if (isAdmin) loadAdminStats();
+      setDataLoaded(true);
     } catch (error) {
       console.error('Error loading opportunity:', error);
       showAlert('Error', 'Failed to load opportunity details', 'error');
@@ -309,13 +420,13 @@ export default function OpportunityDetailsScreen() {
     }
   };
 
-  const checkSignupStatus = async () => {
+  const checkSignupStatus = async (opportunityUuid: string) => {
     if (!user) return;
     try {
       const { data, error } = await supabase
         .from('opportunity_signups')
         .select('status, checked_in, check_in_status')
-        .eq('opportunity_id', opportunityId)
+        .eq('opportunity_id', opportunityUuid)
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -331,14 +442,14 @@ export default function OpportunityDetailsScreen() {
     }
   };
 
-  const checkSaveStatus = async () => {
-    if (!user || !opportunityId) return;
+  const checkSaveStatus = async (opportunityUuid: string) => {
+    if (!user) return;
     try {
       const { data, error } = await supabase
         .from('saved_opportunities')
         .select('id')
         .eq('user_id', user.id)
-        .eq('opportunity_id', opportunityId)
+        .eq('opportunity_id', opportunityUuid)
         .maybeSingle();
 
       if (error && error.code !== 'PGRST116') throw error;
@@ -348,20 +459,20 @@ export default function OpportunityDetailsScreen() {
     }
   };
 
-  const loadAdminStats = async () => {
+  const loadAdminStats = async (opportunityUuid: string) => {
     if (!isAdmin) return;
     try {
       const { count: signupsCount } = await supabase
         .from('opportunity_signups')
         .select('*', { count: 'exact', head: true })
-        .eq('opportunity_id', opportunityId)
+        .eq('opportunity_id', opportunityUuid)
         .neq('status', 'cancelled');
       setTotalSignups(signupsCount || 0);
 
       const { count: checkInsCount } = await supabase
         .from('opportunity_signups')
         .select('*', { count: 'exact', head: true })
-        .eq('opportunity_id', opportunityId)
+        .eq('opportunity_id', opportunityUuid)
         .or('checked_in.eq.true,check_in_status.eq.approved');
       setTotalCheckIns(checkInsCount || 0);
     } catch (error) {
@@ -403,16 +514,17 @@ export default function OpportunityDetailsScreen() {
     try {
       setSubmitting(true);
       await supabase.from('opportunity_signups').insert({
-        opportunity_id: opportunityId,
+        opportunity_id: opportunity.id,
         user_id: user.id,
         status: 'confirmed',
         signed_up_at: new Date().toISOString(),
       });
-      await supabase.from('opportunities').update({ spots_available: opportunity.spotsAvailable - 1 }).eq('id', opportunityId);
+      await supabase.from('opportunities').update({ spots_available: opportunity.spotsAvailable - 1 }).eq('id', opportunity.id);
       setIsSignedUp(true);
       setSignupStatus('confirmed');
       showAlert('Success!', 'You have successfully signed up for this opportunity', 'success');
-      loadOpportunityDetails();
+      // Refresh data
+      setDataLoaded(false);
     } catch (error: any) {
       console.error('Error signing up:', error);
       showAlert('Error', error.message || 'Failed to sign up', 'error');
@@ -425,12 +537,13 @@ export default function OpportunityDetailsScreen() {
     if (!user || !opportunity) return;
     try {
       setSubmitting(true);
-      await supabase.from('opportunity_signups').delete().eq('opportunity_id', opportunityId).eq('user_id', user.id);
-      await supabase.from('opportunities').update({ spots_available: opportunity.spotsAvailable + 1 }).eq('id', opportunityId);
+      await supabase.from('opportunity_signups').delete().eq('opportunity_id', opportunity.id).eq('user_id', user.id);
+      await supabase.from('opportunities').update({ spots_available: opportunity.spotsAvailable + 1 }).eq('id', opportunity.id);
       setIsSignedUp(false);
       setSignupStatus(null);
       showAlert('Cancelled', 'Your signup has been cancelled', 'success');
-      loadOpportunityDetails();
+      // Refresh data
+      setDataLoaded(false);
     } catch (error: any) {
       console.error('Error cancelling signup:', error);
       showAlert('Error', error.message || 'Failed to cancel signup', 'error');
@@ -443,7 +556,7 @@ export default function OpportunityDetailsScreen() {
     if (!opportunity) return;
     try {
       setSubmitting(true);
-      await supabase.from('opportunities').delete().eq('id', opportunityId);
+      await supabase.from('opportunities').delete().eq('id', opportunity.id);
       showAlert('Deleted', 'Opportunity has been deleted', 'success');
       setTimeout(() => router.back(), 1500);
     } catch (error: any) {
@@ -493,11 +606,11 @@ export default function OpportunityDetailsScreen() {
         checked_in_at: new Date().toISOString(),
         check_in_method: 'manual',
         check_in_status: 'pending_approval',
-      }).eq('opportunity_id', opportunityId).eq('user_id', user.id);
+      }).eq('opportunity_id', opportunity.id).eq('user_id', user.id);
       setHasCheckedIn(true);
       setCheckInStatus('pending_approval');
       showAlert('Success!', 'Check-in successful! Waiting for admin approval.', 'success');
-      checkSignupStatus();
+      checkSignupStatus(opportunity.id);
     } catch (error: any) {
       console.error('Error checking in:', error);
       showAlert('Error', error.message || 'Failed to check in', 'error');
@@ -525,11 +638,11 @@ export default function OpportunityDetailsScreen() {
         checked_in_at: new Date().toISOString(),
         check_in_method: 'qr_code',
         check_in_status: 'approved',
-      }).eq('opportunity_id', opportunityId).eq('user_id', user.id);
+      }).eq('opportunity_id', opportunity.id).eq('user_id', user.id);
       setHasCheckedIn(true);
       setCheckInStatus('approved');
       showAlert('Success!', 'You have been checked in successfully! 🎉', 'success');
-      checkSignupStatus();
+      checkSignupStatus(opportunity.id);
     } catch (error: any) {
       console.error('Error checking in with QR:', error);
       showAlert('Error', error.message || 'Failed to check in', 'error');
@@ -651,7 +764,7 @@ export default function OpportunityDetailsScreen() {
           </TouchableOpacity>
           {isAdmin && (
             <>
-              <TouchableOpacity onPress={() => router.push(`/edit-opportunity/${opportunityId}`)} style={[styles.headerBtn, { backgroundColor: colors.primary + '15' }]}>
+              <TouchableOpacity onPress={() => router.push(`/edit-opportunity/${opportunity.id}`)} style={[styles.headerBtn, { backgroundColor: colors.primary + '15' }]}>
                 <Edit size={20} color={colors.primary} />
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setQrModalVisible(true)} style={[styles.headerBtn, { backgroundColor: colors.success + '15' }]}>
@@ -668,24 +781,14 @@ export default function OpportunityDetailsScreen() {
       {/* CONTENT BY TAB */}
       {activeTab === 'details' ? (
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
-          {/* HERO IMAGE WITH GRADIENT */}
-          {imageSource && (
-            <View style={styles.heroContainer}>
-              <Image source={imageSource} style={styles.heroImage} />
-              <LinearGradient colors={['transparent', 'rgba(0,0,0,0.7)']} style={styles.heroGradient} />
-              {/* Floating Category Badge */}
-              <View style={[styles.heroBadge, { backgroundColor: categoryColor }]}>
-                <Text style={styles.heroBadgeText}>{opportunity.category.toUpperCase()}</Text>
-              </View>
-              {/* Verified Badge */}
-              {opportunity.organizationVerified && (
-                <View style={[styles.heroVerified, { backgroundColor: colors.success }]}>
-                  <CheckCircle size={12} color="#FFF" />
-                  <Text style={styles.heroVerifiedText}>Verified</Text>
-                </View>
-              )}
-            </View>
-          )}
+          {/* HERO IMAGE WITH GRADIENT - Memoized to prevent reload loop */}
+          <MemoizedHeroImage
+            imageUrl={opportunity.imageUrl}
+            categoryColor={categoryColor}
+            category={opportunity.category}
+            isVerified={opportunity.organizationVerified || false}
+            successColor={colors.success}
+          />
 
           {/* CHECK-IN BUTTON */}
           {shouldShowCheckInButton() && (
@@ -900,14 +1003,14 @@ export default function OpportunityDetailsScreen() {
           <View style={{ paddingHorizontal: 16 }}>
             <AnimatedTabBar activeTab={activeTab} onTabChange={setActiveTab} chatBadge={chatMessageCount} colors={colors} />
           </View>
-          <OpportunityGroupChat opportunityId={opportunityId} opportunityTitle={opportunity.title} onMessageCountChange={setChatMessageCount} />
+          <OpportunityGroupChat opportunityId={opportunity.id} opportunityTitle={opportunity.title} onMessageCountChange={setChatMessageCount} />
         </View>
       ) : (
         <View style={styles.tabScreen}>
           <View style={{ paddingHorizontal: 16 }}>
             <AnimatedTabBar activeTab={activeTab} onTabChange={setActiveTab} chatBadge={chatMessageCount} colors={colors} />
           </View>
-          <ParticipantsList opportunityId={opportunityId} isAdmin={isAdmin || false} onCheckInApproved={() => { loadOpportunityDetails(); if (isAdmin) loadAdminStats(); }} />
+          <ParticipantsList opportunityId={opportunity.id} isAdmin={isAdmin || false} onCheckInApproved={() => { loadOpportunityDetails(); if (isAdmin && opportunity?.id) loadAdminStats(opportunity.id); }} />
         </View>
       )}
 
@@ -1040,24 +1143,6 @@ const styles = StyleSheet.create({
 
   // Loading/Error
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
-  loadingText: { fontSize: 15, fontWeight: '500' },
-  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
-  errorIcon: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  errorTitle: { fontSize: 20, fontWeight: '700', marginBottom: 8, textAlign: 'center' },
-  errorSubtitle: { fontSize: 15, textAlign: 'center', marginBottom: 24 },
-  errorBtn: { paddingHorizontal: 28, paddingVertical: 14, borderRadius: 12 },
-  errorBtnText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
-
-  // Hero
-  heroContainer: { height: 260, position: 'relative' },
-  heroImage: { width: '100%', height: '100%', resizeMode: 'cover' },
-  heroGradient: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '60%' },
-  heroBadge: { position: 'absolute', top: 16, left: 16, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  heroBadgeText: { color: '#FFF', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
-  heroVerified: { position: 'absolute', top: 16, right: 16, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16 },
-  heroVerifiedText: { color: '#FFF', fontSize: 11, fontWeight: '600' },
-
-  // Content
   scrollView: { flex: 1 },
   content: { padding: 16 },
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
