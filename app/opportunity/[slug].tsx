@@ -54,6 +54,7 @@ import {
   Share2,
   Bookmark,
   Phone,
+  ChevronRight,
 } from 'lucide-react-native';
 import { Opportunity } from '../../types';
 import { supabase } from '../../services/supabase';
@@ -823,67 +824,64 @@ export default function OpportunityDetailsScreen() {
               </View>
             )}
             <Text style={[styles.title, { color: colors.text }]}>{opportunity.title}</Text>
-            <Text style={[styles.org, { color: colors.textSecondary }]}>{opportunity.organizationName}</Text>
-
-            {/* INFO CARDS - COMPACT 2x2 GRID */}
-            <View style={styles.infoGrid}>
-              {/* Location */}
-              <AnimatedPressable
-                onPress={opportunity.mapLink ? () => Linking.openURL(opportunity.mapLink!) : undefined}
-                disabled={!opportunity.mapLink}
-                style={[styles.infoCard, { backgroundColor: colors.card, shadowColor: '#000' }]}
-              >
-                <View style={[styles.infoIconWrap, { backgroundColor: colors.primary + '15' }]}>
-                  <MapPin size={20} color={colors.primary} />
+            <View style={styles.orgRow}>
+              <Text style={[styles.org, { color: colors.textSecondary }]}>{opportunity.organizationName}</Text>
+              {opportunity.organizationVerified && (
+                <View style={styles.verifiedBadge}>
+                  <CheckCircle size={12} color={colors.success} fill={colors.success} />
+                  <Text style={[styles.verifiedBadgeText, { color: colors.success }]}>Verified</Text>
                 </View>
-                <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Location</Text>
-                <Text style={[styles.infoValue, { color: colors.text }]} numberOfLines={2}>{opportunity.location}</Text>
-              </AnimatedPressable>
+              )}
+            </View>
 
+            {/* INFO LIST - Clean scannable rows */}
+            <View style={styles.infoList}>
               {/* Date */}
-              <View style={[styles.infoCard, { backgroundColor: colors.card, shadowColor: '#000' }]}>
-                <View style={[styles.infoIconWrap, { backgroundColor: colors.primary + '15' }]}>
-                  <Calendar size={20} color={colors.primary} />
-                </View>
-                <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Date</Text>
-                <Text style={[styles.infoValue, { color: colors.text }]}>{formatDateRange()}</Text>
+              <View style={styles.infoRow}>
+                <Calendar size={18} color={colors.textSecondary} />
+                <Text style={[styles.infoText, { color: colors.text }]}>{formatDateRange()}</Text>
               </View>
 
               {/* Time */}
-              <View style={[styles.infoCard, { backgroundColor: colors.card, shadowColor: '#000' }]}>
-                <View style={[styles.infoIconWrap, { backgroundColor: colors.primary + '15' }]}>
-                  <Clock size={20} color={colors.primary} />
-                </View>
-                <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Time</Text>
-                <Text style={[styles.infoValue, { color: colors.text }]}>{formatTime()}</Text>
+              <View style={styles.infoRow}>
+                <Clock size={18} color={colors.textSecondary} />
+                <Text style={[styles.infoText, { color: colors.text }]}>{formatTime()}</Text>
               </View>
 
-              {/* Spots */}
-              <View style={[styles.infoCard, { backgroundColor: colors.card, shadowColor: '#000' }]}>
-                <View style={[styles.infoIconWrap, { backgroundColor: (isLimited ? colors.warning : colors.primary) + '15' }]}>
-                  <Users size={20} color={isLimited ? colors.warning : colors.primary} />
-                </View>
-                <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Spots Left</Text>
-                <Text style={[styles.infoValue, { color: isLimited ? colors.warning : colors.text, fontWeight: '700' }]}>{spotsLeft} / {opportunity.spotsTotal}</Text>
+              {/* Location - tappable */}
+              <TouchableOpacity 
+                style={styles.infoRow}
+                onPress={opportunity.mapLink ? () => Linking.openURL(opportunity.mapLink!) : undefined}
+                disabled={!opportunity.mapLink}
+                activeOpacity={0.7}
+              >
+                <MapPin size={18} color={colors.textSecondary} />
+                <Text style={[styles.infoText, { color: colors.text, flex: 1 }]} numberOfLines={1}>{opportunity.location}</Text>
+                {opportunity.mapLink && <ChevronRight size={18} color={colors.textSecondary} />}
+              </TouchableOpacity>
+
+              {/* Spots - with urgency styling */}
+              <View style={[styles.infoRow, isLimited && styles.urgencyRow, isLimited && { backgroundColor: colors.warning + '12' }]}>
+                <Users size={18} color={isLimited ? colors.warning : colors.textSecondary} />
+                <Text style={[styles.infoText, { color: isLimited ? colors.warning : colors.text, fontWeight: isLimited ? '600' : '400' }]}>
+                  {isLimited ? `Only ${spotsLeft} spot${spotsLeft === 1 ? '' : 's'} left!` : `${spotsLeft} of ${opportunity.spotsTotal} spots available`}
+                </Text>
               </View>
             </View>
 
-            {/* ADMIN STATS */}
+            {/* ADMIN STATS BANNER - subtle inline */}
             {isAdmin && (
-              <View style={styles.adminStats}>
-                <View style={[styles.adminStatCard, { backgroundColor: colors.card, shadowColor: '#000' }]}>
-                  <View style={[styles.adminStatIcon, { backgroundColor: colors.primary + '15' }]}>
-                    <Users size={20} color={colors.primary} />
-                  </View>
-                  <Text style={[styles.adminStatValue, { color: colors.text }]}>{totalSignups}</Text>
-                  <Text style={[styles.adminStatLabel, { color: colors.textSecondary }]}>Signups</Text>
+              <View style={[styles.adminBanner, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.adminBannerItem}>
+                  <Users size={14} color={colors.primary} />
+                  <Text style={[styles.adminBannerValue, { color: colors.text }]}>{totalSignups}</Text>
+                  <Text style={[styles.adminBannerLabel, { color: colors.textSecondary }]}>signups</Text>
                 </View>
-                <View style={[styles.adminStatCard, { backgroundColor: colors.card, shadowColor: '#000' }]}>
-                  <View style={[styles.adminStatIcon, { backgroundColor: colors.success + '15' }]}>
-                    <CheckCircle size={20} color={colors.success} />
-                  </View>
-                  <Text style={[styles.adminStatValue, { color: colors.success }]}>{totalCheckIns}</Text>
-                  <Text style={[styles.adminStatLabel, { color: colors.textSecondary }]}>Checked In</Text>
+                <View style={[styles.adminBannerDivider, { backgroundColor: colors.border }]} />
+                <View style={styles.adminBannerItem}>
+                  <CheckCircle size={14} color={colors.success} />
+                  <Text style={[styles.adminBannerValue, { color: colors.text }]}>{totalCheckIns}</Text>
+                  <Text style={[styles.adminBannerLabel, { color: colors.textSecondary }]}>checked in</Text>
                 </View>
               </View>
             )}
@@ -1155,53 +1153,54 @@ const styles = StyleSheet.create({
   categoryBadgeInlineText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
   verifiedInline: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   verifiedInlineText: { fontSize: 12, fontWeight: '600' },
-  title: { fontSize: 26, fontWeight: '700', marginBottom: 6, letterSpacing: -0.3 },
-  org: { fontSize: 15, fontWeight: '500', marginBottom: 20 },
+  title: { fontSize: 24, fontWeight: '700', marginBottom: 4, letterSpacing: -0.3 },
+  orgRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 20 },
+  org: { fontSize: 15, fontWeight: '500' },
+  verifiedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  verifiedBadgeText: { fontSize: 12, fontWeight: '600' },
 
-  // Info Grid - COMPACT 2x2
-  infoGrid: {
+  // Info List - Clean scannable rows
+  infoList: {
+    gap: 2,
+    marginBottom: 16,
+  },
+  infoRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 20,
-  },
-  infoCard: {
-    width: (SCREEN_WIDTH - 32 - 10) / 2,
-    padding: 14,
-    borderRadius: 14,
     alignItems: 'center',
-    gap: 8,
-    ...Platform.select({
-      ios: { shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 8 },
-      android: { elevation: 3 },
-    }),
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
   },
-  infoIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  infoText: {
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  urgencyRow: {
+    borderRadius: 8,
+    marginHorizontal: -4,
+    paddingHorizontal: 8,
+  },
+
+  // Admin Banner - subtle inline
+  adminBanner: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 16,
   },
-  infoLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
-  infoValue: { fontSize: 14, fontWeight: '600', textAlign: 'center' },
-
-  // Admin Stats
-  adminStats: { flexDirection: 'row', gap: 10, marginBottom: 20 },
-  adminStatCard: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 14,
+  adminBannerItem: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    ...Platform.select({
-      ios: { shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 8 },
-      android: { elevation: 3 },
-    }),
+    gap: 6,
   },
-  adminStatIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  adminStatValue: { fontSize: 28, fontWeight: '700' },
-  adminStatLabel: { fontSize: 12, fontWeight: '500' },
+  adminBannerValue: { fontSize: 15, fontWeight: '700' },
+  adminBannerLabel: { fontSize: 13 },
+  adminBannerDivider: { width: 1, height: 16 },
 
   // Tab Bar
   tabBar: {
