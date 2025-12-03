@@ -1,7 +1,7 @@
 /**
  * Optimized Event Detail Screen
  * Modern design with professional UI/UX, performance optimizations, and accessibility
- * File: app/events/[id].tsx
+ * File: app/events/[slug].tsx
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -46,7 +46,7 @@ import { Colors } from '../../constants/colors';
 import { EVENT_CATEGORY_CONFIG } from '../../constants/eventCategories';
 import { Event, EventRegistration } from '../../types';
 import {
-  getEventById,
+  getEventBySlug,
   checkUserRegistration,
   registerForEvent,
   cancelEventRegistration,
@@ -143,7 +143,7 @@ const Spacing = {
 // CUSTOM HOOKS
 // ============================================================================
 
-function useEventDetails(eventId: string | undefined) {
+function useEventDetails(eventSlug: string | undefined) {
   const [event, setEvent] = useState<Event | null>(null);
   const [registration, setRegistration] = useState<EventRegistration | null>(null);
   const [registrations, setRegistrations] = useState<EventRegistration[]>([]);
@@ -152,36 +152,47 @@ function useEventDetails(eventId: string | undefined) {
   const { user, isAdmin } = useAuth();
 
   const fetchEventData = useCallback(async () => {
-    if (!eventId) return;
+    if (!eventSlug) return;
 
     try {
       setLoading(true);
       setError(null);
 
-      const [eventResponse, registrationResponse] = await Promise.all([
-        getEventById(eventId),
-        user ? checkUserRegistration(eventId, user.id) : Promise.resolve({ success: true, data: null }),
-      ]);
+      const eventResponse = await getEventBySlug(eventSlug);
 
-      if (eventResponse.success && eventResponse.data) {
-        setEvent(eventResponse.data);
-      } else {
-        throw new Error('Failed to load event details');
+      if (!eventResponse.success || !eventResponse.data) {
+        throw new Error(eventResponse.error || 'Failed to load event details');
       }
+
+      const eventData = eventResponse.data;
+      setEvent(eventData);
+
+      const eventId = eventData.id;
+
+      const registrationPromise = user
+        ? checkUserRegistration(eventId, user.id)
+        : Promise.resolve({ success: true, data: null });
+
+      const registrationsPromise = isAdmin
+        ? getEventRegistrations(eventId)
+        : Promise.resolve({ success: true, data: [] as EventRegistration[] });
+
+      const [registrationResponse, registrationsResponse] = await Promise.all([
+        registrationPromise,
+        registrationsPromise,
+      ]);
 
       if (registrationResponse.success) {
         setRegistration(registrationResponse.data);
       }
 
-      // Load registrations for admin
-      if (isAdmin && eventResponse.data) {
-        const registrationsResponse = await getEventRegistrations(eventId);
-        if (registrationsResponse.success && registrationsResponse.data) {
-          const activeRegistrations = registrationsResponse.data.filter(
-            (reg) => reg.status !== 'cancelled'
-          );
-          setRegistrations(activeRegistrations);
-        }
+      if (registrationsResponse.success && registrationsResponse.data) {
+        const activeRegistrations = registrationsResponse.data.filter(
+          (reg) => reg.status !== 'cancelled'
+        );
+        setRegistrations(activeRegistrations);
+      } else {
+        setRegistrations([]);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Something went wrong';
@@ -190,7 +201,7 @@ function useEventDetails(eventId: string | undefined) {
     } finally {
       setLoading(false);
     }
-  }, [eventId, user, isAdmin]);
+  }, [eventSlug, user, isAdmin]);
 
   useEffect(() => {
     fetchEventData();
@@ -629,14 +640,14 @@ function ErrorScreen({ onRetry, colors }: { onRetry: () => void; colors: any }) 
 // ============================================================================
 
 export default function EventDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { slug } = useLocalSearchParams<{ slug: string }>();
   const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const { user } = useAuth();
   const responsive = getResponsiveValues();
 
-  const { event, registration, registrations, loading, error, refetch } = useEventDetails(id);
+  const { event, registration, registrations, loading, error, refetch } = useEventDetails(slug);
 
   const [registering, setRegistering] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -660,10 +671,12 @@ export default function EventDetailScreen() {
     if (!event) return;
 
     try {
-      const message = `Join me at "${event.title}"!\n\n📅 ${formatEventDate(event.eventDate)}\n⏰ ${formatEventTime(event.startTime)}\n📍 ${event.isVirtual ? 'Virtual Event' : event.location}\n\nRegister on Volunteers Inc!`;
+      const shareUrl = `https://vibe.volunteersinc.org/events/${event.slug}`;
+      const message = `Join me at "${event.title}"!\n\n📅 ${formatEventDate(event.eventDate)}\n⏰ ${formatEventTime(event.startTime)}\n📍 ${event.isVirtual ? 'Virtual Event' : event.location}\n\nSave your spot: ${shareUrl}`;
 
       await Share.share({
         message,
+        url: shareUrl,
         title: `Event: ${event.title}`,
       });
     } catch (error) {
@@ -673,7 +686,7 @@ export default function EventDetailScreen() {
   }, [event]);
 
   const handleRegister = useCallback(async () => {
-    if (!event || !id) return;
+    if (!event) return;
 
     if (!user) {
       showToast('Please sign in to register for events', 'warning');
@@ -709,7 +722,7 @@ export default function EventDetailScreen() {
 
     // For paid events, navigate to registration screen
     if (!event.isFree) {
-      router.push(`/events/${id}/register`);
+      router.push(`/events/${event.slug}/register`);
       return;
     }
 
@@ -717,7 +730,7 @@ export default function EventDetailScreen() {
     setRegistering(true);
     try {
       const response = await registerForEvent({
-        eventId: id,
+        eventId: event.id,
         userId: user.id,
       });
 
@@ -732,7 +745,7 @@ export default function EventDetailScreen() {
     } finally {
       setRegistering(false);
     }
-  }, [event, id, user, registration, router, refetch]);
+  }, [event, user, registration, router, refetch]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);

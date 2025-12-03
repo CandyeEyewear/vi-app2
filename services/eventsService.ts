@@ -33,6 +33,7 @@ function transformEvent(row: any): Event {
   
   return {
     id: row.id,
+    slug: row.slug,
     title: row.title,
     description: row.description,
     category: row.category,
@@ -103,6 +104,11 @@ function transformRegistration(row: any): EventRegistration {
     cancelledAt: row.cancelled_at,
     attendedAt: row.attended_at,
   } as EventRegistration;
+}
+
+function isValidUUID(str: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
 }
 
 
@@ -212,19 +218,35 @@ export async function getEvents(options?: {
 }
 
 /**
- * Fetch a single event by ID
+ * Fetch a single event by slug (with UUID fallback for legacy links)
  */
-export async function getEventById(eventId: string): Promise<ApiResponse<Event>> {
+export async function getEventBySlug(identifier: string): Promise<ApiResponse<Event>> {
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('events')
       .select(`
         *,
         creator:users!created_by(id, full_name, avatar_url),
         cause:causes(id, title, image_url)
       `)
-      .eq('id', eventId)
+      .eq('slug', identifier)
       .single();
+
+    // Fallback to UUID lookup for backward compatibility
+    if ((error || !data) && isValidUUID(identifier)) {
+      const fallback = await supabase
+        .from('events')
+        .select(`
+          *,
+          creator:users!created_by(id, full_name, avatar_url),
+          cause:causes(id, title, image_url)
+        `)
+        .eq('id', identifier)
+        .single();
+
+      data = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) throw error;
 
@@ -237,6 +259,13 @@ export async function getEventById(eventId: string): Promise<ApiResponse<Event>>
     console.error('Error fetching event:', error);
     return { success: false, error: 'Failed to fetch event' };
   }
+}
+
+/**
+ * Legacy helper retained for compatibility (accepts slug or UUID)
+ */
+export async function getEventById(eventId: string): Promise<ApiResponse<Event>> {
+  return getEventBySlug(eventId);
 }
 
 /**
