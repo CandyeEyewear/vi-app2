@@ -60,6 +60,7 @@ import {
 } from '../../services/eventsService';
 import { useAuth } from '../../contexts/AuthContext';
 import { showToast } from '../../utils/toast';
+import { logImageDebugInfo } from '../../utils/webImageDebug';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import Button from '../../components/Button';
 import { ShimmerSkeleton } from '../../components/ShimmerSkeleton';
@@ -265,13 +266,10 @@ function EventImage({
   event: Event; 
   colors: any;
 }) {
-  const responsive = getResponsiveValues();
-  const heroHeight = responsive.isSmallMobile
-    ? 280
-    : responsive.isTablet || responsive.isDesktop
-    ? 400
-    : 320;
+  // Use useRef to avoid re-renders
+  const imageLoadingRef = useRef(true);
   const [imageError, setImageError] = useState(false);
+  const [showLoader, setShowLoader] = useState(true);
   const categoryConfig = EVENT_CATEGORY_CONFIG[event.category] || EVENT_CATEGORY_CONFIG.other;
   const imageSource = useMemo(() => (event.imageUrl ? { uri: event.imageUrl } : null), [event.imageUrl]);
   const loadingRef = useRef(true);
@@ -306,28 +304,59 @@ function EventImage({
     }).start();
   }, [loaderOpacity]);
 
+  // Memoize the source object to prevent recreation on every render
+  const imageSource = useMemo(() => {
+    return event.imageUrl ? { uri: event.imageUrl } : null;
+  }, [event.imageUrl]);
+
+  // Debug: Log image URL (only once per URL change)
+  React.useEffect(() => {
+    if (event.imageUrl) {
+      logImageDebugInfo(event.imageUrl, `EventImage: ${event.title}`);
+    } else {
+      console.log('[EventImage] Event:', event.title, 'No image URL');
+    }
+  }, [event.imageUrl, event.title]);
+
+  // Memoize callbacks to prevent recreation
+  const handleLoadStart = useCallback(() => {
+    console.log('[EventImage] Image load started:', event.imageUrl);
+    imageLoadingRef.current = true;
+  }, [event.imageUrl]);
+
+  const handleLoadEnd = useCallback(() => {
+    console.log('[EventImage] Image load ended successfully:', event.imageUrl);
+    imageLoadingRef.current = false;
+    setShowLoader(false);
+  }, [event.imageUrl]);
+
+  const handleError = useCallback((error: any) => {
+    console.error('[EventImage] Image load error for:', event.title);
+    console.error('  URL:', event.imageUrl);
+    console.error('  Error:', error.nativeEvent);
+    console.error('  Tip: Open URL in new tab to test if accessible');
+    setImageError(true);
+    setShowLoader(false);
+  }, [event.title, event.imageUrl]);
+
   return (
-    <View style={[styles.imageContainer, { height: heroHeight }]}>
+    <View style={styles.imageContainer}>
       {imageSource && !imageError ? (
         <>
-          <AnimatedExpoImage
+          <Image
             source={imageSource}
-            style={[styles.eventImage, { height: heroHeight, opacity: imageOpacity }]}
-            contentFit="cover"
-            transition={600}
-            cachePolicy="memory-disk"
-            onError={handleImageError}
-            onLoadEnd={handleImageLoaded}
+            style={styles.eventImage}
+            onLoadStart={handleLoadStart}
+            onLoadEnd={handleLoadEnd}
+            onError={handleError}
+            resizeMode="cover"
             accessibilityLabel={`Event image for ${event.title}`}
           />
-          <Animated.View
-            style={[
-              styles.imageLoadingOverlay,
-              { opacity: loaderOpacity, backgroundColor: colors.imageOverlayLight },
-            ]}
-          >
-            <ActivityIndicator size="large" color={colors.primary} />
-          </Animated.View>
+          {showLoader && (
+            <View style={styles.imageLoadingOverlay}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          )}
         </>
       ) : (
         <View
