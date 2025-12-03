@@ -212,12 +212,12 @@ export function EventsList({
           <Pressable
             style={({ pressed }) => [
               styles.clearButton, 
-              { backgroundColor: '#38B6FF' },
+              { backgroundColor: colors.primary },
               pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }
             ]}
             onPress={handleClearSearch}
           >
-            <Text style={styles.clearButtonText}>Clear Search</Text>
+            <Text style={[styles.clearButtonText, { color: colors.textOnPrimary }]}>Clear Search</Text>
           </Pressable>
         )}
       </View>
@@ -265,8 +265,8 @@ export function EventsList({
                 style={({ pressed }) => [
                   styles.categoryChip,
                   {
-                    backgroundColor: selectedCategory === category.value ? '#38B6FF' : colors.background,
-                    borderColor: selectedCategory === category.value ? '#38B6FF' : colors.border,
+                    backgroundColor: selectedCategory === category.value ? colors.primary : colors.card,
+                    borderColor: selectedCategory === category.value ? colors.primary : colors.border,
                   },
                   pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }
                 ]}
@@ -275,7 +275,7 @@ export function EventsList({
                 <Text
                   style={[
                     styles.categoryChipText,
-                    { color: selectedCategory === category.value ? '#FFFFFF' : colors.textSecondary },
+                    { color: selectedCategory === category.value ? colors.textOnPrimary : colors.textSecondary },
                   ]}
                 >
                   {category.emoji ? `${category.emoji} ` : ''}{category.label}
@@ -313,7 +313,7 @@ export function EventsList({
 
     return (
       <View style={styles.loadingMoreContainer}>
-        <ActivityIndicator size="small" color="#38B6FF" />
+        <ActivityIndicator size="small" color={colors.primary} />
         <Text style={[styles.loadingMoreText, { color: colors.textSecondary }]}>
           Loading more...
         </Text>
@@ -345,8 +345,8 @@ export function EventsList({
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor="#38B6FF"
-            colors={['#38B6FF']}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
           />
         }
         onEndReached={handleLoadMore}
@@ -437,7 +437,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   clearButtonText: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
   },

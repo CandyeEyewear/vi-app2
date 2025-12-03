@@ -149,7 +149,7 @@ export function CauseCard({ cause, onPress, onDonatePress }: CauseCardProps) {
                 styles.progressFill,
                 {
                   width: `${progress}%`,
-                  backgroundColor: progress >= 100 ? '#4CAF50' : '#38B6FF',
+                  backgroundColor: progress >= 100 ? colors.success : colors.primary,
                 },
               ]}
             />
@@ -192,16 +192,19 @@ export function CauseCard({ cause, onPress, onDonatePress }: CauseCardProps) {
         </View>
 
         {/* Donate Button */}
-        <TouchableOpacity
-          style={[styles.donateButton, { backgroundColor: '#38B6FF' }]}
+        <Pressable
+          style={({ pressed }) => [
+            styles.donateButton, 
+            { backgroundColor: colors.primary },
+            pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }
+          ]}
           onPress={handleDonatePress}
-          activeOpacity={0.8}
           accessibilityRole="button"
           accessibilityLabel={`Donate to ${cause.title}`}
         >
-          <Heart size={16} color="#FFFFFF" />
-          <Text style={styles.donateButtonText}>Donate Now</Text>
-        </TouchableOpacity>
+          <Heart size={16} color={colors.textOnPrimary} />
+          <Text style={[styles.donateButtonText, { color: colors.textOnPrimary }]}>Donate Now</Text>
+        </Pressable>
       </View>
     </Pressable>
     <ShareCauseModal
@@ -355,7 +358,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   donateButtonText: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
   },

@@ -151,7 +151,7 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
 
         {/* Date Badge */}
         <View style={[styles.dateBadge, { backgroundColor: colors.card }]}>
-          <Text style={[styles.dateMonth, { color: '#38B6FF' }]}>
+          <Text style={[styles.dateMonth, { color: colors.primary }]}>
             {new Date(event.eventDate).toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}
           </Text>
           <Text style={[styles.dateDay, { color: colors.text }]}>
@@ -192,8 +192,8 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
         <View style={styles.infoRow}>
           {event.isVirtual ? (
             <>
-              <Video size={14} color="#38B6FF" />
-              <Text style={[styles.infoText, { color: '#38B6FF' }]}>
+              <Video size={14} color={colors.primary} />
+              <Text style={[styles.infoText, { color: colors.primary }]}>
                 Virtual Event
               </Text>
             </>
@@ -245,15 +245,15 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
           <Pressable
             style={({ pressed }) => [
               styles.registerButton, 
-              { backgroundColor: '#38B6FF' },
+              { backgroundColor: colors.primary },
               pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }
             ]}
             onPress={handleRegisterPress}
             accessibilityRole="button"
             accessibilityLabel={`Register for ${event.title}`}
           >
-            <Ticket size={16} color="#FFFFFF" />
-            <Text style={styles.registerButtonText}>
+            <Ticket size={16} color={colors.textOnPrimary} />
+            <Text style={[styles.registerButtonText, { color: colors.textOnPrimary }]}>
               {event.isFree ? 'Register Now' : 'Get Tickets'}
             </Text>
           </Pressable>
@@ -261,8 +261,8 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
 
         {/* View Details (if no registration required) */}
         {!event.registrationRequired && (
-          <View style={[styles.viewDetailsButton, { borderColor: '#38B6FF' }]}>
-            <Text style={[styles.viewDetailsText, { color: '#38B6FF' }]}>
+          <View style={[styles.viewDetailsButton, { borderColor: colors.primary }]}>
+            <Text style={[styles.viewDetailsText, { color: colors.primary }]}>
               View Details
             </Text>
           </View>
@@ -443,7 +443,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   registerButtonText: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
   },
