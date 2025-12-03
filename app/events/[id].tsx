@@ -944,9 +944,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: Spacing.lg,
     left: Spacing.lg,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   categoryBadgeText: {
     fontSize: 12,
