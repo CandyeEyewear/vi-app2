@@ -605,13 +605,24 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
 
     try {
-      await supabase
+      const timestamp = new Date().toISOString();
+      if (__DEV__) {
+        console.log(`[Update Online Status] User: ${user.fullName}, Online: ${isOnline}, Time: ${timestamp}`);
+      }
+      
+      const { error } = await supabase
         .from('users')
         .update({
           online_status: isOnline,
-          last_seen: new Date().toISOString(),
+          last_seen: timestamp,
         })
         .eq('id', user.id);
+      
+      if (error) {
+        console.error('Error updating online status:', error);
+      } else if (__DEV__) {
+        console.log(`[Update Online Status] ✅ Successfully updated`);
+      }
     } catch (error) {
       console.error('Error updating online status:', error);
     }

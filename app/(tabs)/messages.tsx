@@ -123,6 +123,18 @@ const ConversationRow = ({ conversation, colors, currentUserId, onPress }: Conve
   const lastMessage = conversation.lastMessage;
   const lastMessageFromCurrentUser = lastMessage?.senderId === currentUserId;
   const preview = parseMessagePreview(lastMessage?.text);
+  
+  // Debug: Check online status calculation
+  const isOnline = isUserOnline(otherUser?.lastSeen);
+  if (__DEV__) {
+    console.log(`[Online Status Debug] ${otherUser?.fullName}:`, {
+      lastSeen: otherUser?.lastSeen,
+      isOnline,
+      timeSinceLastSeen: otherUser?.lastSeen 
+        ? `${Math.floor((Date.now() - new Date(otherUser.lastSeen).getTime()) / 1000)}s ago`
+        : 'never',
+    });
+  }
 
   const fallbackPreview = preview.hasAttachment
     ? 'Shared an attachment'
@@ -232,9 +244,11 @@ export default function MessagesScreen() {
       // Set user as online and update last_seen
       updateOnlineStatus(true);
       
-      // Update last_seen every 30 seconds while on this screen
+      // Update last_seen AND refresh conversations every 30 seconds
+      // This ensures we see other users' online status changes
       const interval = setInterval(() => {
         updateOnlineStatus(true);
+        refreshConversations(); // Refresh to see other users' status updates
       }, 30000); // 30 seconds
       
       // Cleanup: set user as offline when leaving screen
