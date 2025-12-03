@@ -977,11 +977,21 @@ export default function EventDetailScreen() {
             />
 
             {/* Stats Row */}
-            <View style={styles.statsRow}>
+            <View
+              style={[
+                styles.statsRow,
+                responsive.isMobile && styles.statsRowStacked,
+              ]}
+            >
               {stats.map(({ key, icon: IconComponent, value, label }) => (
                 <View
                   key={key}
-                  style={[styles.statCard, { backgroundColor: colors.card }, getPremiumShadow(colors)]}
+                  style={[
+                    styles.statCard,
+                    { backgroundColor: colors.card },
+                    getPremiumShadow(colors),
+                    responsive.isMobile && styles.statCardStacked,
+                  ]}
                 >
                   <View style={[styles.statIcon, { backgroundColor: colors.primarySoft }]}>
                     <IconComponent size={20} color={colors.primary} />
@@ -1273,6 +1283,9 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     marginBottom: Spacing.xl,
   },
+  statsRowStacked: {
+    flexDirection: 'column',
+  },
   statCard: {
     flex: 1,
     alignItems: 'center',
@@ -1280,6 +1293,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     gap: Spacing.sm,
     borderRadius: 16,
+  },
+  statCardStacked: {
+    flex: 0,
+    width: '100%',
   },
   statIcon: {
     width: 44,
