@@ -60,6 +60,10 @@ export interface User {
   createdAt: string;
   updatedAt: string;
   
+  // Online status
+  onlineStatus?: boolean;
+  lastSeen?: string;
+  
   // Donation stats
   totalDonated?: number;
   donationCount?: number;

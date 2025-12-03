@@ -27,6 +27,7 @@ import WebContainer from '../../components/WebContainer';
 import { EmptyState } from '../../components/EmptyState';
 import { UserAvatar, UserNameWithBadge, OnlineStatusDot, MessageStatus } from '../../components';
 import type { Conversation } from '../../types';
+import { isUserOnline } from '../../utils/userStatus';
 
 const FILTERS: { id: 'all' | 'unread'; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -159,7 +160,7 @@ const ConversationRow = ({ conversation, colors, currentUserId, onPress }: Conve
           size={56}
         />
         <OnlineStatusDot
-          isOnline={Boolean(otherUser?.onlineStatus)}
+          isOnline={isUserOnline(otherUser?.lastSeen)}
           style={styles.onlineDot}
         />
       </View>
@@ -217,16 +218,31 @@ export default function MessagesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { conversations, loading, refreshConversations } = useMessaging();
+  const { conversations, loading, refreshConversations, updateOnlineStatus } = useMessaging();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'unread'>('all');
   const [refreshing, setRefreshing] = useState(false);
 
+  // Update last_seen when screen is focused
   useFocusEffect(
     useCallback(() => {
       refreshConversations();
-    }, [refreshConversations])
+      
+      // Set user as online and update last_seen
+      updateOnlineStatus(true);
+      
+      // Update last_seen every 30 seconds while on this screen
+      const interval = setInterval(() => {
+        updateOnlineStatus(true);
+      }, 30000); // 30 seconds
+      
+      // Cleanup: set user as offline when leaving screen
+      return () => {
+        clearInterval(interval);
+        updateOnlineStatus(false);
+      };
+    }, [refreshConversations, updateOnlineStatus])
   );
 
   const handleRefresh = useCallback(async () => {

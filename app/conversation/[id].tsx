@@ -41,13 +41,14 @@ import TypingIndicator from '../../components/TypingIndicator';
 import OnlineStatusDot from '../../components/OnlineStatusDot';
 import SwipeableMessage from '../../components/SwipeableMessage';
 import { UserAvatar, UserNameWithBadge } from '../../components/index';
+import { isUserOnline } from '../../utils/userStatus';
 
 export default function ConversationScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const { conversations, sendMessage, markAsRead, markMessageDelivered, deleteMessage } = useMessaging();
+  const { conversations, sendMessage, markAsRead, markMessageDelivered, deleteMessage, updateOnlineStatus } = useMessaging();
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -177,6 +178,14 @@ export default function ConversationScreen() {
 
     loadMessages();
     markAsRead(id);
+    
+    // Update last_seen when entering conversation
+    updateOnlineStatus(true);
+    
+    // Update last_seen every 30 seconds while in conversation
+    const lastSeenInterval = setInterval(() => {
+      updateOnlineStatus(true);
+    }, 30000); // 30 seconds
     
     // Subscribe to new messages (INSERT)
     const messagesChannel = supabase.channel(`conversation:${id}`);
@@ -332,6 +341,12 @@ export default function ConversationScreen() {
 
     // Cleanup: Remove presence when leaving chat
     return () => {
+      // Clear last_seen interval
+      clearInterval(lastSeenInterval);
+      
+      // Update status to offline when leaving
+      updateOnlineStatus(false);
+      
       // Untrack presence before unsubscribing
       presenceChannel.untrack();
       presenceChannel.unsubscribe();
@@ -342,7 +357,7 @@ export default function ConversationScreen() {
       presenceChannelRef.current = null;
       setOtherUserOnline(false);
     };
-  }, [id, user, otherUser?.id]);
+  }, [id, user, otherUser?.id, updateOnlineStatus]);
 
   const loadMessages = async (loadMore = false) => {
     try {
@@ -982,7 +997,8 @@ export default function ConversationScreen() {
               membershipStatus={otherUser.membershipStatus || 'inactive'}
               isPartnerOrganization={otherUser.is_partner_organization}
             />
-            {otherUserOnline && (
+            {/* Show online dot if user is in this conversation OR if they're generally online in the app */}
+            {(otherUserOnline || isUserOnline(otherUser.lastSeen)) && (
               <View style={{ position: 'absolute', bottom: -2, right: -2 }}>
                 <OnlineStatusDot isOnline={true} size={12} />
               </View>
@@ -997,7 +1013,10 @@ export default function ConversationScreen() {
               isPartnerOrganization={otherUser.is_partner_organization}
               style={styles.headerName}
             />
-            {otherUserOnline && <Text style={styles.onlineText}>Online</Text>}
+            {/* Show "Online" text if user is in this conversation OR generally online */}
+            {(otherUserOnline || isUserOnline(otherUser.lastSeen)) && (
+              <Text style={styles.onlineText}>Online</Text>
+            )}
           </View>
         </TouchableOpacity>
       </View>
