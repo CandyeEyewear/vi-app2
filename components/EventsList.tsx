@@ -4,7 +4,7 @@
  * File: components/EventsList.tsx
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,9 @@ import {
   ActivityIndicator,
   ScrollView,
   Dimensions,
+  Animated,
 } from 'react-native';
+import { Check } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Search, X, Calendar, Filter } from 'lucide-react-native';
 import { Event, EventCategory } from '../types';
@@ -183,6 +185,52 @@ export function EventsList({
     setSearchQuery('');
   }, []);
 
+  // Animated Filter Chip Component
+  const AnimatedCategoryChip = useCallback(({ category }: { category: typeof EVENT_CATEGORIES[0] }) => {
+    const isSelected = selectedCategory === category.value;
+    const scaleAnim = useRef(new Animated.Value(1)).current;
+    const bgAnim = useRef(new Animated.Value(isSelected ? 1 : 0)).current;
+
+    useEffect(() => {
+      Animated.timing(bgAnim, { toValue: isSelected ? 1 : 0, duration: 200, useNativeDriver: false }).start();
+    }, [isSelected]);
+
+    const handlePressIn = () => {
+      Animated.spring(scaleAnim, { toValue: 0.95, useNativeDriver: true }).start();
+    };
+
+    const handlePressOut = () => {
+      Animated.spring(scaleAnim, { toValue: 1, friction: 3, useNativeDriver: true }).start();
+    };
+
+    const backgroundColor = bgAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [colors.card, colors.primary],
+    });
+
+    const borderColor = bgAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [colors.border, colors.primary],
+    });
+
+    return (
+      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+        <Pressable onPress={() => setSelectedCategory(category.value)} onPressIn={handlePressIn} onPressOut={handlePressOut}>
+          <Animated.View style={[styles.categoryChip, { backgroundColor, borderColor }]}>
+            {isSelected && (
+              <View style={styles.chipCheckmark}>
+                <Check size={12} color={colors.textOnPrimary} strokeWidth={3} />
+              </View>
+            )}
+            <Text style={[styles.categoryChipText, { color: isSelected ? colors.textOnPrimary : colors.text }, isSelected && styles.categoryChipTextSelected]}>
+              {category.emoji ? `${category.emoji} ` : ''}{category.label}
+            </Text>
+          </Animated.View>
+        </Pressable>
+      </Animated.View>
+    );
+  }, [selectedCategory, colors]);
+
   // Render event item
   const renderEventItem = useCallback(({ item }: { item: Event }) => (
     <EventCard
@@ -260,27 +308,7 @@ export function EventsList({
             contentContainerStyle={styles.categoriesContent}
           >
             {EVENT_CATEGORIES.map((category) => (
-              <Pressable
-                key={category.value}
-                style={({ pressed }) => [
-                  styles.categoryChip,
-                  {
-                    backgroundColor: selectedCategory === category.value ? colors.primary : colors.card,
-                    borderColor: selectedCategory === category.value ? colors.primary : colors.border,
-                  },
-                  pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }
-                ]}
-                onPress={() => setSelectedCategory(category.value)}
-              >
-                <Text
-                  style={[
-                    styles.categoryChipText,
-                    { color: selectedCategory === category.value ? colors.textOnPrimary : colors.textSecondary },
-                  ]}
-                >
-                  {category.emoji ? `${category.emoji} ` : ''}{category.label}
-                </Text>
-              </Pressable>
+              <AnimatedCategoryChip key={category.value} category={category} />
             ))}
           </ScrollView>
         </View>
@@ -394,14 +422,23 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   categoryChip: {
-    paddingHorizontal: isSmallScreen ? 10 : 12,
-    paddingVertical: isSmallScreen ? 6 : 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: isSmallScreen ? 12 : 14,
+    paddingVertical: isSmallScreen ? 8 : 10,
     borderRadius: 20,
     borderWidth: 1,
     marginRight: 8,
+    position: 'relative',
+  },
+  chipCheckmark: {
+    marginRight: 6,
   },
   categoryChipText: {
     fontSize: isSmallScreen ? 12 : 13,
+    fontWeight: '500',
+  },
+  categoryChipTextSelected: {
     fontWeight: '600',
   },
   resultsInfo: {
