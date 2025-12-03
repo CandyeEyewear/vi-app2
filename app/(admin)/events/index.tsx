@@ -14,7 +14,7 @@ import {
   useColorScheme,
   RefreshControl,
   Dimensions,
-  ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -43,9 +43,41 @@ import {
 } from '../../../services/eventsService';
 import { useAuth } from '../../../contexts/AuthContext';
 import CustomAlert from '../../../components/CustomAlert';
+import { ShimmerSkeleton } from '../../../components/ShimmerSkeleton';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
+
+// Modern Loading Skeleton
+function EventsLoadingSkeleton({ colors }: { colors: any }) {
+  return (
+    <ScrollView style={styles.listContent}>
+      {[...Array(5)].map((_, index) => (
+        <View 
+          key={`skeleton-${index}`}
+          style={[styles.eventItem, { backgroundColor: colors.card, borderColor: colors.border }]}
+        >
+          {/* Header */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+            <ShimmerSkeleton colors={colors} style={{ width: '70%', height: 20, borderRadius: 8 }} />
+            <ShimmerSkeleton colors={colors} style={{ width: 24, height: 24, borderRadius: 12 }} />
+          </View>
+          
+          {/* Status Badge */}
+          <ShimmerSkeleton colors={colors} style={{ width: 80, height: 24, borderRadius: 12, marginBottom: 12 }} />
+          
+          {/* Details */}
+          <View style={{ gap: 8 }}>
+            <ShimmerSkeleton colors={colors} style={{ width: '60%', height: 14, borderRadius: 6 }} />
+            <ShimmerSkeleton colors={colors} style={{ width: '50%', height: 14, borderRadius: 6 }} />
+            <ShimmerSkeleton colors={colors} style={{ width: '70%', height: 14, borderRadius: 6 }} />
+            <ShimmerSkeleton colors={colors} style={{ width: '45%', height: 14, borderRadius: 6 }} />
+          </View>
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
 
 // Status badge colors
 const STATUS_CONFIG: Record<EventStatus, { label: string; color: string; bgColor: string }> = {
@@ -392,9 +424,7 @@ export default function AdminEventsScreen() {
 
       {/* Events List */}
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#38B6FF" />
-        </View>
+        <EventsLoadingSkeleton colors={colors} />
       ) : (
         <FlatList
           data={events}
