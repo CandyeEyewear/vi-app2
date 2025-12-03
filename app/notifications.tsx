@@ -12,10 +12,12 @@ import {
   StyleSheet,
   ActivityIndicator,
   useColorScheme,
+  Animated,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Bell, MessageCircle, Calendar, UserPlus, Megaphone, Trash2, Check, X, User, Heart, Ticket } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { ChevronLeft, Bell, MessageCircle, Calendar, UserPlus, Megaphone, Trash2, Check, X, User, Heart, Ticket, Sparkles } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -266,19 +268,59 @@ export default function NotificationsScreen() {
     return notification.sender_id || null;
   };
 
-  const getIcon = (type: string) => {
-    switch (type) {
-      case 'announcement':
-        return <Megaphone size={20} color={colors.primary} />;
-      case 'opportunity':
-        return <Calendar size={20} color={colors.primary} />;
-      case 'cause':
-        return <Heart size={20} color={colors.primary} />;
-      case 'event':
-        return <Ticket size={20} color={colors.primary} />;
-      default:
-        return <Bell size={20} color={colors.primary} />;
-    }
+  const getNotificationStyle = (type: string) => {
+    const styles = {
+      announcement: {
+        icon: Megaphone,
+        gradient: [Colors.gradients.accent[0], Colors.gradients.accent[1]],
+        iconBg: colors.accentSoft,
+        iconColor: colors.accent,
+        borderColor: colors.accent,
+      },
+      opportunity: {
+        icon: Calendar,
+        gradient: [Colors.gradients.primary[0], Colors.gradients.primary[1]],
+        iconBg: colors.primarySoft,
+        iconColor: colors.primary,
+        borderColor: colors.primary,
+      },
+      cause: {
+        icon: Heart,
+        gradient: ['#EC4899', '#F472B6'],
+        iconBg: 'rgba(236, 72, 153, 0.15)',
+        iconColor: '#EC4899',
+        borderColor: '#EC4899',
+      },
+      event: {
+        icon: Ticket,
+        gradient: ['#8B5CF6', '#A78BFA'],
+        iconBg: 'rgba(139, 92, 246, 0.15)',
+        iconColor: '#8B5CF6',
+        borderColor: '#8B5CF6',
+      },
+      message: {
+        icon: MessageCircle,
+        gradient: Colors.gradients.ocean,
+        iconBg: colors.infoSoft,
+        iconColor: colors.info,
+        borderColor: colors.info,
+      },
+      circle_request: {
+        icon: UserPlus,
+        gradient: Colors.gradients.purple,
+        iconBg: colors.communitySoft,
+        iconColor: colors.community,
+        borderColor: colors.community,
+      },
+      default: {
+        icon: Bell,
+        gradient: [colors.primary, colors.primaryDark],
+        iconBg: colors.primarySoft,
+        iconColor: colors.primary,
+        borderColor: colors.primary,
+      },
+    };
+    return styles[type as keyof typeof styles] || styles.default;
   };
 
   const getNotificationAvatar = (notification: Notification): SenderInfo | null => {
@@ -309,26 +351,43 @@ export default function NotificationsScreen() {
 
   const renderNotification = ({ item }: { item: Notification }) => {
     const isSelected = selectedNotifications.includes(item.id);
+    const notifStyle = getNotificationStyle(item.type);
+    const Icon = notifStyle.icon;
     
     return (
       <Pressable
         style={({ pressed }) => [
           styles.notificationCard,
-          { backgroundColor: item.is_read ? colors.card : colors.background },
-          { borderLeftColor: colors.primary },
-          isSelected && { backgroundColor: colors.primary + '20' },
-          pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }
+          { 
+            backgroundColor: item.is_read ? colors.card : colors.surfaceElevated,
+            borderColor: colors.border,
+          },
+          isSelected && { 
+            backgroundColor: notifStyle.iconBg,
+            borderColor: notifStyle.borderColor,
+            borderWidth: 2,
+          },
+          pressed && { transform: [{ scale: 0.98 }] }
         ]}
         onPress={() => handleNotificationPress(item)}
         onLongPress={() => handleNotificationLongPress(item.id)}
         delayLongPress={500}
       >
+        {/* Gradient accent bar on left */}
+        <LinearGradient
+          colors={notifStyle.gradient}
+          style={styles.accentBar}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+        />
+
         {isSelected && (
-          <View style={[styles.selectionIndicator, { backgroundColor: colors.primary }]}>
-            <Check size={16} color="#FFFFFF" />
+          <View style={[styles.selectionIndicator, { backgroundColor: notifStyle.iconColor }]}>
+            <Check size={16} color={colors.textOnPrimary} strokeWidth={3} />
           </View>
         )}
-        {/* Show avatar for message and circle_request, icon for others */}
+
+        {/* Show avatar for message and circle_request, enhanced icon for others */}
         {(item.type === 'message' || item.type === 'circle_request') ? (
           (() => {
             const senderInfo = getNotificationAvatar(item);
@@ -346,20 +405,30 @@ export default function NotificationsScreen() {
             );
           })()
         ) : (
-          <View style={styles.iconContainer}>{getIcon(item.type)}</View>
+          <View style={[styles.iconContainer, { backgroundColor: notifStyle.iconBg }]}>
+            <Icon size={22} color={notifStyle.iconColor} strokeWidth={2} />
+          </View>
         )}
+
         <View style={styles.contentContainer}>
-          <Text style={[styles.title, { color: colors.text }]}>{item.title}</Text>
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+              {item.title}
+            </Text>
+            {!item.is_read && !isSelected && (
+              <View style={styles.newBadge}>
+                <Sparkles size={10} color={colors.textOnPrimary} fill={colors.textOnPrimary} />
+                <Text style={[styles.newBadgeText, { color: colors.textOnPrimary }]}>NEW</Text>
+              </View>
+            )}
+          </View>
           <Text style={[styles.message, { color: colors.textSecondary }]} numberOfLines={2}>
             {item.message}
           </Text>
-          <Text style={[styles.time, { color: colors.textSecondary }]}>
+          <Text style={[styles.time, { color: colors.textTertiary }]}>
             {formatTimeAgo(item.created_at)}
           </Text>
         </View>
-        {!item.is_read && !isSelected && (
-          <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />
-        )}
       </Pressable>
     );
   };
@@ -377,20 +446,24 @@ export default function NotificationsScreen() {
           },
         ]}
       >
-        <Pressable onPress={() => {
-          if (selectedNotifications.length > 0) {
-            clearSelection();
-          } else {
-            router.back();
-          }
-        }} style={({ pressed }) => [
-          styles.backButton,
-          pressed && { opacity: 0.7 }
-        ]}>
+        <Pressable 
+          onPress={() => {
+            if (selectedNotifications.length > 0) {
+              clearSelection();
+            } else {
+              router.back();
+            }
+          }} 
+          style={({ pressed }) => [
+            styles.backButton,
+            { backgroundColor: colors.surfaceElevated },
+            pressed && { opacity: 0.7, transform: [{ scale: 0.95 }] }
+          ]}
+        >
           {selectedNotifications.length > 0 ? (
-            <X size={28} color={colors.primary} />
+            <X size={24} color={colors.text} />
           ) : (
-            <ChevronLeft size={28} color={colors.primary} />
+            <ChevronLeft size={24} color={colors.text} />
           )}
         </Pressable>
         <Text style={[styles.headerTitle, { color: colors.text }]}>
@@ -399,11 +472,15 @@ export default function NotificationsScreen() {
             : 'Notifications'}
         </Text>
         {selectedNotifications.length > 0 ? (
-          <Pressable onPress={handleDeleteSelected} style={({ pressed }) => [
-            styles.deleteButton,
-            pressed && { opacity: 0.7, transform: [{ scale: 0.95 }] }
-          ]}>
-            <Trash2 size={24} color={colors.error} />
+          <Pressable 
+            onPress={handleDeleteSelected} 
+            style={({ pressed }) => [
+              styles.deleteButton,
+              { backgroundColor: colors.errorSoft },
+              pressed && { opacity: 0.7, transform: [{ scale: 0.95 }] }
+            ]}
+          >
+            <Trash2 size={20} color={colors.error} />
           </Pressable>
         ) : (
           <View style={{ width: 40 }} />
@@ -423,12 +500,14 @@ export default function NotificationsScreen() {
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Bell size={64} color={colors.textSecondary} />
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                No notifications yet
+              <View style={[styles.emptyIconContainer, { backgroundColor: colors.primarySoft }]}>
+                <Bell size={48} color={colors.primary} strokeWidth={1.5} />
+              </View>
+              <Text style={[styles.emptyText, { color: colors.text }]}>
+                All caught up! 🎉
               </Text>
               <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
-                You'll see updates here when you receive notifications
+                You'll see updates here when you receive new notifications
               </Text>
             </View>
           }
@@ -464,17 +543,21 @@ const styles = StyleSheet.create({
   backButton: {
     width: 40,
     height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   deleteButton: {
     width: 40,
     height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: -0.5,
   },
   loadingContainer: {
     flex: 1,
@@ -487,34 +570,52 @@ const styles = StyleSheet.create({
   notificationCard: {
     flexDirection: 'row',
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     marginBottom: 12,
-    borderLeftWidth: 4,
+    borderWidth: 1,
+    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+    position: 'relative',
+  },
+  accentBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
   },
   selectionIndicator: {
     position: 'absolute',
-    top: 8,
-    left: 8,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    top: 12,
+    left: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 1,
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.light.primary + '15',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   avatarContainer: {
     marginRight: 12,
@@ -537,42 +638,67 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flex: 1,
+    paddingLeft: 4,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
   },
   title: {
     fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
+    fontWeight: '700',
+    flex: 1,
+    letterSpacing: -0.2,
+  },
+  newBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    gap: 3,
+  },
+  newBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   message: {
     fontSize: 14,
-    marginBottom: 4,
+    marginBottom: 6,
     lineHeight: 20,
   },
   time: {
     fontSize: 12,
-  },
-  unreadDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginLeft: 8,
+    fontWeight: '500',
   },
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 64,
+    paddingVertical: 80,
     paddingHorizontal: 32,
   },
+  emptyIconContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
   emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginTop: 16,
-    marginBottom: 8,
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 12,
+    letterSpacing: -0.5,
   },
   emptySubtext: {
-    fontSize: 14,
+    fontSize: 15,
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 22,
   },
 });
