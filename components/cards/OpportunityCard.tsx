@@ -280,9 +280,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   categoryText: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontSize: 12,
+    fontWeight: '600',
   },
   title: {
     fontSize: 16,
