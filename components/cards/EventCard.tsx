@@ -23,6 +23,7 @@ import {
   Ticket,
   Star,
   Share2,
+  Bookmark,
 } from 'lucide-react-native';
 import { Event, EventCategory } from '../../types';
 import { Colors } from '../../constants/colors';
@@ -44,6 +45,8 @@ interface EventCardProps {
   event: Event;
   onPress?: () => void;
   onRegisterPress?: () => void;
+  isSaved?: boolean;
+  onToggleSave?: () => void;
 }
 
 // Category colors and labels
@@ -57,7 +60,7 @@ const CATEGORY_CONFIG: Record<EventCategory, { label: string; color: string; emo
   other: { label: 'Event', color: '#757575', emoji: '📅' },
 };
 
-export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
+export function EventCard({ event, onPress, onRegisterPress, isSaved = false, onToggleSave }: EventCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const [showShareModal, setShowShareModal] = useState(false);
@@ -78,6 +81,11 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
   const handleSharePress = (e: any) => {
     e.stopPropagation();
     setShowShareModal(true);
+  };
+
+  const handleSavePress = (e: any) => {
+    e.stopPropagation();
+    onToggleSave?.();
   };
 
   const handleShare = async (comment?: string, visibility: 'public' | 'circle' = 'public') => {
@@ -131,17 +139,38 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
           </Text>
         </View>
 
-        {/* Share Button */}
-        <Pressable
-          onPress={handleSharePress}
-          style={({ pressed }) => [
-            styles.shareButton,
-            pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] }
-          ]}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Share2 size={18} color="#FFFFFF" />
-        </Pressable>
+        {/* Action Buttons */}
+        <View style={styles.actionButtons}>
+          {/* Bookmark Button */}
+          {onToggleSave && (
+            <Pressable
+              onPress={handleSavePress}
+              style={({ pressed }) => [
+                styles.actionButton,
+                pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] }
+              ]}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Bookmark 
+                size={18} 
+                color="#FFFFFF" 
+                fill={isSaved ? "#FFFFFF" : "none"}
+              />
+            </Pressable>
+          )}
+          
+          {/* Share Button */}
+          <Pressable
+            onPress={handleSharePress}
+            style={({ pressed }) => [
+              styles.actionButton,
+              pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] }
+            ]}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Share2 size={18} color="#FFFFFF" />
+          </Pressable>
+        </View>
 
         {/* Featured Badge */}
         {event.isFeatured && (
@@ -321,17 +350,21 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
   },
-  shareButton: {
+  actionButtons: {
     position: 'absolute',
     top: 12,
     right: 12,
+    flexDirection: 'row',
+    gap: 8,
+    zIndex: 2,
+  },
+  actionButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 2,
   },
   categoryBadgeText: {
     color: '#FFFFFF',
