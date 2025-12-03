@@ -37,7 +37,6 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
   const router = useRouter();
   const [imageError, setImageError] = useState(false);
   const [showLoader, setShowLoader] = useState(true);
-  const [imageError, setImageError] = useState(false);
   const imageLoadingRef = React.useRef(true);
 
   const categoryConfig = EVENT_CATEGORY_CONFIG[event.category] || EVENT_CATEGORY_CONFIG.other;
