@@ -763,6 +763,7 @@ export interface Event {
   // Status
   status: EventStatus;
   isFeatured: boolean;
+  visibility?: VisibilityType;
   
   // Admin
   createdBy: string;
