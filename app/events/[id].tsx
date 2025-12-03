@@ -66,6 +66,9 @@ import Card from '../../components/Card';
 import Button from '../../components/Button';
 import { ShimmerSkeleton } from '../../components/ShimmerSkeleton';
 
+// Screen width constant
+const screenWidth = Dimensions.get('window').width;
+
 // Responsive System
 const getResponsiveValues = () => {
   const width = Dimensions.get('window').width;
