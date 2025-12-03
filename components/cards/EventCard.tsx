@@ -9,7 +9,7 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
+  Pressable,
   Image,
   useColorScheme,
   Dimensions,
@@ -100,10 +100,13 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
 
   return (
     <>
-    <TouchableOpacity
-      style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
+    <Pressable
+      style={({ pressed }) => [
+        styles.card,
+        { backgroundColor: colors.card, borderColor: colors.border },
+        pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }
+      ]}
       onPress={onPress}
-      activeOpacity={0.7}
       accessibilityRole="button"
       accessibilityLabel={`Event: ${event.title}. ${formatEventDate(event.eventDate)}`}
     >
@@ -129,13 +132,16 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
         </View>
 
         {/* Share Button */}
-        <TouchableOpacity
+        <Pressable
           onPress={handleSharePress}
-          style={styles.shareButton}
+          style={({ pressed }) => [
+            styles.shareButton,
+            pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] }
+          ]}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Share2 size={18} color="#FFFFFF" />
-        </TouchableOpacity>
+        </Pressable>
 
         {/* Featured Badge */}
         {event.isFeatured && (
@@ -147,7 +153,7 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
 
         {/* Date Badge */}
         <View style={[styles.dateBadge, { backgroundColor: colors.card }]}>
-          <Text style={[styles.dateMonth, { color: '#38B6FF' }]}>
+          <Text style={[styles.dateMonth, { color: colors.primary }]}>
             {new Date(event.eventDate).toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}
           </Text>
           <Text style={[styles.dateDay, { color: colors.text }]}>
@@ -188,8 +194,8 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
         <View style={styles.infoRow}>
           {event.isVirtual ? (
             <>
-              <Video size={14} color="#38B6FF" />
-              <Text style={[styles.infoText, { color: '#38B6FF' }]}>
+              <Video size={14} color={colors.primary} />
+              <Text style={[styles.infoText, { color: colors.primary }]}>
                 Virtual Event
               </Text>
             </>
@@ -238,10 +244,13 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
 
         {/* Register Button */}
         {event.registrationRequired && spotsLeft !== 0 && (
-          <TouchableOpacity
-            style={[styles.registerButton, { backgroundColor: '#38B6FF' }]}
+          <Pressable
+            style={({ pressed }) => [
+              styles.registerButton,
+              { backgroundColor: colors.primary },
+              pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }
+            ]}
             onPress={handleRegisterPress}
-            activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel={`Register for ${event.title}`}
           >
@@ -249,19 +258,19 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
             <Text style={styles.registerButtonText}>
               {event.isFree ? 'Register Now' : 'Get Tickets'}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
 
         {/* View Details (if no registration required) */}
         {!event.registrationRequired && (
-          <View style={[styles.viewDetailsButton, { borderColor: '#38B6FF' }]}>
-            <Text style={[styles.viewDetailsText, { color: '#38B6FF' }]}>
+          <View style={[styles.viewDetailsButton, { borderColor: colors.primary }]}>
+            <Text style={[styles.viewDetailsText, { color: colors.primary }]}>
               View Details
             </Text>
           </View>
         )}
       </View>
-    </TouchableOpacity>
+    </Pressable>
     <ShareEventModal
       visible={showShareModal}
       onClose={() => setShowShareModal(false)}
