@@ -186,13 +186,13 @@ function EventItem({ event, colors, onView, onEdit, onDelete, onRegistrations }:
         <View style={styles.detailRow}>
           <Calendar size={14} color={colors.textSecondary} />
           <Text style={[styles.detailText, { color: colors.textSecondary }]}>
-            {formatEventDate(event.eventDate)}
+            {event.eventDate ? formatEventDate(event.eventDate) : 'Date TBA'}
           </Text>
         </View>
         <View style={styles.detailRow}>
           <Clock size={14} color={colors.textSecondary} />
           <Text style={[styles.detailText, { color: colors.textSecondary }]}>
-            {formatEventTime(event.startTime)}
+            {event.startTime ? formatEventTime(event.startTime) : 'Time TBA'}
           </Text>
         </View>
         <View style={styles.detailRow}>
@@ -202,7 +202,7 @@ function EventItem({ event, colors, onView, onEdit, onDelete, onRegistrations }:
             <MapPin size={14} color={colors.textSecondary} />
           )}
           <Text style={[styles.detailText, { color: colors.textSecondary }]} numberOfLines={1}>
-            {event.isVirtual ? 'Virtual' : event.location}
+            {event.isVirtual ? 'Virtual' : (event.location || 'Location TBA')}
           </Text>
         </View>
         {event.capacity && (

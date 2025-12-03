@@ -261,7 +261,7 @@ function EventImage({
   const [imageError, setImageError] = useState(false);
   const colorScheme = useColorScheme();
   const CATEGORY_CONFIG = getCategoryConfig(colorScheme === 'dark' ? 'dark' : 'light');
-  const categoryConfig = CATEGORY_CONFIG[event.category];
+  const categoryConfig = CATEGORY_CONFIG[event.category] || CATEGORY_CONFIG.other;
 
   return (
     <View style={styles.imageContainer}>
@@ -429,7 +429,7 @@ export default function EventDetailScreen() {
 
   // Memoized calculations
   const eventStatus = useMemo(() => {
-    if (!event) return null;
+    if (!event || !event.eventDate) return null;
     
     if (isEventPast(event.eventDate)) return 'past';
     if (isEventToday(event.eventDate)) return 'today';
@@ -448,7 +448,11 @@ export default function EventDetailScreen() {
     try {
       // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       
-      const message = `Join me at "${event.title}"!\n\n📅 ${formatEventDate(event.eventDate)}\n⏰ ${formatEventTime(event.startTime)}\n📍 ${event.isVirtual ? 'Virtual Event' : event.location}\n\nRegister on Volunteers Inc!`;
+      const dateText = event.eventDate ? formatEventDate(event.eventDate) : 'Date TBA';
+      const timeText = event.startTime ? formatEventTime(event.startTime) : 'Time TBA';
+      const locationText = event.isVirtual ? 'Virtual Event' : (event.location || 'Location TBA');
+      
+      const message = `Join me at "${event.title}"!\n\n📅 ${dateText}\n⏰ ${timeText}\n📍 ${locationText}\n\nRegister on Volunteers Inc!`;
 
       await Share.share({
         message,
@@ -679,7 +683,7 @@ export default function EventDetailScreen() {
 
   const spotsLeft = event.spotsRemaining ?? event.capacity ?? 999;
   const isSoldOut = spotsLeft <= 0;
-  const isPastEvent = isEventPast(event.eventDate);
+  const isPastEvent = event.eventDate ? isEventPast(event.eventDate) : false;
 
   return (
     <ErrorBoundary>
@@ -722,8 +726,8 @@ export default function EventDetailScreen() {
             {/* Date & Time Card */}
             <EventInfoCard
               icon={<Calendar size={24} color={colors.primary} />}
-              title={formatEventDate(event.eventDate)}
-              subtitle={`${formatEventTime(event.startTime)}${event.endTime ? ` - ${formatEventTime(event.endTime)}` : ''}`}
+              title={event.eventDate ? formatEventDate(event.eventDate) : 'Date TBA'}
+              subtitle={event.startTime ? `${formatEventTime(event.startTime)}${event.endTime ? ` - ${formatEventTime(event.endTime)}` : ''}` : 'Time TBA'}
               badge={eventStatus === 'today' && (
                 <View style={[styles.todayBadge, { backgroundColor: colors.accent }]}>
                   <Text style={[styles.todayBadgeText, { color: colors.textOnPrimary }]}>TODAY</Text>
@@ -738,7 +742,7 @@ export default function EventDetailScreen() {
                 <Video size={24} color={colors.primary} /> : 
                 <MapPin size={24} color={colors.primary} />
               }
-              title={event.isVirtual ? 'Virtual Event' : event.location}
+              title={event.isVirtual ? 'Virtual Event' : (event.location || 'Location TBA')}
               subtitle={event.isVirtual ? 
                 'Join online from anywhere' : 
                 event.locationAddress

@@ -45,8 +45,8 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
   const router = useRouter();
 
   const categoryConfig = CATEGORY_CONFIG[event.category] || CATEGORY_CONFIG.other;
-  const daysUntil = getDaysUntilEvent(event.eventDate);
-  const isToday = isEventToday(event.eventDate);
+  const daysUntil = event.eventDate ? getDaysUntilEvent(event.eventDate) : null;
+  const isToday = event.eventDate ? isEventToday(event.eventDate) : false;
   const spotsLeft = event.spotsRemaining ?? event.capacity;
   const hasLimitedSpots = spotsLeft !== undefined && spotsLeft <= 10 && spotsLeft > 0;
 
@@ -86,7 +86,7 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
         <View style={styles.infoRow}>
           <Calendar size={14} color={colors.textSecondary} />
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-            {formatEventDate(event.eventDate)}
+            {event.eventDate ? formatEventDate(event.eventDate) : 'Date TBA'}
           </Text>
           {isToday && (
             <View style={styles.todayBadge}>
@@ -99,7 +99,7 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
           <Clock size={14} color={colors.textSecondary} />
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
             {event.startTime ? formatEventTime(event.startTime) : 'TBA'}
-            {event.endTime && ` - ${formatEventTime(event.endTime)}`}
+            {event.endTime && event.startTime && ` - ${formatEventTime(event.endTime)}`}
           </Text>
         </View>
 

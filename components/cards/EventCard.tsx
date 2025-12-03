@@ -65,8 +65,8 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
   const { shareEventToFeed } = useFeed();
 
   const categoryConfig = CATEGORY_CONFIG[event.category] || CATEGORY_CONFIG.other;
-  const daysUntil = getDaysUntilEvent(event.eventDate);
-  const isToday = isEventToday(event.eventDate);
+  const daysUntil = event.eventDate ? getDaysUntilEvent(event.eventDate) : null;
+  const isToday = event.eventDate ? isEventToday(event.eventDate) : false;
   const spotsLeft = event.spotsRemaining ?? event.capacity;
   const hasLimitedSpots = spotsLeft !== undefined && spotsLeft <= 10 && spotsLeft > 0;
 
@@ -108,7 +108,7 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
       ]}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Event: ${event.title}. ${formatEventDate(event.eventDate)}`}
+      accessibilityLabel={`Event: ${event.title}. ${event.eventDate ? formatEventDate(event.eventDate) : 'Date TBA'}`}
     >
       {/* Image Section */}
       <View style={styles.imageContainer}>
@@ -152,14 +152,16 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
         )}
 
         {/* Date Badge */}
-        <View style={[styles.dateBadge, { backgroundColor: colors.card }]}>
-          <Text style={[styles.dateMonth, { color: colors.primary }]}>
-            {new Date(event.eventDate).toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}
-          </Text>
-          <Text style={[styles.dateDay, { color: colors.text }]}>
-            {new Date(event.eventDate).getDate()}
-          </Text>
-        </View>
+        {event.eventDate && (
+          <View style={[styles.dateBadge, { backgroundColor: colors.card }]}>
+            <Text style={[styles.dateMonth, { color: colors.primary }]}>
+              {new Date(event.eventDate).toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}
+            </Text>
+            <Text style={[styles.dateDay, { color: colors.text }]}>
+              {new Date(event.eventDate).getDate()}
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Content Section */}
@@ -173,7 +175,7 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
         <View style={styles.infoRow}>
           <Calendar size={14} color={colors.textSecondary} />
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-            {formatEventDate(event.eventDate)}
+            {event.eventDate ? formatEventDate(event.eventDate) : 'Date TBA'}
           </Text>
           {isToday && (
             <View style={styles.todayBadge}>
@@ -185,8 +187,8 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
         <View style={styles.infoRow}>
           <Clock size={14} color={colors.textSecondary} />
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-            {formatEventTime(event.startTime)}
-            {event.endTime && ` - ${formatEventTime(event.endTime)}`}
+            {event.startTime ? formatEventTime(event.startTime) : 'TBA'}
+            {event.endTime && event.startTime && ` - ${formatEventTime(event.endTime)}`}
           </Text>
         </View>
 
@@ -203,7 +205,7 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
             <>
               <MapPin size={14} color={colors.textSecondary} />
               <Text style={[styles.infoText, { color: colors.textSecondary }]} numberOfLines={1}>
-                {event.location}
+                {event.location || 'Location TBA'}
               </Text>
             </>
           )}
