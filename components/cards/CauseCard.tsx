@@ -9,7 +9,6 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   Pressable,
   Image,
   useColorScheme,
@@ -112,13 +111,16 @@ export function CauseCard({ cause, onPress, onDonatePress }: CauseCardProps) {
         </View>
 
         {/* Share Button */}
-        <TouchableOpacity
+        <Pressable
           onPress={handleSharePress}
-          style={styles.shareButton}
+          style={({ pressed }) => [
+            styles.shareButton,
+            pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] }
+          ]}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Share2 size={18} color="#FFFFFF" />
-        </TouchableOpacity>
+        </Pressable>
 
         {/* Featured Badge */}
         {cause.isFeatured && (
@@ -149,7 +151,7 @@ export function CauseCard({ cause, onPress, onDonatePress }: CauseCardProps) {
                 styles.progressFill,
                 {
                   width: `${progress}%`,
-                  backgroundColor: progress >= 100 ? '#4CAF50' : '#38B6FF',
+                  backgroundColor: progress >= 100 ? colors.success : colors.primary,
                 },
               ]}
             />
@@ -192,16 +194,19 @@ export function CauseCard({ cause, onPress, onDonatePress }: CauseCardProps) {
         </View>
 
         {/* Donate Button */}
-        <TouchableOpacity
-          style={[styles.donateButton, { backgroundColor: '#38B6FF' }]}
+        <Pressable
+          style={({ pressed }) => [
+            styles.donateButton,
+            { backgroundColor: colors.primary },
+            pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }
+          ]}
           onPress={handleDonatePress}
-          activeOpacity={0.8}
           accessibilityRole="button"
           accessibilityLabel={`Donate to ${cause.title}`}
         >
           <Heart size={16} color="#FFFFFF" />
           <Text style={styles.donateButtonText}>Donate Now</Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
     </Pressable>
     <ShareCauseModal

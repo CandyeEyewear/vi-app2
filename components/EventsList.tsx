@@ -4,22 +4,23 @@
  * File: components/EventsList.tsx
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   FlatList,
   StyleSheet,
   RefreshControl,
-  TouchableOpacity,
+  Pressable,
   TextInput,
   useColorScheme,
   ActivityIndicator,
   ScrollView,
   Dimensions,
+  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Search, X, Calendar, Filter } from 'lucide-react-native';
+import { Search, X, Calendar, Filter, Check } from 'lucide-react-native';
 import { Event, EventCategory } from '../types';
 import { Colors } from '../constants/colors';
 import { getEvents } from '../services/eventsService';
@@ -76,6 +77,76 @@ function EventsListSkeleton({ colors, count = 3 }: { colors: any; count?: number
     </View>
   );
 }
+
+// Animated Filter Chip Component
+const AnimatedFilterChip = React.memo(({
+  label,
+  isSelected,
+  onPress,
+  colors,
+}: {
+  label: string;
+  isSelected: boolean;
+  onPress: () => void;
+  colors: any;
+}) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const bgAnim = useRef(new Animated.Value(isSelected ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(bgAnim, { 
+      toValue: isSelected ? 1 : 0, 
+      duration: 200, 
+      useNativeDriver: false 
+    }).start();
+  }, [isSelected]);
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, { toValue: 0.95, useNativeDriver: true }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, { toValue: 1, friction: 3, useNativeDriver: true }).start();
+  };
+
+  const backgroundColor = bgAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [colors.card, colors.primary],
+  });
+
+  const borderColor = bgAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [colors.border, colors.primary],
+  });
+
+  return (
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
+        <Animated.View
+          style={[
+            styles.categoryChip,
+            { backgroundColor, borderColor }
+          ]}
+        >
+          {isSelected && (
+            <View style={styles.chipCheckmark}>
+              <Check size={12} color={colors.textOnPrimary} strokeWidth={3} />
+            </View>
+          )}
+          <Text 
+            style={[
+              styles.categoryChipText, 
+              { color: isSelected ? colors.textOnPrimary : colors.text },
+              isSelected && styles.categoryChipTextSelected
+            ]}
+          >
+            {label}
+          </Text>
+        </Animated.View>
+      </Pressable>
+    </Animated.View>
+  );
+});
 
 export function EventsList({
   featured,
@@ -209,12 +280,16 @@ export function EventsList({
           }
         </Text>
         {searchQuery && (
-          <TouchableOpacity
-            style={[styles.clearButton, { backgroundColor: '#38B6FF' }]}
+          <Pressable
+            style={({ pressed }) => [
+              styles.clearButton, 
+              { backgroundColor: colors.primary },
+              pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }
+            ]}
             onPress={handleClearSearch}
           >
             <Text style={styles.clearButtonText}>Clear Search</Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
     );
@@ -240,9 +315,9 @@ export function EventsList({
             returnKeyType="search"
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={handleClearSearch}>
+            <Pressable onPress={handleClearSearch}>
               <X size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
+            </Pressable>
           )}
         </View>
       )}
@@ -256,27 +331,13 @@ export function EventsList({
             contentContainerStyle={styles.categoriesContent}
           >
             {EVENT_CATEGORIES.map((category) => (
-              <TouchableOpacity
+              <AnimatedFilterChip
                 key={category.value}
-                style={[
-                  styles.categoryChip,
-                  {
-                    backgroundColor: selectedCategory === category.value ? '#38B6FF' : colors.background,
-                    borderColor: selectedCategory === category.value ? '#38B6FF' : colors.border,
-                  },
-                ]}
+                label={`${category.emoji ? category.emoji + ' ' : ''}${category.label}`}
+                isSelected={selectedCategory === category.value}
                 onPress={() => setSelectedCategory(category.value)}
-                activeOpacity={0.7}
-              >
-                <Text
-                  style={[
-                    styles.categoryChipText,
-                    { color: selectedCategory === category.value ? '#FFFFFF' : colors.textSecondary },
-                  ]}
-                >
-                  {category.emoji ? `${category.emoji} ` : ''}{category.label}
-                </Text>
-              </TouchableOpacity>
+                colors={colors}
+              />
             ))}
           </ScrollView>
         </View>
@@ -309,7 +370,7 @@ export function EventsList({
 
     return (
       <View style={styles.loadingMoreContainer}>
-        <ActivityIndicator size="small" color="#38B6FF" />
+        <ActivityIndicator size="small" color={colors.primary} />
         <Text style={[styles.loadingMoreText, { color: colors.textSecondary }]}>
           Loading more...
         </Text>
@@ -341,8 +402,8 @@ export function EventsList({
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor="#38B6FF"
-            colors={['#38B6FF']}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
           />
         }
         onEndReached={handleLoadMore}
@@ -390,14 +451,23 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: isSmallScreen ? 10 : 12,
     paddingVertical: isSmallScreen ? 6 : 8,
     borderRadius: 20,
     borderWidth: 1,
     marginRight: 8,
+    position: 'relative',
+  },
+  chipCheckmark: {
+    marginRight: 6,
   },
   categoryChipText: {
     fontSize: isSmallScreen ? 12 : 13,
+    fontWeight: '500',
+  },
+  categoryChipTextSelected: {
     fontWeight: '600',
   },
   resultsInfo: {

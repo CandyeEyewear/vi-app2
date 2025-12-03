@@ -8,14 +8,15 @@ import {
   View,
   Text,
   FlatList,
-  TouchableOpacity,
+  Pressable,
   StyleSheet,
   ActivityIndicator,
   useColorScheme,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Bell, MessageCircle, Calendar, UserPlus, Megaphone, Trash2, Check, X, User, Heart, Ticket } from 'lucide-react-native';
+import { ChevronLeft, Bell, MessageCircle, Calendar, UserPlus, Megaphone, Trash2, Check, X, User, Heart, Ticket, Sparkles } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../constants/colors';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -266,18 +267,53 @@ export default function NotificationsScreen() {
     return notification.sender_id || null;
   };
 
-  const getIcon = (type: string) => {
+  const getCategoryConfig = (type: string) => {
     switch (type) {
       case 'announcement':
-        return <Megaphone size={20} color={colors.primary} />;
+        return { 
+          icon: Megaphone, 
+          color: colors.primary,
+          gradient: [colors.primary, colors.primaryDark || '#0088CC']
+        };
       case 'opportunity':
-        return <Calendar size={20} color={colors.primary} />;
+      case 'opportunity_submitted':
+      case 'opportunity_approved':
+      case 'opportunity_rejected':
+        return { 
+          icon: Calendar, 
+          color: '#9C27B0',
+          gradient: ['#9C27B0', '#7B1FA2']
+        };
       case 'cause':
-        return <Heart size={20} color={colors.primary} />;
+        return { 
+          icon: Heart, 
+          color: '#E91E63',
+          gradient: ['#E91E63', '#C2185B']
+        };
       case 'event':
-        return <Ticket size={20} color={colors.primary} />;
+        return { 
+          icon: Ticket, 
+          color: '#FF9800',
+          gradient: ['#FF9800', '#F57C00']
+        };
+      case 'circle_request':
+        return { 
+          icon: UserPlus, 
+          color: '#4CAF50',
+          gradient: ['#4CAF50', '#388E3C']
+        };
+      case 'message':
+        return { 
+          icon: MessageCircle, 
+          color: colors.primary,
+          gradient: [colors.primary, colors.primaryDark || '#0088CC']
+        };
       default:
-        return <Bell size={20} color={colors.primary} />;
+        return { 
+          icon: Bell, 
+          color: colors.primary,
+          gradient: [colors.primary, colors.primaryDark || '#0088CC']
+        };
     }
   };
 
@@ -309,25 +345,38 @@ export default function NotificationsScreen() {
 
   const renderNotification = ({ item }: { item: Notification }) => {
     const isSelected = selectedNotifications.includes(item.id);
+    const categoryConfig = getCategoryConfig(item.type);
+    const IconComponent = categoryConfig.icon;
     
     return (
-      <TouchableOpacity
-        style={[
+      <Pressable
+        style={({ pressed }) => [
           styles.notificationCard,
-          { backgroundColor: item.is_read ? colors.card : colors.background },
-          { borderLeftColor: colors.primary },
+          { 
+            backgroundColor: item.is_read ? colors.card : colors.surfaceElevated,
+            borderLeftColor: categoryConfig.color 
+          },
           isSelected && { backgroundColor: colors.primary + '20' },
+          pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }
         ]}
         onPress={() => handleNotificationPress(item)}
         onLongPress={() => handleNotificationLongPress(item.id)}
-        activeOpacity={0.7}
         delayLongPress={500}
       >
+        {/* Gradient Accent Bar */}
+        <LinearGradient
+          colors={categoryConfig.gradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.gradientAccent}
+        />
+        
         {isSelected && (
           <View style={[styles.selectionIndicator, { backgroundColor: colors.primary }]}>
             <Check size={16} color="#FFFFFF" />
           </View>
         )}
+        
         {/* Show avatar for message and circle_request, icon for others */}
         {(item.type === 'message' || item.type === 'circle_request') ? (
           (() => {
@@ -346,10 +395,21 @@ export default function NotificationsScreen() {
             );
           })()
         ) : (
-          <View style={styles.iconContainer}>{getIcon(item.type)}</View>
+          <View style={[styles.iconContainer, { backgroundColor: categoryConfig.color + '15' }]}>
+            <IconComponent size={20} color={categoryConfig.color} />
+          </View>
         )}
+        
         <View style={styles.contentContainer}>
-          <Text style={[styles.title, { color: colors.text }]}>{item.title}</Text>
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, { color: colors.text }]}>{item.title}</Text>
+            {!item.is_read && !isSelected && (
+              <View style={[styles.newBadge, { backgroundColor: categoryConfig.color }]}>
+                <Sparkles size={10} color="#FFFFFF" />
+                <Text style={styles.newBadgeText}>NEW</Text>
+              </View>
+            )}
+          </View>
           <Text style={[styles.message, { color: colors.textSecondary }]} numberOfLines={2}>
             {item.message}
           </Text>
@@ -357,10 +417,7 @@ export default function NotificationsScreen() {
             {formatTimeAgo(item.created_at)}
           </Text>
         </View>
-        {!item.is_read && !isSelected && (
-          <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />
-        )}
-      </TouchableOpacity>
+      </Pressable>
     );
   };
 
@@ -377,28 +434,40 @@ export default function NotificationsScreen() {
           },
         ]}
       >
-        <TouchableOpacity onPress={() => {
-          if (selectedNotifications.length > 0) {
-            clearSelection();
-          } else {
-            router.back();
-          }
-        }} style={styles.backButton}>
+        <Pressable 
+          onPress={() => {
+            if (selectedNotifications.length > 0) {
+              clearSelection();
+            } else {
+              router.back();
+            }
+          }} 
+          style={({ pressed }) => [
+            styles.backButton,
+            pressed && { opacity: 0.7 }
+          ]}
+        >
           {selectedNotifications.length > 0 ? (
             <X size={28} color={colors.primary} />
           ) : (
             <ChevronLeft size={28} color={colors.primary} />
           )}
-        </TouchableOpacity>
+        </Pressable>
         <Text style={[styles.headerTitle, { color: colors.text }]}>
           {selectedNotifications.length > 0 
             ? `${selectedNotifications.length} selected` 
             : 'Notifications'}
         </Text>
         {selectedNotifications.length > 0 ? (
-          <TouchableOpacity onPress={handleDeleteSelected} style={styles.deleteButton}>
+          <Pressable 
+            onPress={handleDeleteSelected} 
+            style={({ pressed }) => [
+              styles.deleteButton,
+              pressed && { opacity: 0.7 }
+            ]}
+          >
             <Trash2 size={24} color={colors.error} />
-          </TouchableOpacity>
+          </Pressable>
         ) : (
           <View style={{ width: 40 }} />
         )}
@@ -489,6 +558,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  gradientAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
   },
   selectionIndicator: {
     position: 'absolute',
@@ -505,7 +583,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Colors.light.primary + '15',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -532,10 +609,31 @@ const styles = StyleSheet.create({
   contentContainer: {
     flex: 1,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+    gap: 8,
+  },
   title: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 4,
+    flex: 1,
+  },
+  newBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    gap: 3,
+  },
+  newBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   message: {
     fontSize: 14,
@@ -544,12 +642,6 @@ const styles = StyleSheet.create({
   },
   time: {
     fontSize: 12,
-  },
-  unreadDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginLeft: 8,
   },
   emptyContainer: {
     flex: 1,
