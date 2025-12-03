@@ -29,7 +29,6 @@ import {
   ArrowLeft,
   Share2,
   Calendar,
-  Clock,
   MapPin,
   Users,
   Video,
@@ -39,14 +38,13 @@ import {
   Phone,
   Mail,
   DollarSign,
-  Heart,
   Check,
   X,
   AlertCircle,
 } from 'lucide-react-native';
 import { Colors } from '../../constants/colors';
 import { EVENT_CATEGORY_CONFIG } from '../../constants/eventCategories';
-import { Event, EventCategory, EventRegistration } from '../../types';
+import { Event, EventRegistration } from '../../types';
 import {
   getEventById,
   checkUserRegistration,
@@ -227,6 +225,7 @@ function EventHeader({
       <Pressable
         style={({ pressed }) => [
           styles.headerButton, 
+          getPremiumShadow(colors),
           { 
             backgroundColor: colors.card,
             transform: [{ scale: pressed ? 0.95 : 1 }],
@@ -243,6 +242,7 @@ function EventHeader({
       <Pressable
         style={({ pressed }) => [
           styles.headerButton, 
+          getPremiumShadow(colors),
           { 
             backgroundColor: colors.card,
             transform: [{ scale: pressed ? 0.95 : 1 }],
@@ -1209,74 +1209,6 @@ const styles = StyleSheet.create({
   categoryBadgeText: {
     fontSize: 12,
     fontWeight: '600',
-  },
-  categoryBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  content: {
-    flex: 1,
-    padding: Spacing.lg,
-    marginTop: -20,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-  },
-  title: {
-    ...Typography.title2,
-    marginBottom: Spacing.xl,
-    lineHeight: 32,
-  },
-  infoCard: {
-    marginBottom: Spacing.md,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
-  },
-  infoCardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Spacing.lg,
-    gap: Spacing.lg,
-  },
-  infoIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  infoContent: {
-    flex: 1,
-  },
-  infoTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  infoTitle: {
-    ...Typography.body1,
-    fontWeight: '600',
-  },
-  infoSubtitle: {
-    ...Typography.body2,
-    marginTop: 2,
-  },
-  todayBadge: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  todayBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
   },
   featuredBadge: {
     position: 'absolute',
