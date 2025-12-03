@@ -480,7 +480,7 @@ export default function OpportunityDetailsScreen() {
   const { user, isAdmin } = useAuth();
   const { shareOpportunityToFeed } = useFeed();
   const params = useLocalSearchParams();
-  const opportunityId = params.id as string;
+  const opportunityId = params.slug as string;
   const responsive = getResponsiveValues();
 
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
