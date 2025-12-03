@@ -55,10 +55,16 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
   const [showShareModal, setShowShareModal] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [imageError, setImageError] = useState(false);
-  const [imageLoading, setImageLoading] = useState(true);
+  const [showLoader, setShowLoader] = useState(true);
+  const imageLoadingRef = React.useRef(true);
   const { shareEventToFeed } = useFeed();
 
-  // Debug: Log image URL
+  // Memoize the image source to prevent recreation
+  const imageSource = React.useMemo(() => {
+    return event.imageUrl ? { uri: event.imageUrl } : null;
+  }, [event.imageUrl]);
+
+  // Debug: Log image URL (only once per URL change)
   React.useEffect(() => {
     if (event.imageUrl) {
       logImageDebugInfo(event.imageUrl, `EventCard: ${event.title}`);
@@ -66,6 +72,27 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
       console.log('[EventCard] Event:', event.title, 'No image URL');
     }
   }, [event.imageUrl, event.title]);
+
+  // Memoize callbacks to prevent recreation
+  const handleLoadStart = React.useCallback(() => {
+    console.log('[EventCard] Image load started:', event.imageUrl);
+    imageLoadingRef.current = true;
+  }, [event.imageUrl]);
+
+  const handleLoadEnd = React.useCallback(() => {
+    console.log('[EventCard] Image load ended successfully:', event.imageUrl);
+    imageLoadingRef.current = false;
+    setShowLoader(false);
+  }, [event.imageUrl]);
+
+  const handleImageError = React.useCallback((error: any) => {
+    console.error('[EventCard] Image load error for:', event.title);
+    console.error('  URL:', event.imageUrl);
+    console.error('  Error:', error.nativeEvent);
+    console.error('  Tip: Check if image URL is accessible in browser');
+    setImageError(true);
+    setShowLoader(false);
+  }, [event.title, event.imageUrl]);
 
   const categoryConfig = EVENT_CATEGORY_CONFIG[event.category] || EVENT_CATEGORY_CONFIG.other;
   const daysUntil = getDaysUntilEvent(event.eventDate);
@@ -113,30 +140,17 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
     >
       {/* Image Section */}
       <View style={styles.imageContainer}>
-        {event.imageUrl && !imageError ? (
+        {imageSource && !imageError ? (
           <>
             <Image
-              source={{ uri: event.imageUrl }}
+              source={imageSource}
               style={styles.image}
               resizeMode="cover"
-              onLoadStart={() => {
-                console.log('[EventCard] Image load started:', event.imageUrl);
-                setImageLoading(true);
-              }}
-              onLoadEnd={() => {
-                console.log('[EventCard] Image load ended successfully:', event.imageUrl);
-                setImageLoading(false);
-              }}
-              onError={(error) => {
-                console.error('[EventCard] Image load error for:', event.title);
-                console.error('  URL:', event.imageUrl);
-                console.error('  Error:', error.nativeEvent);
-                console.error('  Tip: Check if image URL is accessible in browser');
-                setImageError(true);
-                setImageLoading(false);
-              }}
+              onLoadStart={handleLoadStart}
+              onLoadEnd={handleLoadEnd}
+              onError={handleImageError}
             />
-            {imageLoading && (
+            {showLoader && (
               <View style={styles.imageLoadingOverlay}>
                 <ActivityIndicator size="small" color={colors.primary} />
               </View>
