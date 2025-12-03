@@ -10,7 +10,6 @@ import {
   Text,
   Image,
   StyleSheet,
-  TouchableOpacity,
   useColorScheme,
 } from 'react-native';
 import { Heart, Users, Clock, TrendingUp, ExternalLink } from 'lucide-react-native';
@@ -18,6 +17,7 @@ import { Cause, CauseCategory } from '../types';
 import { Colors } from '../constants/colors';
 import { useRouter } from 'expo-router';
 import { getCauseProgress, getCauseDaysRemaining, formatCurrency } from '../services/causesService';
+import { AnimatedPressable } from './AnimatedPressable';
 
 interface SharedCauseCardProps {
   cause: Cause;
@@ -47,10 +47,9 @@ export default function SharedCauseCard({ cause }: SharedCauseCardProps) {
   };
 
   return (
-    <TouchableOpacity
+    <AnimatedPressable
       style={[styles.container, { backgroundColor: colors.card, borderColor: colors.border }]}
       onPress={handlePress}
-      activeOpacity={0.7}
     >
       {cause.imageUrl && (
         <Image source={{ uri: cause.imageUrl }} style={styles.image} />
@@ -133,21 +132,26 @@ export default function SharedCauseCard({ cause }: SharedCauseCardProps) {
           </View>
         </View>
       </View>
-    </TouchableOpacity>
+    </AnimatedPressable>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     marginHorizontal: 16,
     marginBottom: 12,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   image: {
     width: '100%',
-    height: 180,
+    height: 140,
     resizeMode: 'cover',
   },
   content: {
@@ -166,7 +170,7 @@ const styles = StyleSheet.create({
   },
   categoryBadgeText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
   },
   featuredBadge: {
@@ -183,10 +187,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   title: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     marginBottom: 6,
-    lineHeight: 24,
+    lineHeight: 22,
   },
   description: {
     fontSize: 13,

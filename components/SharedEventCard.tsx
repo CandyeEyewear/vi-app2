@@ -10,7 +10,6 @@ import {
   Text,
   Image,
   StyleSheet,
-  TouchableOpacity,
   useColorScheme,
 } from 'react-native';
 import { Calendar, Clock, MapPin, Users, Video, Ticket, Star, ExternalLink } from 'lucide-react-native';
@@ -24,6 +23,7 @@ import {
   isEventToday,
   formatCurrency,
 } from '../services/eventsService';
+import { AnimatedPressable } from './AnimatedPressable';
 
 interface SharedEventCardProps {
   event: Event;
@@ -45,8 +45,8 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
   const router = useRouter();
 
   const categoryConfig = CATEGORY_CONFIG[event.category] || CATEGORY_CONFIG.other;
-  const daysUntil = getDaysUntilEvent(event.eventDate);
-  const isToday = isEventToday(event.eventDate);
+  const daysUntil = event.eventDate ? getDaysUntilEvent(event.eventDate) : null;
+  const isToday = event.eventDate ? isEventToday(event.eventDate) : false;
   const spotsLeft = event.spotsRemaining ?? event.capacity;
   const hasLimitedSpots = spotsLeft !== undefined && spotsLeft <= 10 && spotsLeft > 0;
 
@@ -55,10 +55,9 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
   };
 
   return (
-    <TouchableOpacity
+    <AnimatedPressable
       style={[styles.container, { backgroundColor: colors.card, borderColor: colors.border }]}
       onPress={handlePress}
-      activeOpacity={0.7}
     >
       {event.imageUrl && (
         <Image source={{ uri: event.imageUrl }} style={styles.image} />
@@ -87,7 +86,7 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
         <View style={styles.infoRow}>
           <Calendar size={14} color={colors.textSecondary} />
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-            {formatEventDate(event.eventDate)}
+            {event.eventDate ? formatEventDate(event.eventDate) : 'Date TBA'}
           </Text>
           {isToday && (
             <View style={styles.todayBadge}>
@@ -100,7 +99,7 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
           <Clock size={14} color={colors.textSecondary} />
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
             {event.startTime ? formatEventTime(event.startTime) : 'TBA'}
-            {event.endTime && ` - ${formatEventTime(event.endTime)}`}
+            {event.endTime && event.startTime && ` - ${formatEventTime(event.endTime)}`}
           </Text>
         </View>
 
@@ -156,21 +155,26 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
           </View>
         </View>
       </View>
-    </TouchableOpacity>
+    </AnimatedPressable>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     marginHorizontal: 16,
     marginBottom: 12,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   image: {
     width: '100%',
-    height: 180,
+    height: 140,
     resizeMode: 'cover',
   },
   content: {
@@ -189,7 +193,7 @@ const styles = StyleSheet.create({
   },
   categoryBadgeText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
   },
   featuredBadge: {
@@ -206,10 +210,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   title: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     marginBottom: 8,
-    lineHeight: 24,
+    lineHeight: 22,
   },
   infoRow: {
     flexDirection: 'row',

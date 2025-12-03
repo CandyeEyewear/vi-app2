@@ -920,14 +920,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   categoryBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   categoryText: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontSize: 12,
+    fontWeight: '600',
   },
   verifiedBadge: {
     flexDirection: 'row',

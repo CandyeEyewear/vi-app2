@@ -175,15 +175,15 @@ function EventSummaryCard({
           <View style={styles.eventDetailRow}>
             <Calendar size={16} color={colors.textSecondary} />
             <Text style={[styles.eventDetailText, { color: colors.textSecondary }]}>
-              {formatEventDate(event.eventDate)}
+              {event.eventDate ? formatEventDate(event.eventDate) : 'Date TBA'}
             </Text>
           </View>
-          
+
           <View style={styles.eventDetailRow}>
             <Clock size={16} color={colors.textSecondary} />
             <Text style={[styles.eventDetailText, { color: colors.textSecondary }]}>
-              {formatEventTime(event.startTime)}
-              {event.endTime && ` - ${formatEventTime(event.endTime)}`}
+              {event.startTime ? formatEventTime(event.startTime) : 'Time TBA'}
+              {event.endTime && event.startTime && ` - ${formatEventTime(event.endTime)}`}
             </Text>
           </View>
           

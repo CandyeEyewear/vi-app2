@@ -41,6 +41,7 @@ type ConversationRowProps = {
   conversation: Conversation;
   colors: ColorTheme;
   currentUserId?: string;
+  isUserOnline: (userId: string) => boolean;
   onPress: (conversationId: string) => void;
 };
 
@@ -117,7 +118,7 @@ const ConversationSkeleton = ({ colors }: { colors: ColorTheme }) => (
   </View>
 );
 
-const ConversationRow = ({ conversation, colors, currentUserId, onPress }: ConversationRowProps) => {
+const ConversationRow = ({ conversation, colors, currentUserId, isUserOnline, onPress }: ConversationRowProps) => {
   const otherUser = getOtherParticipant(conversation, currentUserId);
   const lastMessage = conversation.lastMessage;
   const lastMessageFromCurrentUser = lastMessage?.senderId === currentUserId;
@@ -135,6 +136,9 @@ const ConversationRow = ({ conversation, colors, currentUserId, onPress }: Conve
       ? 'You'
       : otherUser?.fullName?.split(' ')[0] || 'Volunteer'
     : otherUser?.fullName || 'Volunteer';
+
+  // Check if other user is online using global presence
+  const isOtherUserOnline = otherUser?.id ? isUserOnline(otherUser.id) : false;
 
   return (
     <Pressable
@@ -159,7 +163,7 @@ const ConversationRow = ({ conversation, colors, currentUserId, onPress }: Conve
           size={56}
         />
         <OnlineStatusDot
-          isOnline={Boolean(otherUser?.onlineStatus)}
+          isOnline={isOtherUserOnline}
           style={styles.onlineDot}
         />
       </View>
@@ -217,7 +221,7 @@ export default function MessagesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { conversations, loading, refreshConversations } = useMessaging();
+  const { conversations, loading, refreshConversations, isUserOnline } = useMessaging();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'unread'>('all');
@@ -265,6 +269,7 @@ export default function MessagesScreen() {
       conversation={item}
       colors={colors}
       currentUserId={user?.id}
+      isUserOnline={isUserOnline}
       onPress={(conversationId) =>
         router.push({ pathname: '/conversation/[id]', params: { id: conversationId } })
       }

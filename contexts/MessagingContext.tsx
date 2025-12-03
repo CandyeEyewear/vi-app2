@@ -1,9 +1,10 @@
 /**
  * Messaging Context - SIMPLIFIED LIKE NOTIFICATIONS
- * Real-time updates for conversation list
+ * Real-time updates for conversation list with global presence tracking
  */
 
-import React, { createContext, useState, useContext, useEffect, useMemo } from 'react';
+import React, { createContext, useState, useContext, useEffect, useMemo, useRef } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import { Conversation, Message, ApiResponse } from '../types';
 import { supabase } from '../services/supabase';
 import { useAuth } from './AuthContext';
@@ -13,6 +14,8 @@ interface MessagingContextType {
   conversations: Conversation[];
   loading: boolean;
   totalUnreadCount: number;
+  onlineUsers: Set<string>;
+  isUserOnline: (userId: string) => boolean;
   getOrCreateConversation: (otherUserId: string) => Promise<ApiResponse<Conversation>>;
   sendMessage: (conversationId: string, text: string, replyTo?: { id: string; senderId: string; senderName: string; text: string }, attachments?: { type: 'image' | 'video' | 'document'; url: string; filename?: string; thumbnail?: string }[]) => Promise<ApiResponse<Message>>;
   markAsRead: (conversationId: string) => Promise<void>;
@@ -30,11 +33,19 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
+  const globalPresenceChannelRef = useRef<any>(null);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   // Calculate total unread count
   const totalUnreadCount = useMemo(() => {
     return conversations.reduce((sum, conv) => sum + conv.unreadCount, 0);
   }, [conversations]);
+
+  // Helper function to check if a user is online
+  const isUserOnline = (userId: string): boolean => {
+    return onlineUsers.has(userId);
+  };
 
   // Load conversations on mount - SIMPLE LIKE NOTIFICATIONS
   useEffect(() => {
@@ -84,6 +95,127 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     return () => {
       messageSubscription.unsubscribe();
       conversationSubscription.unsubscribe();
+    };
+  }, [user]);
+
+  // GLOBAL PRESENCE CHANNEL - Track all online users
+  useEffect(() => {
+    if (!user) return;
+
+    console.log('[GlobalPresence] Setting up global presence channel for user:', user.id.substring(0, 8));
+
+    const globalPresenceChannel = supabase.channel('global-presence', {
+      config: {
+        presence: {
+          key: user.id,
+        },
+      },
+    });
+
+    globalPresenceChannelRef.current = globalPresenceChannel;
+
+    // Track presence changes
+    globalPresenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = globalPresenceChannel.presenceState();
+        const presences = Object.values(state).flat() as any[];
+        
+        // Extract all online user IDs
+        const onlineUserIds = new Set<string>(
+          presences
+            .filter((p: any) => p.online === true)
+            .map((p: any) => p.user_id)
+        );
+        
+        console.log('[GlobalPresence] Synced online users:', onlineUserIds.size);
+        setOnlineUsers(onlineUserIds);
+      })
+      .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+        console.log('[GlobalPresence] User joined:', key);
+        const joinedUserId = newPresences[0]?.user_id;
+        if (joinedUserId) {
+          setOnlineUsers((prev) => new Set(prev).add(joinedUserId));
+        }
+      })
+      .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+        console.log('[GlobalPresence] User left:', key);
+        const leftUserId = leftPresences[0]?.user_id;
+        if (leftUserId) {
+          setOnlineUsers((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(leftUserId);
+            return newSet;
+          });
+        }
+      })
+      .subscribe(async (status) => {
+        console.log('[GlobalPresence] Subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          // Track current user as online
+          await globalPresenceChannel.track({
+            user_id: user.id,
+            user_name: user.fullName,
+            online: true,
+            timestamp: new Date().toISOString(),
+          });
+          console.log('[GlobalPresence] Tracked user as online');
+        }
+      });
+
+    return () => {
+      console.log('[GlobalPresence] Cleaning up presence channel');
+      if (globalPresenceChannelRef.current) {
+        globalPresenceChannelRef.current.untrack();
+        globalPresenceChannelRef.current.unsubscribe();
+        supabase.removeChannel(globalPresenceChannelRef.current);
+        globalPresenceChannelRef.current = null;
+      }
+      setOnlineUsers(new Set());
+    };
+  }, [user]);
+
+  // APP STATE LISTENER - Track when app goes to background/foreground
+  useEffect(() => {
+    if (!user) return;
+
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      const previousAppState = appStateRef.current;
+      appStateRef.current = nextAppState;
+
+      console.log('[AppState] Changed from', previousAppState, 'to', nextAppState);
+
+      if (nextAppState === 'active' && previousAppState.match(/inactive|background/)) {
+        // App came to foreground - mark user as online
+        console.log('[AppState] App came to foreground, marking user as online');
+        if (globalPresenceChannelRef.current) {
+          try {
+            await globalPresenceChannelRef.current.track({
+              user_id: user.id,
+              user_name: user.fullName,
+              online: true,
+              timestamp: new Date().toISOString(),
+            });
+          } catch (error) {
+            console.error('[AppState] Error tracking presence:', error);
+          }
+        }
+      } else if (nextAppState.match(/inactive|background/)) {
+        // App went to background - mark user as offline
+        console.log('[AppState] App went to background, marking user as offline');
+        if (globalPresenceChannelRef.current) {
+          try {
+            await globalPresenceChannelRef.current.untrack();
+          } catch (error) {
+            console.error('[AppState] Error untracking presence:', error);
+          }
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      subscription.remove();
     };
   }, [user]);
 
@@ -684,6 +816,8 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         conversations,
         loading,
         totalUnreadCount,
+        onlineUsers,
+        isUserOnline,
         getOrCreateConversation,
         sendMessage,
         markAsRead,

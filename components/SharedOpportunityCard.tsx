@@ -10,13 +10,13 @@ import {
   Text,
   Image,
   StyleSheet,
-  TouchableOpacity,
   useColorScheme,
 } from 'react-native';
 import { MapPin, Clock, Users, CheckCircle, ExternalLink } from 'lucide-react-native';
 import { Opportunity } from '../types';
 import { Colors } from '../constants/colors';
 import { useRouter } from 'expo-router';
+import { AnimatedPressable } from './AnimatedPressable';
 
 interface SharedOpportunityCardProps {
   opportunity: Opportunity;
@@ -50,10 +50,9 @@ export default function SharedOpportunityCard({ opportunity }: SharedOpportunity
   };
 
   return (
-    <TouchableOpacity
+    <AnimatedPressable
       style={[styles.container, { backgroundColor: colors.card, borderColor: colors.border }]}
       onPress={handlePress}
-      activeOpacity={0.7}
     >
       {opportunity.imageUrl && (
         <Image source={{ uri: opportunity.imageUrl }} style={styles.image} />
@@ -127,21 +126,26 @@ export default function SharedOpportunityCard({ opportunity }: SharedOpportunity
           </View>
         </View>
       </View>
-    </TouchableOpacity>
+    </AnimatedPressable>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     marginHorizontal: 16,
     marginBottom: 12,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   image: {
     width: '100%',
-    height: 180,
+    height: 140,
     resizeMode: 'cover',
   },
   content: {
@@ -154,20 +158,19 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   categoryBadge: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: 12,
   },
   categoryText: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontSize: 12,
+    fontWeight: '600',
   },
   title: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     marginBottom: 6,
-    lineHeight: 24,
+    lineHeight: 22,
   },
   orgContainer: {
     marginBottom: 10,

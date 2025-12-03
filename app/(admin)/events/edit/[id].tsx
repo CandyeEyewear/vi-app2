@@ -207,9 +207,13 @@ export default function EditEventScreen() {
           setLatitude(event.latitude || null);
           setLongitude(event.longitude || null);
           // Parse date and time
-          const eventDateObj = new Date(event.eventDate);
-          setEventDate(eventDateObj);
-          setStartTime(timeStringToDate(event.startTime));
+          if (event.eventDate) {
+            const eventDateObj = new Date(event.eventDate);
+            setEventDate(eventDateObj);
+          }
+          if (event.startTime) {
+            setStartTime(timeStringToDate(event.startTime));
+          }
           if (event.endTime) {
             setEndTime(timeStringToDate(event.endTime));
           }
