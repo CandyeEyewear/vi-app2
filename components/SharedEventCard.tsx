@@ -4,13 +4,14 @@
  * Clicking on it navigates to the event details page
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   Image,
   StyleSheet,
   useColorScheme,
+  ActivityIndicator,
 } from 'react-native';
 import { Calendar, Clock, MapPin, Users, Video, Ticket, Star, ExternalLink } from 'lucide-react-native';
 import { Event, EventCategory } from '../types';
@@ -43,6 +44,8 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const router = useRouter();
+  const [imageError, setImageError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
 
   const categoryConfig = CATEGORY_CONFIG[event.category] || CATEGORY_CONFIG.other;
   const daysUntil = event.eventDate ? getDaysUntilEvent(event.eventDate) : null;
@@ -59,9 +62,29 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
       style={[styles.container, { backgroundColor: colors.card, borderColor: colors.border }]}
       onPress={handlePress}
     >
-      {event.imageUrl && (
-        <Image source={{ uri: event.imageUrl }} style={styles.image} />
-      )}
+      {event.imageUrl && !imageError ? (
+        <View style={styles.imageContainer}>
+          <Image 
+            source={{ uri: event.imageUrl }} 
+            style={styles.image}
+            onLoadStart={() => setImageLoading(true)}
+            onLoadEnd={() => setImageLoading(false)}
+            onError={() => {
+              setImageError(true);
+              setImageLoading(false);
+            }}
+          />
+          {imageLoading && (
+            <View style={styles.imageLoadingOverlay}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          )}
+        </View>
+      ) : event.imageUrl ? (
+        <View style={[styles.imagePlaceholder, { backgroundColor: categoryConfig.color }]}>
+          <Text style={styles.placeholderEmoji}>{categoryConfig.emoji}</Text>
+        </View>
+      ) : null}
       
       <View style={styles.content}>
         <View style={styles.header}>
@@ -172,10 +195,34 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  image: {
+  imageContainer: {
+    position: 'relative',
     width: '100%',
     height: 140,
+  },
+  image: {
+    width: '100%',
+    height: '100%',
     resizeMode: 'cover',
+  },
+  imageLoadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  imagePlaceholder: {
+    width: '100%',
+    height: 140,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderEmoji: {
+    fontSize: 48,
   },
   content: {
     padding: 12,

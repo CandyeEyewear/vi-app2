@@ -13,6 +13,7 @@ import {
   Image,
   useColorScheme,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import {
   Calendar,
@@ -62,6 +63,8 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const [showShareModal, setShowShareModal] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
   const { shareEventToFeed } = useFeed();
 
   const categoryConfig = CATEGORY_CONFIG[event.category] || CATEGORY_CONFIG.other;
@@ -110,12 +113,25 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
     >
       {/* Image Section */}
       <View style={styles.imageContainer}>
-        {event.imageUrl ? (
-          <Image
-            source={{ uri: event.imageUrl }}
-            style={styles.image}
-            resizeMode="cover"
-          />
+        {event.imageUrl && !imageError ? (
+          <>
+            <Image
+              source={{ uri: event.imageUrl }}
+              style={styles.image}
+              resizeMode="cover"
+              onLoadStart={() => setImageLoading(true)}
+              onLoadEnd={() => setImageLoading(false)}
+              onError={() => {
+                setImageError(true);
+                setImageLoading(false);
+              }}
+            />
+            {imageLoading && (
+              <View style={styles.imageLoadingOverlay}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            )}
+          </>
         ) : (
           <View style={[styles.imagePlaceholder, { backgroundColor: categoryConfig.color }]}>
             <Text style={styles.placeholderEmoji}>{categoryConfig.emoji}</Text>
@@ -299,6 +315,16 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: '100%',
+  },
+  imageLoadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
   },
   imagePlaceholder: {
     width: '100%',
