@@ -65,8 +65,6 @@ import ErrorBoundary from '../../components/ErrorBoundary';
 import Button from '../../components/Button';
 import { ShimmerSkeleton } from '../../components/ShimmerSkeleton';
 
-const AnimatedExpoImage = Animated.createAnimatedComponent(Image);
-
 const getPremiumShadow = (colors: any) =>
   Platform.select({
     ios: {
@@ -259,58 +257,26 @@ function EventHeader({
 }
 
 // Event Image Component with modern loading
-function EventImage({ 
-  event, 
-  colors 
-}: { 
-  event: Event; 
+function EventImage({
+  event,
+  colors,
+}: {
+  event: Event;
   colors: any;
 }) {
-  // Use useRef to avoid re-renders
+  const responsive = getResponsiveValues();
+  const heroHeight = responsive.isSmallMobile
+    ? 280
+    : responsive.isTablet || responsive.isDesktop
+    ? 400
+    : 320;
+  const categoryConfig = EVENT_CATEGORY_CONFIG[event.category] || EVENT_CATEGORY_CONFIG.other;
+  const imageSource = useMemo(() => (event.imageUrl ? { uri: event.imageUrl } : null), [event.imageUrl]);
   const imageLoadingRef = useRef(true);
   const [imageError, setImageError] = useState(false);
   const [showLoader, setShowLoader] = useState(true);
-  const categoryConfig = EVENT_CATEGORY_CONFIG[event.category] || EVENT_CATEGORY_CONFIG.other;
-  const imageSource = useMemo(() => (event.imageUrl ? { uri: event.imageUrl } : null), [event.imageUrl]);
-  const loadingRef = useRef(true);
-  const imageOpacity = useRef(new Animated.Value(0)).current;
-  const loaderOpacity = useRef(new Animated.Value(1)).current;
 
-  const handleImageLoaded = useCallback(() => {
-    if (!loadingRef.current) return;
-    loadingRef.current = false;
-    Animated.parallel([
-      Animated.timing(imageOpacity, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }),
-      Animated.timing(loaderOpacity, {
-        toValue: 0,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [imageOpacity, loaderOpacity]);
-
-  const handleImageError = useCallback(() => {
-    setImageError(true);
-    if (!loadingRef.current) return;
-    loadingRef.current = false;
-    Animated.timing(loaderOpacity, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start();
-  }, [loaderOpacity]);
-
-  // Memoize the source object to prevent recreation on every render
-  const imageSource = useMemo(() => {
-    return event.imageUrl ? { uri: event.imageUrl } : null;
-  }, [event.imageUrl]);
-
-  // Debug: Log image URL (only once per URL change)
-  React.useEffect(() => {
+  useEffect(() => {
     if (event.imageUrl) {
       logImageDebugInfo(event.imageUrl, `EventImage: ${event.title}`);
     } else {
@@ -318,29 +284,31 @@ function EventImage({
     }
   }, [event.imageUrl, event.title]);
 
-  // Memoize callbacks to prevent recreation
   const handleLoadStart = useCallback(() => {
-    console.log('[EventImage] Image load started:', event.imageUrl);
     imageLoadingRef.current = true;
+    setShowLoader(true);
+    console.log('[EventImage] Image load started:', event.imageUrl);
   }, [event.imageUrl]);
 
   const handleLoadEnd = useCallback(() => {
-    console.log('[EventImage] Image load ended successfully:', event.imageUrl);
     imageLoadingRef.current = false;
     setShowLoader(false);
+    console.log('[EventImage] Image load ended successfully:', event.imageUrl);
   }, [event.imageUrl]);
 
-  const handleError = useCallback((error: any) => {
-    console.error('[EventImage] Image load error for:', event.title);
-    console.error('  URL:', event.imageUrl);
-    console.error('  Error:', error.nativeEvent);
-    console.error('  Tip: Open URL in new tab to test if accessible');
-    setImageError(true);
-    setShowLoader(false);
-  }, [event.title, event.imageUrl]);
+  const handleError = useCallback(
+    (error: any) => {
+      console.error('[EventImage] Image load error for:', event.title);
+      console.error('  URL:', event.imageUrl);
+      console.error('  Error:', error.nativeEvent);
+      setImageError(true);
+      setShowLoader(false);
+    },
+    [event.title, event.imageUrl]
+  );
 
   return (
-    <View style={styles.imageContainer}>
+    <View style={[styles.imageContainer, { height: heroHeight }]}>
       {imageSource && !imageError ? (
         <>
           <Image
