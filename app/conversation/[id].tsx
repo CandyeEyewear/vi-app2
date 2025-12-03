@@ -642,8 +642,7 @@ export default function ConversationScreen() {
                 
                 const result = await ImagePicker.launchCameraAsync({
                   mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                  allowsEditing: true,
-                  aspect: [4, 3],
+                  allowsEditing: false, // Allow full image without cropping
                   quality: 0.8,
                 });
                 if (!result.canceled && result.assets[0]) {
@@ -663,8 +662,7 @@ export default function ConversationScreen() {
                 
                 const result = await ImagePicker.launchImageLibraryAsync({
                   mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                  allowsEditing: true,
-                  aspect: [4, 3],
+                  allowsEditing: false, // Allow full image without cropping
                   quality: 0.8,
                 });
                 if (!result.canceled && result.assets[0]) {
@@ -685,11 +683,13 @@ export default function ConversationScreen() {
     try {
       setUploadingImage(true);
 
-      // Compress and resize image
+      // Compress and resize image - better compression to save space
+      // Max width: 1280px (good quality for viewing, smaller file size)
+      // Quality: 0.65 (good balance between quality and storage - saves ~50% space)
       const manipulatedImage = await manipulateAsync(
         uri,
-        [{ resize: { width: 1920 } }],
-        { compress: 0.8, format: SaveFormat.JPEG }
+        [{ resize: { width: 1280 } }], // Reduced from 1920px for better compression
+        { compress: 0.65, format: SaveFormat.JPEG } // Reduced from 0.8 to save storage
       );
 
       // Create filename
