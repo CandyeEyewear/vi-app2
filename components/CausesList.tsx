@@ -20,16 +20,15 @@ import {
   Keyboard,
   Animated,
 } from 'react-native';
+import { Check } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { Search, X, Check, Bookmark, TrendingUp, Zap } from 'lucide-react-native';
+import { Search, X } from 'lucide-react-native';
 import { Cause, CauseCategory } from '../types';
 import { Colors } from '../constants/colors';
 import { getCauses } from '../services/causesService';
 import { CauseCard } from './cards/CauseCard';
 import { EmptyState } from './EmptyState';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../services/supabase';
-import { showToast } from '../utils/toast';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
@@ -44,13 +43,6 @@ const CAUSE_CATEGORIES: { value: CauseCategory | 'all'; label: string; emoji: st
   { value: 'community', label: 'Community', emoji: '' },
   { value: 'poverty', label: 'Poverty Relief', emoji: '' },
   { value: 'other', label: 'Other', emoji: '' },
-];
-
-// Quick filter options
-const QUICK_FILTERS = [
-  { id: 'trending', label: 'Trending', icon: TrendingUp, description: 'Most popular causes' },
-  { id: 'ending', label: 'Ending Soon', icon: Zap, description: 'Ending this week' },
-  { id: 'saved', label: 'Saved', icon: Bookmark, description: 'Your bookmarks' },
 ];
 
 interface CausesListProps {
@@ -92,76 +84,6 @@ function CausesListSkeleton({ colors, count = 3 }: { colors: any; count?: number
   );
 }
 
-// Animated Filter Chip Component
-const AnimatedFilterChip = React.memo(({
-  label,
-  isSelected,
-  onPress,
-  colors,
-}: {
-  label: string;
-  isSelected: boolean;
-  onPress: () => void;
-  colors: any;
-}) => {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const bgAnim = useRef(new Animated.Value(isSelected ? 1 : 0)).current;
-
-  useEffect(() => {
-    Animated.timing(bgAnim, { 
-      toValue: isSelected ? 1 : 0, 
-      duration: 200, 
-      useNativeDriver: false 
-    }).start();
-  }, [isSelected]);
-
-  const handlePressIn = () => {
-    Animated.spring(scaleAnim, { toValue: 0.95, useNativeDriver: true }).start();
-  };
-
-  const handlePressOut = () => {
-    Animated.spring(scaleAnim, { toValue: 1, friction: 3, useNativeDriver: true }).start();
-  };
-
-  const backgroundColor = bgAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [colors.card, colors.primary],
-  });
-
-  const borderColor = bgAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [colors.border, colors.primary],
-  });
-
-  return (
-    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-      <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
-        <Animated.View
-          style={[
-            styles.categoryChip,
-            { backgroundColor, borderColor }
-          ]}
-        >
-          {isSelected && (
-            <View style={styles.chipCheckmark}>
-              <Check size={12} color={colors.textOnPrimary} strokeWidth={3} />
-            </View>
-          )}
-          <Text 
-            style={[
-              styles.categoryChipText, 
-              { color: isSelected ? colors.textOnPrimary : colors.text },
-              isSelected && styles.categoryChipTextSelected
-            ]}
-          >
-            {label}
-          </Text>
-        </Animated.View>
-      </Pressable>
-    </Animated.View>
-  );
-});
-
 export function CausesList({
   featured,
   category: initialCategory,
@@ -189,8 +111,6 @@ export function CausesList({
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
   const [internalIsSearchExpanded, setInternalIsSearchExpanded] = useState(false);
-  const [savedCauseIds, setSavedCauseIds] = useState<string[]>([]);
-  const [selectedQuickFilter, setSelectedQuickFilter] = useState<string | null>(null);
   const searchInputRef = useRef<TextInput>(null);
   const PAGE_SIZE = limit || 10;
   
@@ -203,67 +123,6 @@ export function CausesList({
       setInternalIsSearchExpanded(expanded);
     }
   };
-
-  // Load saved causes
-  const loadSavedCauseIds = useCallback(async () => {
-    if (!user?.id) { 
-      setSavedCauseIds([]);
-      return;
-    }
-    
-    try {
-      const { data, error } = await supabase
-        .from('saved_causes')
-        .select('cause_id')
-        .eq('user_id', user.id);
-      
-      if (error) throw error;
-      setSavedCauseIds(data?.map(item => item.cause_id) || []);
-    } catch (error) {
-      console.error('Error loading saved causes:', error);
-      setSavedCauseIds([]);
-    }
-  }, [user?.id]);
-
-  // Toggle save
-  const handleToggleSave = useCallback(async (cause: Cause) => {
-    if (!user) {
-      showToast('Please log in to save causes', 'error');
-      return;
-    }
-    
-    const isSaved = savedCauseIds.includes(cause.id);
-    
-    try {
-      if (isSaved) {
-        const { error } = await supabase
-          .from('saved_causes')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('cause_id', cause.id);
-        
-        if (!error) {
-          setSavedCauseIds(prev => prev.filter(id => id !== cause.id));
-          showToast('Removed from saved', 'success');
-        }
-      } else {
-        const { error } = await supabase
-          .from('saved_causes')
-          .insert({
-            user_id: user.id,
-            cause_id: cause.id,
-          });
-        
-        if (!error) {
-          setSavedCauseIds(prev => [...prev, cause.id]);
-          showToast('Saved for later!', 'success');
-        }
-      }
-    } catch (error) {
-      console.error('Error toggling save:', error);
-      showToast('Failed to save', 'error');
-    }
-  }, [user, savedCauseIds]);
 
   // Fetch causes
   const fetchCauses = useCallback(async (reset: boolean = false) => {
@@ -307,42 +166,6 @@ export function CausesList({
   useEffect(() => {
     fetchCauses(true);
   }, [selectedCategory, searchQuery]);
-
-  // Load saved causes on mount and when user changes
-  useEffect(() => {
-    if (user?.id) {
-      loadSavedCauseIds();
-    } else {
-      setSavedCauseIds([]);
-    }
-  }, [user?.id, loadSavedCauseIds]);
-
-  // Filter causes based on quick filters
-  const filteredCauses = React.useMemo(() => {
-    let results = [...causes];
-    
-    if (selectedQuickFilter === 'trending') {
-      // Sort by most donors
-      results.sort((a, b) => (b.donorCount || 0) - (a.donorCount || 0));
-    } else if (selectedQuickFilter === 'ending') {
-      // Filter causes ending within 7 days
-      const now = new Date();
-      const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-      results = results.filter(cause => {
-        if (!cause.endDate) return false;
-        const endDate = new Date(cause.endDate);
-        return endDate >= now && endDate <= sevenDaysFromNow;
-      }).sort((a, b) => {
-        const aDate = a.endDate ? new Date(a.endDate).getTime() : 0;
-        const bDate = b.endDate ? new Date(b.endDate).getTime() : 0;
-        return aDate - bDate;
-      });
-    } else if (selectedQuickFilter === 'saved') {
-      results = results.filter(cause => savedCauseIds.includes(cause.id));
-    }
-    
-    return results;
-  }, [causes, selectedQuickFilter, savedCauseIds]);
 
   // Focus search input when expanded
   useEffect(() => {
@@ -390,16 +213,60 @@ export function CausesList({
     setSearchQuery('');
   }, []);
 
+  // Animated Filter Chip Component
+  const AnimatedCategoryChip = useCallback(({ category }: { category: typeof CAUSE_CATEGORIES[0] }) => {
+    const isSelected = selectedCategory === category.value;
+    const scaleAnim = useRef(new Animated.Value(1)).current;
+    const bgAnim = useRef(new Animated.Value(isSelected ? 1 : 0)).current;
+
+    useEffect(() => {
+      Animated.timing(bgAnim, { toValue: isSelected ? 1 : 0, duration: 200, useNativeDriver: false }).start();
+    }, [isSelected]);
+
+    const handlePressIn = () => {
+      Animated.spring(scaleAnim, { toValue: 0.95, useNativeDriver: true }).start();
+    };
+
+    const handlePressOut = () => {
+      Animated.spring(scaleAnim, { toValue: 1, friction: 3, useNativeDriver: true }).start();
+    };
+
+    const backgroundColor = bgAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [colors.card, colors.primary],
+    });
+
+    const borderColor = bgAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [colors.border, colors.primary],
+    });
+
+    return (
+      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+        <Pressable onPress={() => setSelectedCategory(category.value)} onPressIn={handlePressIn} onPressOut={handlePressOut}>
+          <Animated.View style={[styles.categoryChip, { backgroundColor, borderColor }]}>
+            {isSelected && (
+              <View style={styles.chipCheckmark}>
+                <Check size={12} color={colors.textOnPrimary} strokeWidth={3} />
+              </View>
+            )}
+            <Text style={[styles.categoryChipText, { color: isSelected ? colors.textOnPrimary : colors.text }, isSelected && styles.categoryChipTextSelected]}>
+              {category.label}
+            </Text>
+          </Animated.View>
+        </Pressable>
+      </Animated.View>
+    );
+  }, [selectedCategory, colors]);
+
   // Render cause item
   const renderCauseItem = useCallback(({ item }: { item: Cause }) => (
     <CauseCard
       cause={item}
       onPress={() => handleCausePress(item)}
       onDonatePress={() => handleDonatePress(item)}
-      isSaved={savedCauseIds.includes(item.id)}
-      onToggleSave={() => handleToggleSave(item)}
     />
-  ), [handleCausePress, handleDonatePress, savedCauseIds, handleToggleSave]);
+  ), [handleCausePress, handleDonatePress]);
 
   // Render empty state
   const renderEmptyComponent = useCallback(() => {
@@ -425,7 +292,7 @@ export function CausesList({
             ]}
             onPress={handleClearSearch}
           >
-            <Text style={styles.clearButtonText}>Clear Search</Text>
+            <Text style={[styles.clearButtonText, { color: colors.textOnPrimary }]}>Clear Search</Text>
           </Pressable>
         )}
       </View>
@@ -458,7 +325,7 @@ export function CausesList({
               }}
             />
             {searchQuery.length > 0 && (
-              <Pressable onPress={handleClearSearch}>
+              <Pressable onPress={handleClearSearch} style={({ pressed }) => pressed && { opacity: 0.7 }}>
                 <X size={20} color={colors.textSecondary} />
               </Pressable>
             )}
@@ -481,7 +348,7 @@ export function CausesList({
         </View>
       )}
 
-      {/* Category Filters and Quick Filters */}
+      {/* Category Filters */}
       {showFilters && (
         <View style={styles.filtersContainer}>
           <ScrollView
@@ -490,45 +357,17 @@ export function CausesList({
             contentContainerStyle={styles.categoriesContent}
           >
             {CAUSE_CATEGORIES.map((category) => (
-              <AnimatedFilterChip
-                key={category.value}
-                label={category.label}
-                isSelected={selectedCategory === category.value && !selectedQuickFilter}
-                onPress={() => {
-                  setSelectedCategory(category.value);
-                  setSelectedQuickFilter(null);
-                }}
-                colors={colors}
-              />
-            ))}
-            
-            <View style={[styles.filterDivider, { backgroundColor: colors.border }]} />
-            
-            {QUICK_FILTERS.map((filter) => (
-              <AnimatedFilterChip
-                key={filter.id}
-                label={filter.label}
-                isSelected={selectedQuickFilter === filter.id}
-                onPress={() => {
-                  if (selectedQuickFilter === filter.id) {
-                    setSelectedQuickFilter(null);
-                  } else {
-                    setSelectedQuickFilter(filter.id);
-                    setSelectedCategory('all');
-                  }
-                }}
-                colors={colors}
-              />
+              <AnimatedCategoryChip key={category.value} category={category} />
             ))}
           </ScrollView>
         </View>
       )}
 
       {/* Results count */}
-      {!loading && filteredCauses.length > 0 && (
+      {!loading && causes.length > 0 && (
         <View style={styles.resultsInfo}>
           <Text style={[styles.resultsText, { color: colors.textSecondary }]}>
-            {filteredCauses.length} {filteredCauses.length === 1 ? 'cause' : 'causes'} found
+            {causes.length} {causes.length === 1 ? 'cause' : 'causes'} found
           </Text>
         </View>
       )}
@@ -572,7 +411,7 @@ export function CausesList({
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <FlatList
-        data={filteredCauses}
+        data={causes}
         renderItem={renderCauseItem}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
@@ -643,17 +482,11 @@ const styles = StyleSheet.create({
   categoriesContent: {
     gap: 8,
   },
-  filterDivider: {
-    width: 1,
-    height: 24,
-    marginHorizontal: 8,
-    alignSelf: 'center',
-  },
   categoryChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: isSmallScreen ? 10 : 12,
-    paddingVertical: isSmallScreen ? 6 : 8,
+    paddingHorizontal: isSmallScreen ? 12 : 14,
+    paddingVertical: isSmallScreen ? 8 : 10,
     borderRadius: 20,
     borderWidth: 1,
     marginRight: 8,
@@ -702,7 +535,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   clearButtonText: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
   },

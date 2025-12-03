@@ -9,12 +9,13 @@ import {
   View,
   Text,
   StyleSheet,
+  TouchableOpacity,
   Pressable,
   Image,
   useColorScheme,
   Dimensions,
 } from 'react-native';
-import { Heart, Users, Clock, TrendingUp, Share2, Bookmark } from 'lucide-react-native';
+import { Heart, Users, Clock, TrendingUp, Share2 } from 'lucide-react-native';
 import { Cause, CauseCategory } from '../../types';
 import { Colors } from '../../constants/colors';
 import { getCauseProgress, getCauseDaysRemaining, formatCurrency } from '../../services/causesService';
@@ -29,8 +30,6 @@ interface CauseCardProps {
   cause: Cause;
   onPress?: () => void;
   onDonatePress?: () => void;
-  isSaved?: boolean;
-  onToggleSave?: () => void;
 }
 
 // Category colors and labels
@@ -44,7 +43,7 @@ const CATEGORY_CONFIG: Record<CauseCategory, { label: string; color: string; emo
   other: { label: 'Other', color: '#757575', emoji: '📋' },
 };
 
-export function CauseCard({ cause, onPress, onDonatePress, isSaved = false, onToggleSave }: CauseCardProps) {
+export function CauseCard({ cause, onPress, onDonatePress }: CauseCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const [showShareModal, setShowShareModal] = useState(false);
@@ -63,11 +62,6 @@ export function CauseCard({ cause, onPress, onDonatePress, isSaved = false, onTo
   const handleSharePress = (e: any) => {
     e.stopPropagation();
     setShowShareModal(true);
-  };
-
-  const handleSavePress = (e: any) => {
-    e.stopPropagation();
-    onToggleSave?.();
   };
 
   const handleShare = async (comment?: string, visibility: 'public' | 'circle' = 'public') => {
@@ -117,38 +111,14 @@ export function CauseCard({ cause, onPress, onDonatePress, isSaved = false, onTo
           </Text>
         </View>
 
-        {/* Action Buttons */}
-        <View style={styles.actionButtons}>
-          {/* Bookmark Button */}
-          {onToggleSave && (
-            <Pressable
-              onPress={handleSavePress}
-              style={({ pressed }) => [
-                styles.actionButton,
-                pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] }
-              ]}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Bookmark 
-                size={18} 
-                color="#FFFFFF" 
-                fill={isSaved ? "#FFFFFF" : "none"}
-              />
-            </Pressable>
-          )}
-          
-          {/* Share Button */}
-          <Pressable
-            onPress={handleSharePress}
-            style={({ pressed }) => [
-              styles.actionButton,
-              pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] }
-            ]}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Share2 size={18} color="#FFFFFF" />
-          </Pressable>
-        </View>
+        {/* Share Button */}
+        <TouchableOpacity
+          onPress={handleSharePress}
+          style={styles.shareButton}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Share2 size={18} color="#FFFFFF" />
+        </TouchableOpacity>
 
         {/* Featured Badge */}
         {cause.isFeatured && (
@@ -224,7 +194,7 @@ export function CauseCard({ cause, onPress, onDonatePress, isSaved = false, onTo
         {/* Donate Button */}
         <Pressable
           style={({ pressed }) => [
-            styles.donateButton,
+            styles.donateButton, 
             { backgroundColor: colors.primary },
             pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }
           ]}
@@ -232,8 +202,8 @@ export function CauseCard({ cause, onPress, onDonatePress, isSaved = false, onTo
           accessibilityRole="button"
           accessibilityLabel={`Donate to ${cause.title}`}
         >
-          <Heart size={16} color="#FFFFFF" />
-          <Text style={styles.donateButtonText}>Donate Now</Text>
+          <Heart size={16} color={colors.textOnPrimary} />
+          <Text style={[styles.donateButtonText, { color: colors.textOnPrimary }]}>Donate Now</Text>
         </Pressable>
       </View>
     </Pressable>
@@ -282,21 +252,17 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
   },
-  actionButtons: {
+  shareButton: {
     position: 'absolute',
     top: 12,
     right: 12,
-    flexDirection: 'row',
-    gap: 8,
-    zIndex: 2,
-  },
-  actionButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 2,
   },
   categoryBadgeText: {
     color: '#FFFFFF',
@@ -392,7 +358,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   donateButtonText: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
   },

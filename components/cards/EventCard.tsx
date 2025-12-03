@@ -23,7 +23,6 @@ import {
   Ticket,
   Star,
   Share2,
-  Bookmark,
 } from 'lucide-react-native';
 import { Event, EventCategory } from '../../types';
 import { Colors } from '../../constants/colors';
@@ -45,8 +44,6 @@ interface EventCardProps {
   event: Event;
   onPress?: () => void;
   onRegisterPress?: () => void;
-  isSaved?: boolean;
-  onToggleSave?: () => void;
 }
 
 // Category colors and labels
@@ -60,7 +57,7 @@ const CATEGORY_CONFIG: Record<EventCategory, { label: string; color: string; emo
   other: { label: 'Event', color: '#757575', emoji: '📅' },
 };
 
-export function EventCard({ event, onPress, onRegisterPress, isSaved = false, onToggleSave }: EventCardProps) {
+export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const [showShareModal, setShowShareModal] = useState(false);
@@ -68,24 +65,17 @@ export function EventCard({ event, onPress, onRegisterPress, isSaved = false, on
   const { shareEventToFeed } = useFeed();
 
   const categoryConfig = CATEGORY_CONFIG[event.category] || CATEGORY_CONFIG.other;
-  const daysUntil = event.eventDate ? getDaysUntilEvent(event.eventDate) : null;
-  const isToday = event.eventDate ? isEventToday(event.eventDate) : false;
+  const daysUntil = getDaysUntilEvent(event.eventDate);
+  const isToday = isEventToday(event.eventDate);
   const spotsLeft = event.spotsRemaining ?? event.capacity;
   const hasLimitedSpots = spotsLeft !== undefined && spotsLeft <= 10 && spotsLeft > 0;
 
-  const handleRegisterPress = (e: any) => {
-    e.stopPropagation();
+  const handleRegisterPress = () => {
     onRegisterPress?.();
   };
 
-  const handleSharePress = (e: any) => {
-    e.stopPropagation();
+  const handleSharePress = () => {
     setShowShareModal(true);
-  };
-
-  const handleSavePress = (e: any) => {
-    e.stopPropagation();
-    onToggleSave?.();
   };
 
   const handleShare = async (comment?: string, visibility: 'public' | 'circle' = 'public') => {
@@ -110,13 +100,13 @@ export function EventCard({ event, onPress, onRegisterPress, isSaved = false, on
     <>
     <Pressable
       style={({ pressed }) => [
-        styles.card,
+        styles.card, 
         { backgroundColor: colors.card, borderColor: colors.border },
         pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }
       ]}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Event: ${event.title}. ${event.eventDate ? formatEventDate(event.eventDate) : 'Date TBA'}`}
+      accessibilityLabel={`Event: ${event.title}. ${formatEventDate(event.eventDate)}`}
     >
       {/* Image Section */}
       <View style={styles.imageContainer}>
@@ -139,38 +129,17 @@ export function EventCard({ event, onPress, onRegisterPress, isSaved = false, on
           </Text>
         </View>
 
-        {/* Action Buttons */}
-        <View style={styles.actionButtons}>
-          {/* Bookmark Button */}
-          {onToggleSave && (
-            <Pressable
-              onPress={handleSavePress}
-              style={({ pressed }) => [
-                styles.actionButton,
-                pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] }
-              ]}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Bookmark 
-                size={18} 
-                color="#FFFFFF" 
-                fill={isSaved ? "#FFFFFF" : "none"}
-              />
-            </Pressable>
-          )}
-          
-          {/* Share Button */}
-          <Pressable
-            onPress={handleSharePress}
-            style={({ pressed }) => [
-              styles.actionButton,
-              pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] }
-            ]}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Share2 size={18} color="#FFFFFF" />
-          </Pressable>
-        </View>
+        {/* Share Button */}
+        <Pressable
+          onPress={handleSharePress}
+          style={({ pressed }) => [
+            styles.shareButton,
+            pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] }
+          ]}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Share2 size={18} color="#FFFFFF" />
+        </Pressable>
 
         {/* Featured Badge */}
         {event.isFeatured && (
@@ -181,16 +150,14 @@ export function EventCard({ event, onPress, onRegisterPress, isSaved = false, on
         )}
 
         {/* Date Badge */}
-        {event.eventDate && (
-          <View style={[styles.dateBadge, { backgroundColor: colors.card }]}>
-            <Text style={[styles.dateMonth, { color: colors.primary }]}>
-              {new Date(event.eventDate).toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}
-            </Text>
-            <Text style={[styles.dateDay, { color: colors.text }]}>
-              {new Date(event.eventDate).getDate()}
-            </Text>
-          </View>
-        )}
+        <View style={[styles.dateBadge, { backgroundColor: colors.card }]}>
+          <Text style={[styles.dateMonth, { color: colors.primary }]}>
+            {new Date(event.eventDate).toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}
+          </Text>
+          <Text style={[styles.dateDay, { color: colors.text }]}>
+            {new Date(event.eventDate).getDate()}
+          </Text>
+        </View>
       </View>
 
       {/* Content Section */}
@@ -204,7 +171,7 @@ export function EventCard({ event, onPress, onRegisterPress, isSaved = false, on
         <View style={styles.infoRow}>
           <Calendar size={14} color={colors.textSecondary} />
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-            {event.eventDate ? formatEventDate(event.eventDate) : 'Date TBA'}
+            {formatEventDate(event.eventDate)}
           </Text>
           {isToday && (
             <View style={styles.todayBadge}>
@@ -216,8 +183,8 @@ export function EventCard({ event, onPress, onRegisterPress, isSaved = false, on
         <View style={styles.infoRow}>
           <Clock size={14} color={colors.textSecondary} />
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-            {event.startTime ? formatEventTime(event.startTime) : 'TBA'}
-            {event.endTime && event.startTime && ` - ${formatEventTime(event.endTime)}`}
+            {formatEventTime(event.startTime)}
+            {event.endTime && ` - ${formatEventTime(event.endTime)}`}
           </Text>
         </View>
 
@@ -234,7 +201,7 @@ export function EventCard({ event, onPress, onRegisterPress, isSaved = false, on
             <>
               <MapPin size={14} color={colors.textSecondary} />
               <Text style={[styles.infoText, { color: colors.textSecondary }]} numberOfLines={1}>
-                {event.location || 'Location TBA'}
+                {event.location}
               </Text>
             </>
           )}
@@ -277,7 +244,7 @@ export function EventCard({ event, onPress, onRegisterPress, isSaved = false, on
         {event.registrationRequired && spotsLeft !== 0 && (
           <Pressable
             style={({ pressed }) => [
-              styles.registerButton,
+              styles.registerButton, 
               { backgroundColor: colors.primary },
               pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }
             ]}
@@ -285,8 +252,8 @@ export function EventCard({ event, onPress, onRegisterPress, isSaved = false, on
             accessibilityRole="button"
             accessibilityLabel={`Register for ${event.title}`}
           >
-            <Ticket size={16} color="#FFFFFF" />
-            <Text style={styles.registerButtonText}>
+            <Ticket size={16} color={colors.textOnPrimary} />
+            <Text style={[styles.registerButtonText, { color: colors.textOnPrimary }]}>
               {event.isFree ? 'Register Now' : 'Get Tickets'}
             </Text>
           </Pressable>
@@ -350,21 +317,17 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
   },
-  actionButtons: {
+  shareButton: {
     position: 'absolute',
     top: 12,
     right: 12,
-    flexDirection: 'row',
-    gap: 8,
-    zIndex: 2,
-  },
-  actionButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 2,
   },
   categoryBadgeText: {
     color: '#FFFFFF',
@@ -480,7 +443,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   registerButtonText: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
   },

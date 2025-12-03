@@ -4,20 +4,23 @@
  * File: app/events/[id].tsx
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
+  Pressable,
   Image,
+  useColorScheme,
   RefreshControl,
   Share,
-  Animated,
+  Dimensions,
   ActivityIndicator,
   Linking,
   Platform,
   SafeAreaView,
+  Animated,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,10 +34,12 @@ import {
   Users,
   Video,
   Ticket,
+  Star,
   ExternalLink,
   Phone,
   Mail,
   DollarSign,
+  Heart,
   Check,
   X,
   AlertCircle,
@@ -55,15 +60,53 @@ import {
   formatCurrency,
 } from '../../services/eventsService';
 import { useAuth } from '../../contexts/AuthContext';
-import { useThemeStyles } from '../../hooks/useThemeStyles';
 import { showToast } from '../../utils/toast';
 import ErrorBoundary from '../../components/ErrorBoundary';
-import { AnimatedPressable } from '../../components/AnimatedPressable';
 import Card from '../../components/Card';
 import Button from '../../components/Button';
 import { ShimmerSkeleton } from '../../components/ShimmerSkeleton';
 
-// Modern Spacing System
+// Responsive System
+const getResponsiveValues = () => {
+  const width = Dimensions.get('window').width;
+  const isSmallMobile = width < 380;
+  const isMobile = width < 768;
+  const isTablet = width >= 768 && width < 1024;
+  const isDesktop = width >= 1024;
+  
+  return {
+    isSmallMobile, isMobile, isTablet, isDesktop,
+    spacing: {
+      xs: isSmallMobile ? 4 : 6,
+      sm: isSmallMobile ? 8 : 10,
+      md: isSmallMobile ? 12 : 16,
+      lg: isSmallMobile ? 16 : 20,
+      xl: isSmallMobile ? 20 : 24,
+      xxl: isSmallMobile ? 24 : 32,
+    },
+    fontSize: {
+      xs: isSmallMobile ? 10 : 11,
+      sm: isSmallMobile ? 12 : 13,
+      md: isSmallMobile ? 14 : 15,
+      lg: isSmallMobile ? 16 : 17,
+      xl: isSmallMobile ? 18 : 20,
+      xxl: isSmallMobile ? 22 : 26,
+      header: isSmallMobile ? 22 : isTablet ? 28 : 26,
+    },
+  };
+};
+
+// Modern Typography Scale (using responsive values)
+const Typography = {
+  title1: { fontSize: 32, fontWeight: '800' as const, lineHeight: 38 },
+  title2: { fontSize: 26, fontWeight: '700' as const, lineHeight: 32 },
+  title3: { fontSize: 20, fontWeight: '600' as const, lineHeight: 26 },
+  body1: { fontSize: 16, fontWeight: '400' as const, lineHeight: 24 },
+  body2: { fontSize: 14, fontWeight: '400' as const, lineHeight: 20 },
+  caption: { fontSize: 12, fontWeight: '500' as const, lineHeight: 16 },
+};
+
+// Modern Spacing System (keeping for compatibility, but use responsive.spacing instead)
 const Spacing = {
   xs: 4,
   sm: 8,
@@ -74,18 +117,9 @@ const Spacing = {
   xxxl: 32,
 };
 
-// Modern Typography Scale
-const Typography = {
-  title1: { fontSize: 32, fontWeight: '800' as const, lineHeight: 38 },
-  title2: { fontSize: 26, fontWeight: '700' as const, lineHeight: 32 },
-  title3: { fontSize: 20, fontWeight: '600' as const, lineHeight: 26 },
-  body1: { fontSize: 16, fontWeight: '400' as const, lineHeight: 24 },
-  body2: { fontSize: 14, fontWeight: '400' as const, lineHeight: 20 },
-  caption: { fontSize: 12, fontWeight: '500' as const, lineHeight: 16 },
-};
-
 // Category configuration with theme colors
-const getCategoryConfig = (colors: any): Record<EventCategory, { label: string; color: string; emoji: string }> => {
+const getCategoryConfig = (colorScheme: 'light' | 'dark'): Record<EventCategory, { label: string; color: string; emoji: string }> => {
+  const colors = Colors[colorScheme];
   return {
     meetup: { label: 'Meetup', color: colors.primary, emoji: '🤝' },
     gala: { label: 'Gala', color: colors.community, emoji: '✨' },
@@ -165,13 +199,11 @@ function useEventDetails(eventId: string | undefined) {
 function EventHeader({ 
   onBack, 
   onShare, 
-  colors,
-  responsive,
+  colors 
 }: { 
   onBack: () => void; 
   onShare: () => void; 
   colors: any;
-  responsive: any;
 }) {
   const insets = useSafeAreaInsets();
 
@@ -179,16 +211,17 @@ function EventHeader({
     <View style={[
       styles.header, 
       { 
-        paddingTop: insets.top + responsive.spacing.lg,
+        paddingTop: insets.top + Spacing.lg,
         backgroundColor: colors.background,
         borderBottomColor: colors.border,
       }
     ]}>
-      <AnimatedPressable
+      <Pressable
         style={({ pressed }) => [
           styles.headerButton, 
           { 
-            backgroundColor: pressed ? colors.surfacePressed : colors.surfaceElevated,
+            backgroundColor: colors.card,
+            transform: [{ scale: pressed ? 0.95 : 1 }],
           }
         ]}
         onPress={onBack}
@@ -196,14 +229,15 @@ function EventHeader({
         accessibilityLabel="Go back"
         accessibilityHint="Returns to previous screen"
       >
-        <ArrowLeft size={responsive.iconSize.lg} color={colors.text} />
-      </AnimatedPressable>
+        <ArrowLeft size={24} color={colors.text} />
+      </Pressable>
 
-      <AnimatedPressable
+      <Pressable
         style={({ pressed }) => [
           styles.headerButton, 
           { 
-            backgroundColor: pressed ? colors.surfacePressed : colors.surfaceElevated,
+            backgroundColor: colors.card,
+            transform: [{ scale: pressed ? 0.95 : 1 }],
           }
         ]}
         onPress={onShare}
@@ -211,8 +245,8 @@ function EventHeader({
         accessibilityLabel="Share event"
         accessibilityHint="Opens share options for this event"
       >
-        <Share2 size={responsive.iconSize.lg} color={colors.text} />
-      </AnimatedPressable>
+        <Share2 size={24} color={colors.text} />
+      </Pressable>
     </View>
   );
 }
@@ -220,17 +254,16 @@ function EventHeader({
 // Event Image Component with modern loading
 function EventImage({ 
   event, 
-  colors,
-  responsive,
+  colors 
 }: { 
   event: Event; 
   colors: any;
-  responsive: any;
 }) {
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
-  const CATEGORY_CONFIG = getCategoryConfig(colors);
-  const categoryConfig = CATEGORY_CONFIG[event.category] || CATEGORY_CONFIG.other;
+  const colorScheme = useColorScheme();
+  const CATEGORY_CONFIG = getCategoryConfig(colorScheme === 'dark' ? 'dark' : 'light');
+  const categoryConfig = CATEGORY_CONFIG[event.category];
 
   return (
     <View style={styles.imageContainer}>
@@ -272,6 +305,90 @@ function EventImage({
   );
 }
 
+// Gradient Button Component with animations and depth
+function GradientButton({ 
+  onPress, 
+  icon: Icon, 
+  label, 
+  variant = 'primary',
+  loading = false,
+  disabled = false,
+  colors,
+}: { 
+  onPress: () => void; 
+  icon: any; 
+  label: string; 
+  variant?: 'primary' | 'secondary' | 'danger';
+  loading?: boolean;
+  disabled?: boolean;
+  colors: typeof Colors.light;
+}) {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const responsive = getResponsiveValues();
+
+  const handlePressIn = () => {
+    if (!disabled && !loading) {
+      Animated.spring(scaleAnim, {
+        toValue: 0.97,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  const handlePressOut = () => {
+    if (!disabled && !loading) {
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 3,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  const gradientColors = variant === 'danger' 
+    ? [colors.error, colors.errorDark]
+    : variant === 'secondary'
+    ? [colors.surfaceElevated, colors.surface2]
+    : Colors.gradients.primary;
+
+  const textColor = variant === 'secondary' ? colors.text : colors.textOnPrimary;
+
+  return (
+    <Animated.View style={[styles.gradientButtonWrapper, { transform: [{ scale: scaleAnim }], opacity: disabled ? 0.5 : 1 }]}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={styles.gradientButtonPressable}
+        disabled={disabled || loading}
+      >
+        <LinearGradient
+          colors={gradientColors}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={[styles.gradientButton, { height: responsive.buttonHeight || 52 }]}
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color={textColor} />
+          ) : (
+            <>
+              <Icon size={20} color={textColor} />
+              <Text style={[styles.gradientButtonText, { color: textColor }]}>{label}</Text>
+            </>
+          )}
+        </LinearGradient>
+      </Pressable>
+      {/* Shadow layer for depth */}
+      {variant === 'primary' && !disabled && (
+        <View style={[styles.buttonShadow, { backgroundColor: colors.primary }]} />
+      )}
+      {variant === 'danger' && !disabled && (
+        <View style={[styles.buttonShadow, { backgroundColor: colors.error }]} />
+      )}
+    </Animated.View>
+  );
+}
+
 // Event Info Cards
 function EventInfoCard({
   icon,
@@ -288,7 +405,7 @@ function EventInfoCard({
   colors: any;
   badge?: React.ReactNode;
 }) {
-  const Component = onPress ? AnimatedPressable : View;
+  const Component = onPress ? Pressable : View;
 
   return (
     <Card style={styles.infoCard}>
@@ -300,7 +417,7 @@ function EventInfoCard({
         onPress={onPress}
         accessibilityRole={onPress ? "button" : undefined}
       >
-        <View style={[styles.infoIcon, { backgroundColor: colors.surfaceElevated }]}>
+        <View style={[styles.infoIcon, { backgroundColor: colors.cardSecondary }]}>
           {icon}
         </View>
         <View style={styles.infoContent}>
@@ -380,11 +497,10 @@ function ErrorScreen({
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { colors, responsive, cardShadow } = useThemeStyles();
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const { user } = useAuth();
 
-  const insets = useSafeAreaInsets();
-  
   const {
     event,
     registration,
@@ -399,7 +515,7 @@ export default function EventDetailScreen() {
 
   // Memoized calculations
   const eventStatus = useMemo(() => {
-    if (!event || !event.eventDate) return null;
+    if (!event) return null;
     
     if (isEventPast(event.eventDate)) return 'past';
     if (isEventToday(event.eventDate)) return 'today';
@@ -418,11 +534,7 @@ export default function EventDetailScreen() {
     try {
       // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       
-      const dateText = event.eventDate ? formatEventDate(event.eventDate) : 'Date TBA';
-      const timeText = event.startTime ? formatEventTime(event.startTime) : 'Time TBA';
-      const locationText = event.isVirtual ? 'Virtual Event' : (event.location || 'Location TBA');
-      
-      const message = `Join me at "${event.title}"!\n\n📅 ${dateText}\n⏰ ${timeText}\n📍 ${locationText}\n\nRegister on Volunteers Inc!`;
+      const message = `Join me at "${event.title}"!\n\n📅 ${formatEventDate(event.eventDate)}\n⏰ ${formatEventTime(event.startTime)}\n📍 ${event.isVirtual ? 'Virtual Event' : event.location}\n\nRegister on Volunteers Inc!`;
 
       await Share.share({
         message,
@@ -570,8 +682,7 @@ export default function EventDetailScreen() {
         <EventHeader 
           onBack={() => router.back()} 
           onShare={() => {}} 
-          colors={colors}
-          responsive={responsive}
+          colors={colors} 
         />
         <ScrollView style={styles.scrollView}>
           {/* Image Skeleton */}
@@ -580,31 +691,31 @@ export default function EventDetailScreen() {
             style={{ width: '100%', height: 300, borderRadius: 0 }} 
           />
           
-          <View style={{ padding: responsive.spacing.lg }}>
+          <View style={{ padding: Spacing.lg }}>
             {/* Category Badge Skeleton */}
             <ShimmerSkeleton 
               colors={colors} 
-              style={{ width: 100, height: 28, borderRadius: 14, marginBottom: responsive.spacing.md }} 
+              style={{ width: 100, height: 28, borderRadius: 14, marginBottom: Spacing.md }} 
             />
             
             {/* Title Skeleton */}
             <ShimmerSkeleton 
               colors={colors} 
-              style={{ width: '90%', height: 32, borderRadius: 8, marginBottom: responsive.spacing.sm }} 
+              style={{ width: '90%', height: 32, borderRadius: 8, marginBottom: Spacing.sm }} 
             />
             <ShimmerSkeleton 
               colors={colors} 
-              style={{ width: '70%', height: 32, borderRadius: 8, marginBottom: responsive.spacing.xxl }} 
+              style={{ width: '70%', height: 32, borderRadius: 8, marginBottom: Spacing.xxl }} 
             />
             
             {/* Info Cards Grid */}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: responsive.spacing.md, marginBottom: responsive.spacing.xxl }}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginBottom: Spacing.xxl }}>
               {[...Array(4)].map((_, i) => (
                 <ShimmerSkeleton 
                   key={i}
                   colors={colors} 
                   style={{ 
-                    width: responsive.isMobile ? '48%' : '23%', 
+                    width: screenWidth > 600 ? '23%' : '48%', 
                     height: 100, 
                     borderRadius: 12 
                   }} 
@@ -615,7 +726,7 @@ export default function EventDetailScreen() {
             {/* Description Section */}
             <ShimmerSkeleton 
               colors={colors} 
-              style={{ width: 120, height: 24, borderRadius: 8, marginBottom: responsive.spacing.md }} 
+              style={{ width: 120, height: 24, borderRadius: 8, marginBottom: Spacing.md }} 
             />
             {[...Array(6)].map((_, i) => (
               <ShimmerSkeleton 
@@ -625,7 +736,7 @@ export default function EventDetailScreen() {
                   width: i === 5 ? '70%' : '100%', 
                   height: 16, 
                   borderRadius: 8, 
-                  marginBottom: responsive.spacing.sm 
+                  marginBottom: Spacing.sm 
                 }} 
               />
             ))}
@@ -643,8 +754,7 @@ export default function EventDetailScreen() {
         <EventHeader 
           onBack={() => router.back()} 
           onShare={() => {}} 
-          colors={colors}
-          responsive={responsive}
+          colors={colors} 
         />
         <ErrorBoundary>
           <ErrorScreen onRetry={refetch} colors={colors} />
@@ -655,19 +765,14 @@ export default function EventDetailScreen() {
 
   const spotsLeft = event.spotsRemaining ?? event.capacity ?? 999;
   const isSoldOut = spotsLeft <= 0;
-  const isPastEvent = event.eventDate ? isEventPast(event.eventDate) : false;
+  const isPastEvent = isEventPast(event.eventDate);
 
   return (
     <ErrorBoundary>
-        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
 
-        <EventHeader 
-          onBack={() => router.back()} 
-          onShare={handleShare} 
-          colors={colors}
-          responsive={responsive}
-        />
+        <EventHeader onBack={() => router.back()} onShare={handleShare} colors={colors} />
 
         <ScrollView
           style={styles.scrollView}
@@ -683,7 +788,7 @@ export default function EventDetailScreen() {
           }
         >
           {/* Event Image */}
-          <EventImage event={event} colors={colors} responsive={responsive} />
+          <EventImage event={event} colors={colors} />
 
           {/* Content */}
           <View style={[styles.content, { backgroundColor: colors.background }]}>
@@ -703,8 +808,8 @@ export default function EventDetailScreen() {
             {/* Date & Time Card */}
             <EventInfoCard
               icon={<Calendar size={24} color={colors.primary} />}
-              title={event.eventDate ? formatEventDate(event.eventDate) : 'Date TBA'}
-              subtitle={event.startTime ? `${formatEventTime(event.startTime)}${event.endTime ? ` - ${formatEventTime(event.endTime)}` : ''}` : 'Time TBA'}
+              title={formatEventDate(event.eventDate)}
+              subtitle={`${formatEventTime(event.startTime)}${event.endTime ? ` - ${formatEventTime(event.endTime)}` : ''}`}
               badge={eventStatus === 'today' && (
                 <View style={[styles.todayBadge, { backgroundColor: colors.accent }]}>
                   <Text style={[styles.todayBadgeText, { color: colors.textOnPrimary }]}>TODAY</Text>
@@ -719,7 +824,7 @@ export default function EventDetailScreen() {
                 <Video size={24} color={colors.primary} /> : 
                 <MapPin size={24} color={colors.primary} />
               }
-              title={event.isVirtual ? 'Virtual Event' : (event.location || 'Location TBA')}
+              title={event.isVirtual ? 'Virtual Event' : event.location}
               subtitle={event.isVirtual ? 
                 'Join online from anywhere' : 
                 event.locationAddress
@@ -825,77 +930,29 @@ export default function EventDetailScreen() {
           </View>
         </ScrollView>
 
-        {/* Bottom Action Button */}
+        {/* Bottom Action Button with Gradient */}
         {!isPastEvent && (
           <View style={[
             styles.bottomBar, 
             { 
               backgroundColor: colors.background,
               borderTopColor: colors.border,
-              paddingBottom: insets.bottom + responsive.spacing.md,
             }
           ]}>
-            {registration ? (
-              <AnimatedPressable
-                onPress={handleRegister}
-                disabled={registering}
-                style={({ pressed }) => [
-                  styles.actionButton,
-                  { opacity: pressed ? 0.9 : 1 }
-                ]}
-              >
-                <LinearGradient
-                  colors={[colors.error, colors.errorDark]}
-                  style={[
-                    styles.gradientButton,
-                    { 
-                      height: responsive.buttonHeight,
-                      paddingHorizontal: responsive.spacing.xl,
-                      opacity: registering ? 0.7 : 1,
-                    }
-                  ]}
-                >
-                  <X size={20} color={colors.textOnPrimary} />
-                  <Text style={[styles.actionButtonText, { color: colors.textOnPrimary }]}>
-                    {registering ? 'Cancelling...' : 'Cancel Registration'}
-                  </Text>
-                </LinearGradient>
-              </AnimatedPressable>
-            ) : (
-              <AnimatedPressable
-                onPress={handleRegister}
-                disabled={registering || isSoldOut}
-                style={({ pressed }) => [
-                  styles.actionButton,
-                  { opacity: pressed ? 0.9 : 1 }
-                ]}
-              >
-                <LinearGradient
-                  colors={
-                    registering || isSoldOut
-                      ? [colors.textSecondary, colors.textSecondary]
-                      : [colors.primary, colors.primaryDark]
-                  }
-                  style={[
-                    styles.gradientButton,
-                    { 
-                      height: responsive.buttonHeight,
-                      paddingHorizontal: responsive.spacing.xl,
-                      opacity: registering || isSoldOut ? 0.7 : 1,
-                    }
-                  ]}
-                >
-                  {!isSoldOut && (
-                    event.isFree ? <Ticket size={20} color={colors.textOnPrimary} /> : <DollarSign size={20} color={colors.textOnPrimary} />
-                  )}
-                  <Text style={[styles.actionButtonText, { color: colors.textOnPrimary }]}>
-                    {registering ? 'Processing...' :
-                     isSoldOut ? 'Sold Out' :
-                     event.isFree ? 'Register for Free' : `Buy Tickets - ${formatCurrency(event.ticketPrice)}`}
-                  </Text>
-                </LinearGradient>
-              </AnimatedPressable>
-            )}
+            <GradientButton
+              variant={registration ? "danger" : "primary"}
+              loading={registering}
+              disabled={!registration && isSoldOut}
+              onPress={handleRegister}
+              icon={registration ? X : event.isFree ? Ticket : DollarSign}
+              label={
+                registering ? 'Processing...' :
+                registration ? 'Cancel Registration' :
+                isSoldOut ? 'Sold Out' :
+                event.isFree ? 'Register for Free' : `Buy Tickets - ${formatCurrency(event.ticketPrice)}`
+              }
+              colors={colors}
+            />
           </View>
         )}
       </SafeAreaView>
@@ -911,8 +968,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
     borderBottomWidth: 1,
     position: 'relative',
     zIndex: 1000,
@@ -968,11 +1025,11 @@ const styles = StyleSheet.create({
   },
   categoryBadge: {
     position: 'absolute',
-    top: 16,
-    left: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    top: Spacing.lg,
+    left: Spacing.lg,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: 20,
   },
   categoryBadgeText: {
     fontSize: 12,
@@ -980,7 +1037,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: Spacing.lg,
     marginTop: -20,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
@@ -1007,8 +1064,8 @@ const styles = StyleSheet.create({
   infoCardContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    gap: 16,
+    padding: Spacing.lg,
+    gap: Spacing.lg,
   },
   infoIcon: {
     width: 48,
@@ -1023,7 +1080,7 @@ const styles = StyleSheet.create({
   infoTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: Spacing.sm,
   },
   infoTitle: {
     ...Typography.body1,
@@ -1034,7 +1091,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   todayBadge: {
-    paddingHorizontal: 8,
+    paddingHorizontal: Spacing.sm,
     paddingVertical: 2,
     borderRadius: 10,
   },
@@ -1044,14 +1101,14 @@ const styles = StyleSheet.create({
   },
   statsRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
+    gap: Spacing.md,
+    marginBottom: Spacing.xl,
   },
   statCard: {
     flex: 1,
     alignItems: 'center',
-    padding: 16,
-    gap: 4,
+    padding: Spacing.lg,
+    gap: Spacing.xs,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -1072,21 +1129,21 @@ const styles = StyleSheet.create({
     ...Typography.caption,
   },
   statusBanner: {
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   statusContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    gap: 12,
+    padding: Spacing.lg,
+    gap: Spacing.md,
   },
   statusText: {
     fontSize: 15,
     fontWeight: '600',
   },
   section: {
-    marginBottom: 20,
-    padding: 16,
+    marginBottom: Spacing.xl,
+    padding: Spacing.lg,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -1102,19 +1159,19 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   description: {
     ...Typography.body1,
   },
   contactActions: {
     flexDirection: 'row',
-    gap: 20,
+    gap: Spacing.xl,
   },
   contactButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: Spacing.xs,
   },
   contactButtonText: {
     fontSize: 14,
@@ -1128,8 +1185,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    padding: Spacing.lg,
     borderTopWidth: 1,
     ...Platform.select({
       ios: {
@@ -1148,8 +1204,15 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     width: '100%',
-    borderRadius: 16,
-    overflow: 'hidden',
+  },
+  // Gradient Button Styles
+  gradientButtonWrapper: {
+    position: 'relative',
+    width: '100%',
+    marginBottom: 8,
+  },
+  gradientButtonPressable: {
+    width: '100%',
   },
   gradientButton: {
     flexDirection: 'row',
@@ -1157,17 +1220,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 16,
     gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  actionButtonText: {
-    fontSize: 16,
+  gradientButtonText: {
+    fontSize: 17,
     fontWeight: '700',
     letterSpacing: 0.3,
+  },
+  buttonShadow: {
+    position: 'absolute',
+    bottom: -6,
+    left: 12,
+    right: 12,
+    height: 10,
+    borderRadius: 16,
+    opacity: 0.3,
+    zIndex: -1,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
+    padding: Spacing.xxxl,
   },
   errorTitle: {
     ...Typography.title3,
