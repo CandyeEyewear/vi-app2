@@ -10,12 +10,10 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
   Image,
-  useColorScheme,
   RefreshControl,
   Share,
-  Dimensions,
+  Animated,
   ActivityIndicator,
   Linking,
   Platform,
@@ -23,6 +21,7 @@ import {
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   ArrowLeft,
   Share2,
@@ -32,12 +31,10 @@ import {
   Users,
   Video,
   Ticket,
-  Star,
   ExternalLink,
   Phone,
   Mail,
   DollarSign,
-  Heart,
   Check,
   X,
   AlertCircle,
@@ -58,46 +55,14 @@ import {
   formatCurrency,
 } from '../../services/eventsService';
 import { useAuth } from '../../contexts/AuthContext';
+import { useThemeStyles } from '../../hooks/useThemeStyles';
 import { showToast } from '../../utils/toast';
 import ErrorBoundary from '../../components/ErrorBoundary';
+import { AnimatedPressable } from '../../components/AnimatedPressable';
 import Card from '../../components/Card';
-import Button from '../../components/Button';
 import { ShimmerSkeleton } from '../../components/ShimmerSkeleton';
 
-// Get screen width for responsive design
-const screenWidth = Dimensions.get('window').width;
-
-// Responsive System
-const getResponsiveValues = () => {
-  const width = Dimensions.get('window').width;
-  const isSmallMobile = width < 380;
-  const isMobile = width < 768;
-  const isTablet = width >= 768 && width < 1024;
-  const isDesktop = width >= 1024;
-  
-  return {
-    isSmallMobile, isMobile, isTablet, isDesktop,
-    spacing: {
-      xs: isSmallMobile ? 4 : 6,
-      sm: isSmallMobile ? 8 : 10,
-      md: isSmallMobile ? 12 : 16,
-      lg: isSmallMobile ? 16 : 20,
-      xl: isSmallMobile ? 20 : 24,
-      xxl: isSmallMobile ? 24 : 32,
-    },
-    fontSize: {
-      xs: isSmallMobile ? 10 : 11,
-      sm: isSmallMobile ? 12 : 13,
-      md: isSmallMobile ? 14 : 15,
-      lg: isSmallMobile ? 16 : 17,
-      xl: isSmallMobile ? 18 : 20,
-      xxl: isSmallMobile ? 22 : 26,
-      header: isSmallMobile ? 22 : isTablet ? 28 : 26,
-    },
-  };
-};
-
-// Modern Typography Scale (using responsive values)
+// Modern Typography Scale
 const Typography = {
   title1: { fontSize: 32, fontWeight: '800' as const, lineHeight: 38 },
   title2: { fontSize: 26, fontWeight: '700' as const, lineHeight: 32 },
@@ -107,20 +72,8 @@ const Typography = {
   caption: { fontSize: 12, fontWeight: '500' as const, lineHeight: 16 },
 };
 
-// Modern Spacing System (keeping for compatibility, but use responsive.spacing instead)
-const Spacing = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
-  xxxl: 32,
-};
-
 // Category configuration with theme colors
-const getCategoryConfig = (colorScheme: 'light' | 'dark'): Record<EventCategory, { label: string; color: string; emoji: string }> => {
-  const colors = Colors[colorScheme];
+const getCategoryConfig = (colors: any): Record<EventCategory, { label: string; color: string; emoji: string }> => {
   return {
     meetup: { label: 'Meetup', color: colors.primary, emoji: '🤝' },
     gala: { label: 'Gala', color: colors.community, emoji: '✨' },
@@ -200,11 +153,13 @@ function useEventDetails(eventId: string | undefined) {
 function EventHeader({ 
   onBack, 
   onShare, 
-  colors 
+  colors,
+  responsive,
 }: { 
   onBack: () => void; 
   onShare: () => void; 
   colors: any;
+  responsive: any;
 }) {
   const insets = useSafeAreaInsets();
 
@@ -212,17 +167,16 @@ function EventHeader({
     <View style={[
       styles.header, 
       { 
-        paddingTop: insets.top + Spacing.lg,
+        paddingTop: insets.top + responsive.spacing.lg,
         backgroundColor: colors.background,
         borderBottomColor: colors.border,
       }
     ]}>
-      <Pressable
+      <AnimatedPressable
         style={({ pressed }) => [
           styles.headerButton, 
           { 
-            backgroundColor: colors.card,
-            transform: [{ scale: pressed ? 0.95 : 1 }],
+            backgroundColor: pressed ? colors.surfacePressed : colors.surfaceElevated,
           }
         ]}
         onPress={onBack}
@@ -230,15 +184,14 @@ function EventHeader({
         accessibilityLabel="Go back"
         accessibilityHint="Returns to previous screen"
       >
-        <ArrowLeft size={24} color={colors.text} />
-      </Pressable>
+        <ArrowLeft size={responsive.iconSize.lg} color={colors.text} />
+      </AnimatedPressable>
 
-      <Pressable
+      <AnimatedPressable
         style={({ pressed }) => [
           styles.headerButton, 
           { 
-            backgroundColor: colors.card,
-            transform: [{ scale: pressed ? 0.95 : 1 }],
+            backgroundColor: pressed ? colors.surfacePressed : colors.surfaceElevated,
           }
         ]}
         onPress={onShare}
@@ -246,8 +199,8 @@ function EventHeader({
         accessibilityLabel="Share event"
         accessibilityHint="Opens share options for this event"
       >
-        <Share2 size={24} color={colors.text} />
-      </Pressable>
+        <Share2 size={responsive.iconSize.lg} color={colors.text} />
+      </AnimatedPressable>
     </View>
   );
 }
@@ -255,15 +208,16 @@ function EventHeader({
 // Event Image Component with modern loading
 function EventImage({ 
   event, 
-  colors 
+  colors,
+  responsive,
 }: { 
   event: Event; 
   colors: any;
+  responsive: any;
 }) {
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
-  const colorScheme = useColorScheme();
-  const CATEGORY_CONFIG = getCategoryConfig(colorScheme === 'dark' ? 'dark' : 'light');
+  const CATEGORY_CONFIG = getCategoryConfig(colors);
   const categoryConfig = CATEGORY_CONFIG[event.category] || CATEGORY_CONFIG.other;
 
   return (
@@ -322,7 +276,7 @@ function EventInfoCard({
   colors: any;
   badge?: React.ReactNode;
 }) {
-  const Component = onPress ? Pressable : View;
+  const Component = onPress ? AnimatedPressable : View;
 
   return (
     <Card style={styles.infoCard}>
@@ -334,7 +288,7 @@ function EventInfoCard({
         onPress={onPress}
         accessibilityRole={onPress ? "button" : undefined}
       >
-        <View style={[styles.infoIcon, { backgroundColor: colors.cardSecondary }]}>
+        <View style={[styles.infoIcon, { backgroundColor: colors.surfaceElevated }]}>
           {icon}
         </View>
         <View style={styles.infoContent}>
