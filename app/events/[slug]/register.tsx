@@ -1,7 +1,7 @@
 /**
  * Optimized Event Registration Screen
  * Modern payment flow with professional UI/UX, form validation, and accessibility
- * File: app/events/[id]/register.tsx
+ * File: app/events/[slug]/register.tsx
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -40,7 +40,7 @@ import {
 import { Colors } from '../../../constants/colors';
 import { Event } from '../../../types';
 import {
-  getEventById,
+  getEventBySlug,
   registerForEvent,
   formatEventDate,
   formatEventTime,
@@ -78,19 +78,19 @@ const Spacing = {
 };
 
 // Custom Hook for Event Data
-function useEventRegistration(eventId: string | undefined) {
+function useEventRegistration(eventSlug: string | undefined) {
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchEvent = useCallback(async () => {
-    if (!eventId) return;
+    if (!eventSlug) return;
 
     try {
       setLoading(true);
       setError(null);
 
-      const response = await getEventById(eventId);
+      const response = await getEventBySlug(eventSlug);
       if (response.success && response.data) {
         setEvent(response.data);
       } else {
@@ -103,7 +103,7 @@ function useEventRegistration(eventId: string | undefined) {
     } finally {
       setLoading(false);
     }
-  }, [eventId]);
+  }, [eventSlug]);
 
   useEffect(() => {
     fetchEvent();
@@ -471,14 +471,14 @@ function SuccessAnimation({ visible }: { visible: boolean }) {
 
 // Main Component
 export default function EventRegisterScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { slug } = useLocalSearchParams<{ slug: string }>();
   const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
 
-  const { event, loading, error, refetch } = useEventRegistration(id);
+  const { event, loading, error, refetch } = useEventRegistration(slug);
   
   const [submitting, setSubmitting] = useState(false);
   const [ticketCount, setTicketCount] = useState(1);
@@ -517,7 +517,7 @@ export default function EventRegisterScreen() {
 
   // Handle purchase with comprehensive validation and feedback
   const handlePurchase = useCallback(async () => {
-    if (!event || !id || !canPurchase) return;
+    if (!event || !canPurchase) return;
 
     if (!user) {
       showToast('Please sign in to register', 'warning');
@@ -548,7 +548,7 @@ export default function EventRegisterScreen() {
       // For free events, register directly
       if (event.isFree) {
         const response = await registerForEvent({
-          eventId: id,
+          eventId: event.id,
           userId: user.id,
           ticketCount,
         });
@@ -570,7 +570,7 @@ export default function EventRegisterScreen() {
 
       // For paid events, create registration and process payment
       const registrationResponse = await registerForEvent({
-        eventId: id,
+        eventId: event.id,
         userId: user.id,
         ticketCount,
       });
@@ -611,7 +611,7 @@ export default function EventRegisterScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [event, id, user, router, totalAmount, ticketCount, spotsLeft, canPurchase]);
+  }, [event, user, router, totalAmount, ticketCount, spotsLeft, canPurchase]);
 
   // Loading state
   if (loading) {

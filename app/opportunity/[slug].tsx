@@ -55,6 +55,9 @@ import QRScanner from '../../components/QRScanner';
 import ShareOpportunityModal from '../../components/ShareOpportunityModal';
 import { useFeed } from '../../contexts/FeedContext';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isValidUUID = (value: string) => UUID_REGEX.test(value);
+
 export default function OpportunityDetailsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
@@ -62,10 +65,10 @@ export default function OpportunityDetailsScreen() {
   const router = useRouter();
   const { user, isAdmin } = useAuth();
   const { shareOpportunityToFeed } = useFeed();
-  const params = useLocalSearchParams();
-  const opportunityId = params.id as string;
+  const { slug: opportunitySlug } = useLocalSearchParams<{ slug: string }>();
 
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
+  const [opportunityId, setOpportunityId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSignedUp, setIsSignedUp] = useState(false);
   const [signupStatus, setSignupStatus] = useState<string | null>(null);
@@ -123,13 +126,17 @@ export default function OpportunityDetailsScreen() {
   };
 
   useEffect(() => {
-    if (opportunityId) {
+    if (opportunitySlug) {
       loadOpportunityDetails();
-      checkSignupStatus();
-      checkSaveStatus();
-      if (isAdmin) {
-        loadAdminStats();
-      }
+    }
+  }, [opportunitySlug]);
+
+  useEffect(() => {
+    if (!opportunityId) return;
+    checkSignupStatus(opportunityId);
+    checkSaveStatus(opportunityId);
+    if (isAdmin) {
+      loadAdminStats(opportunityId);
     }
   }, [opportunityId, isAdmin, user?.id]);
 
@@ -176,19 +183,33 @@ export default function OpportunityDetailsScreen() {
   }, [opportunity, isSignedUp]);
 
   const loadOpportunityDetails = async () => {
+    if (!opportunitySlug) return;
+
     try {
       setLoading(true);
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('opportunities')
         .select('*')
-        .eq('id', opportunityId)
+        .eq('slug', opportunitySlug)
         .single();
 
-      if (error) throw error;
+      if ((error || !data) && isValidUUID(opportunitySlug)) {
+        const fallback = await supabase
+          .from('opportunities')
+          .select('*')
+          .eq('id', opportunitySlug)
+          .single();
+
+        data = fallback.data;
+        error = fallback.error;
+      }
+
+      if (error || !data) throw error;
 
       const opportunityData: Opportunity = {
         id: data.id,
+        slug: data.slug,
         title: data.title,
         description: data.description,
         organizationName: data.organization_name,
@@ -203,7 +224,8 @@ export default function OpportunityDetailsScreen() {
         dateEnd: data.date_end,
         timeStart: data.time_start,
         timeEnd: data.time_end,
-        duration: data.duration || (data.time_start && data.time_end ? `${data.time_start} - ${data.time_end}` : undefined),
+        duration:
+          data.duration || (data.time_start && data.time_end ? `${data.time_start} - ${data.time_end}` : undefined),
         spotsAvailable: data.spots_available,
         spotsTotal: data.spots_total,
         requirements: data.requirements,
@@ -221,10 +243,12 @@ export default function OpportunityDetailsScreen() {
       };
 
       setOpportunity(opportunityData);
-      
-      // Reload admin stats if admin
+      setOpportunityId(data.id);
+
+      checkSignupStatus(data.id);
+      checkSaveStatus(data.id);
       if (isAdmin) {
-        loadAdminStats();
+        loadAdminStats(data.id);
       }
     } catch (error) {
       console.error('Error loading opportunity:', error);

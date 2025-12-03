@@ -25,6 +25,7 @@ import { formatStorageUrl } from '../utils/storageHelpers';
 function transformCause(row: any): Cause {
   return {
     id: row.id,
+    slug: row.slug,
     title: row.title,
     description: row.description,
     category: row.category,
@@ -125,6 +126,11 @@ function transformDonorBadge(row: any): DonorBadge {
   };
 }
 
+function isValidUUID(str: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+}
+
 
 // ==================== CAUSE FUNCTIONS ====================
 
@@ -213,18 +219,32 @@ export async function getCauses(options?: {
 }
 
 /**
- * Fetch a single cause by ID
+ * Fetch a single cause by slug (with UUID fallback)
  */
-export async function getCauseById(causeId: string): Promise<ApiResponse<Cause>> {
+export async function getCauseBySlug(identifier: string): Promise<ApiResponse<Cause>> {
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('causes')
       .select(`
         *,
         creator:users!created_by(id, full_name, avatar_url)
       `)
-      .eq('id', causeId)
+      .eq('slug', identifier)
       .single();
+
+    if ((error || !data) && isValidUUID(identifier)) {
+      const fallback = await supabase
+        .from('causes')
+        .select(`
+          *,
+          creator:users!created_by(id, full_name, avatar_url)
+        `)
+        .eq('id', identifier)
+        .single();
+
+      data = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) throw error;
 
@@ -237,6 +257,10 @@ export async function getCauseById(causeId: string): Promise<ApiResponse<Cause>>
     console.error('Error fetching cause:', error);
     return { success: false, error: 'Failed to fetch cause' };
   }
+}
+
+export async function getCauseById(causeId: string): Promise<ApiResponse<Cause>> {
+  return getCauseBySlug(causeId);
 }
 
 /**

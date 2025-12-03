@@ -10,6 +10,7 @@ export type UserRole = 'volunteer' | 'admin';
 
 export interface User {
   id: string;
+  slug: string;
   email: string;
   fullName: string;
   phone: string;
@@ -90,6 +91,7 @@ export type VisibilityType = 'public' | 'members_only';
 
 export interface Opportunity {
   id: string;
+  slug: string;
   title: string;
   description: string;
   organizationName: string;
@@ -487,6 +489,7 @@ export type CauseStatus = 'draft' | 'active' | 'paused' | 'completed' | 'cancell
 
 export interface Cause {
   id: string;
+  slug: string;
   
   // Basic Info
   title: string;
@@ -717,6 +720,7 @@ export type EventStatus = 'draft' | 'upcoming' | 'ongoing' | 'completed' | 'canc
 
 export interface Event {
   id: string;
+  slug: string;
   
   // Basic Info
   title: string;
