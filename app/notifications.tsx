@@ -8,7 +8,7 @@ import {
   View,
   Text,
   FlatList,
-  TouchableOpacity,
+  Pressable,
   StyleSheet,
   ActivityIndicator,
   useColorScheme,
@@ -311,16 +311,16 @@ export default function NotificationsScreen() {
     const isSelected = selectedNotifications.includes(item.id);
     
     return (
-      <TouchableOpacity
-        style={[
+      <Pressable
+        style={({ pressed }) => [
           styles.notificationCard,
           { backgroundColor: item.is_read ? colors.card : colors.background },
           { borderLeftColor: colors.primary },
           isSelected && { backgroundColor: colors.primary + '20' },
+          pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }
         ]}
         onPress={() => handleNotificationPress(item)}
         onLongPress={() => handleNotificationLongPress(item.id)}
-        activeOpacity={0.7}
         delayLongPress={500}
       >
         {isSelected && (
@@ -360,7 +360,7 @@ export default function NotificationsScreen() {
         {!item.is_read && !isSelected && (
           <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />
         )}
-      </TouchableOpacity>
+      </Pressable>
     );
   };
 
@@ -377,28 +377,34 @@ export default function NotificationsScreen() {
           },
         ]}
       >
-        <TouchableOpacity onPress={() => {
+        <Pressable onPress={() => {
           if (selectedNotifications.length > 0) {
             clearSelection();
           } else {
             router.back();
           }
-        }} style={styles.backButton}>
+        }} style={({ pressed }) => [
+          styles.backButton,
+          pressed && { opacity: 0.7 }
+        ]}>
           {selectedNotifications.length > 0 ? (
             <X size={28} color={colors.primary} />
           ) : (
             <ChevronLeft size={28} color={colors.primary} />
           )}
-        </TouchableOpacity>
+        </Pressable>
         <Text style={[styles.headerTitle, { color: colors.text }]}>
           {selectedNotifications.length > 0 
             ? `${selectedNotifications.length} selected` 
             : 'Notifications'}
         </Text>
         {selectedNotifications.length > 0 ? (
-          <TouchableOpacity onPress={handleDeleteSelected} style={styles.deleteButton}>
+          <Pressable onPress={handleDeleteSelected} style={({ pressed }) => [
+            styles.deleteButton,
+            pressed && { opacity: 0.7, transform: [{ scale: 0.95 }] }
+          ]}>
             <Trash2 size={24} color={colors.error} />
-          </TouchableOpacity>
+          </Pressable>
         ) : (
           <View style={{ width: 40 }} />
         )}

@@ -9,7 +9,7 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
+  Pressable,
   Image,
   useColorScheme,
   Dimensions,
@@ -70,13 +70,11 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
   const spotsLeft = event.spotsRemaining ?? event.capacity;
   const hasLimitedSpots = spotsLeft !== undefined && spotsLeft <= 10 && spotsLeft > 0;
 
-  const handleRegisterPress = (e: any) => {
-    e.stopPropagation();
+  const handleRegisterPress = () => {
     onRegisterPress?.();
   };
 
-  const handleSharePress = (e: any) => {
-    e.stopPropagation();
+  const handleSharePress = () => {
     setShowShareModal(true);
   };
 
@@ -100,10 +98,13 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
 
   return (
     <>
-    <TouchableOpacity
-      style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
+    <Pressable
+      style={({ pressed }) => [
+        styles.card, 
+        { backgroundColor: colors.card, borderColor: colors.border },
+        pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }
+      ]}
       onPress={onPress}
-      activeOpacity={0.7}
       accessibilityRole="button"
       accessibilityLabel={`Event: ${event.title}. ${formatEventDate(event.eventDate)}`}
     >
@@ -129,13 +130,16 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
         </View>
 
         {/* Share Button */}
-        <TouchableOpacity
+        <Pressable
           onPress={handleSharePress}
-          style={styles.shareButton}
+          style={({ pressed }) => [
+            styles.shareButton,
+            pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] }
+          ]}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Share2 size={18} color="#FFFFFF" />
-        </TouchableOpacity>
+        </Pressable>
 
         {/* Featured Badge */}
         {event.isFeatured && (
@@ -238,10 +242,13 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
 
         {/* Register Button */}
         {event.registrationRequired && spotsLeft !== 0 && (
-          <TouchableOpacity
-            style={[styles.registerButton, { backgroundColor: '#38B6FF' }]}
+          <Pressable
+            style={({ pressed }) => [
+              styles.registerButton, 
+              { backgroundColor: '#38B6FF' },
+              pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }
+            ]}
             onPress={handleRegisterPress}
-            activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel={`Register for ${event.title}`}
           >
@@ -249,7 +256,7 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
             <Text style={styles.registerButtonText}>
               {event.isFree ? 'Register Now' : 'Get Tickets'}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
 
         {/* View Details (if no registration required) */}
@@ -261,7 +268,7 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
           </View>
         )}
       </View>
-    </TouchableOpacity>
+    </Pressable>
     <ShareEventModal
       visible={showShareModal}
       onClose={() => setShowShareModal(false)}

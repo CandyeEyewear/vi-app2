@@ -11,7 +11,7 @@ import {
   FlatList,
   StyleSheet,
   RefreshControl,
-  TouchableOpacity,
+  Pressable,
   TextInput,
   useColorScheme,
   ActivityIndicator,
@@ -209,12 +209,16 @@ export function EventsList({
           }
         </Text>
         {searchQuery && (
-          <TouchableOpacity
-            style={[styles.clearButton, { backgroundColor: '#38B6FF' }]}
+          <Pressable
+            style={({ pressed }) => [
+              styles.clearButton, 
+              { backgroundColor: '#38B6FF' },
+              pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }
+            ]}
             onPress={handleClearSearch}
           >
             <Text style={styles.clearButtonText}>Clear Search</Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
     );
@@ -240,9 +244,9 @@ export function EventsList({
             returnKeyType="search"
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={handleClearSearch}>
+            <Pressable onPress={handleClearSearch} style={({ pressed }) => pressed && { opacity: 0.7 }}>
               <X size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
+            </Pressable>
           )}
         </View>
       )}
@@ -256,17 +260,17 @@ export function EventsList({
             contentContainerStyle={styles.categoriesContent}
           >
             {EVENT_CATEGORIES.map((category) => (
-              <TouchableOpacity
+              <Pressable
                 key={category.value}
-                style={[
+                style={({ pressed }) => [
                   styles.categoryChip,
                   {
                     backgroundColor: selectedCategory === category.value ? '#38B6FF' : colors.background,
                     borderColor: selectedCategory === category.value ? '#38B6FF' : colors.border,
                   },
+                  pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }
                 ]}
                 onPress={() => setSelectedCategory(category.value)}
-                activeOpacity={0.7}
               >
                 <Text
                   style={[
@@ -276,7 +280,7 @@ export function EventsList({
                 >
                   {category.emoji ? `${category.emoji} ` : ''}{category.label}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             ))}
           </ScrollView>
         </View>

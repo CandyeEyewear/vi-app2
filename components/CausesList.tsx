@@ -11,7 +11,7 @@ import {
   FlatList,
   StyleSheet,
   RefreshControl,
-  TouchableOpacity,
+  Pressable,
   TextInput,
   useColorScheme,
   ActivityIndicator,
@@ -216,16 +216,16 @@ export function CausesList({
     const isSelected = selectedCategory === item.value;
     
     return (
-      <TouchableOpacity
-        style={[
+      <Pressable
+        style={({ pressed }) => [
           styles.categoryChip,
           { 
             backgroundColor: isSelected ? '#38B6FF' : colors.background,
             borderColor: isSelected ? '#38B6FF' : colors.border,
           },
+          pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }
         ]}
         onPress={() => setSelectedCategory(item.value)}
-        activeOpacity={0.7}
       >
         <Text
           style={[
@@ -235,7 +235,7 @@ export function CausesList({
         >
           {item.label}
         </Text>
-      </TouchableOpacity>
+      </Pressable>
     );
   }, [selectedCategory, colors]);
 
@@ -264,12 +264,16 @@ export function CausesList({
           }
         </Text>
         {searchQuery && (
-          <TouchableOpacity
-            style={[styles.clearButton, { backgroundColor: '#38B6FF' }]}
+          <Pressable
+            style={({ pressed }) => [
+              styles.clearButton, 
+              { backgroundColor: '#38B6FF' },
+              pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }
+            ]}
             onPress={handleClearSearch}
           >
             <Text style={styles.clearButtonText}>Clear Search</Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
     );
@@ -301,23 +305,26 @@ export function CausesList({
               }}
             />
             {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={handleClearSearch}>
+              <Pressable onPress={handleClearSearch} style={({ pressed }) => pressed && { opacity: 0.7 }}>
                 <X size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
+              </Pressable>
             )}
           </View>
-          <TouchableOpacity
+          <Pressable
             onPress={() => {
               setIsSearchExpanded(false);
               setSearchQuery('');
               Keyboard.dismiss();
             }}
-            style={[styles.closeSearchButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+            style={({ pressed }) => [
+              styles.closeSearchButton, 
+              { backgroundColor: colors.card, borderColor: colors.border },
+              pressed && { opacity: 0.7 }
+            ]}
             accessibilityLabel="Close search"
-            activeOpacity={0.7}
           >
             <X size={18} color={colors.text} />
-          </TouchableOpacity>
+          </Pressable>
         </View>
       )}
 
@@ -330,17 +337,17 @@ export function CausesList({
             contentContainerStyle={styles.categoriesContent}
           >
             {CAUSE_CATEGORIES.map((category) => (
-              <TouchableOpacity
+              <Pressable
                 key={category.value}
-                style={[
+                style={({ pressed }) => [
                   styles.categoryChip,
                   { 
                     backgroundColor: selectedCategory === category.value ? '#38B6FF' : colors.background,
                     borderColor: selectedCategory === category.value ? '#38B6FF' : colors.border,
                   },
+                  pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }
                 ]}
                 onPress={() => setSelectedCategory(category.value)}
-                activeOpacity={0.7}
               >
                 <Text
                   style={[
@@ -350,7 +357,7 @@ export function CausesList({
                 >
                   {category.label}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             ))}
           </ScrollView>
         </View>
