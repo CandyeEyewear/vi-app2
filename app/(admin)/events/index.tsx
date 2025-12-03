@@ -79,13 +79,16 @@ function EventsLoadingSkeleton({ colors }: { colors: any }) {
   );
 }
 
-// Status badge colors
-const STATUS_CONFIG: Record<EventStatus, { label: string; color: string; bgColor: string }> = {
-  draft: { label: 'Draft', color: '#757575', bgColor: '#F5F5F5' },
-  upcoming: { label: 'Upcoming', color: '#2196F3', bgColor: '#E3F2FD' },
-  ongoing: { label: 'Ongoing', color: '#4CAF50', bgColor: '#E8F5E9' },
-  completed: { label: 'Completed', color: '#9E9E9E', bgColor: '#FAFAFA' },
-  cancelled: { label: 'Cancelled', color: '#F44336', bgColor: '#FFEBEE' },
+// Status badge colors - using theme colors
+const getStatusConfig = (colorScheme: 'light' | 'dark'): Record<EventStatus, { label: string; color: string; bgColor: string }> => {
+  const colors = Colors[colorScheme];
+  return {
+    draft: { label: 'Draft', color: colors.textSecondary, bgColor: colors.surfaceElevated },
+    upcoming: { label: 'Upcoming', color: colors.primary, bgColor: colors.primarySoft },
+    ongoing: { label: 'Ongoing', color: colors.success, bgColor: colors.successSoft },
+    completed: { label: 'Completed', color: colors.textTertiary, bgColor: colors.surfaceElevated },
+    cancelled: { label: 'Cancelled', color: colors.error, bgColor: colors.errorSoft },
+  };
 };
 
 // Filter tabs
@@ -108,6 +111,8 @@ interface EventItemProps {
 
 function EventItem({ event, colors, onView, onEdit, onDelete, onRegistrations }: EventItemProps) {
   const [showActions, setShowActions] = useState(false);
+  const colorScheme = useColorScheme();
+  const STATUS_CONFIG = getStatusConfig(colorScheme === 'dark' ? 'dark' : 'light');
   const statusConfig = STATUS_CONFIG[event.status] || STATUS_CONFIG.draft;
 
   return (
@@ -122,7 +127,7 @@ function EventItem({ event, colors, onView, onEdit, onDelete, onRegistrations }:
             {event.title}
           </Text>
           {event.isFeatured && (
-            <Star size={16} color="#FFD700" fill="#FFD700" />
+            <Star size={16} color={colors.star} fill={colors.star} />
           )}
         </View>
         <TouchableOpacity
@@ -156,7 +161,7 @@ function EventItem({ event, colors, onView, onEdit, onDelete, onRegistrations }:
         </View>
         <View style={styles.detailRow}>
           {event.isVirtual ? (
-            <Video size={14} color="#38B6FF" />
+            <Video size={14} color={colors.primary} />
           ) : (
             <MapPin size={14} color={colors.textSecondary} />
           )}
@@ -183,18 +188,18 @@ function EventItem({ event, colors, onView, onEdit, onDelete, onRegistrations }:
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.actionItem} onPress={onRegistrations}>
-            <List size={18} color="#9C27B0" />
-            <Text style={[styles.actionText, { color: '#9C27B0' }]}>Registrations</Text>
+            <List size={18} color={colors.community} />
+            <Text style={[styles.actionText, { color: colors.community }]}>Registrations</Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.actionItem} onPress={onEdit}>
-            <Edit3 size={18} color="#38B6FF" />
-            <Text style={[styles.actionText, { color: '#38B6FF' }]}>Edit</Text>
+            <Edit3 size={18} color={colors.primary} />
+            <Text style={[styles.actionText, { color: colors.primary }]}>Edit</Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.actionItem} onPress={onDelete}>
-            <Trash2 size={18} color="#F44336" />
-            <Text style={[styles.actionText, { color: '#F44336' }]}>Delete</Text>
+            <Trash2 size={18} color={colors.error} />
+            <Text style={[styles.actionText, { color: colors.error }]}>Delete</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -355,11 +360,11 @@ export default function AdminEventsScreen() {
           Create your first event to get started
         </Text>
         <TouchableOpacity
-          style={[styles.createButtonEmpty, { backgroundColor: '#38B6FF' }]}
+          style={[styles.createButtonEmpty, { backgroundColor: colors.primary }]}
           onPress={() => router.push('/events/create')}
         >
-          <Plus size={20} color="#FFFFFF" />
-          <Text style={styles.createButtonEmptyText}>Create Event</Text>
+          <Plus size={20} color={colors.textOnPrimary} />
+          <Text style={[styles.createButtonEmptyText, { color: colors.textOnPrimary }]}>Create Event</Text>
         </TouchableOpacity>
       </View>
     );
@@ -376,10 +381,10 @@ export default function AdminEventsScreen() {
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Manage Events</Text>
         <TouchableOpacity
-          style={[styles.addButton, { backgroundColor: '#38B6FF' }]}
+          style={[styles.addButton, { backgroundColor: colors.primary }]}
           onPress={() => router.push('/events/create')}
         >
-          <Plus size={20} color="#FFFFFF" />
+          <Plus size={20} color={colors.textOnPrimary} />
         </TouchableOpacity>
       </View>
 
@@ -395,7 +400,7 @@ export default function AdminEventsScreen() {
             <TouchableOpacity
               style={[
                 styles.filterTab,
-                selectedStatus === item.value && { backgroundColor: '#38B6FF' },
+                selectedStatus === item.value && { backgroundColor: colors.primary },
                 selectedStatus !== item.value && { backgroundColor: colors.card, borderColor: colors.border },
               ]}
               onPress={() => setSelectedStatus(item.value)}
@@ -403,7 +408,7 @@ export default function AdminEventsScreen() {
               <Text
                 style={[
                   styles.filterTabText,
-                  { color: selectedStatus === item.value ? '#FFFFFF' : colors.textSecondary },
+                  { color: selectedStatus === item.value ? colors.textOnPrimary : colors.textSecondary },
                 ]}
               >
                 {item.label}
@@ -436,7 +441,8 @@ export default function AdminEventsScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              tintColor="#38B6FF"
+              tintColor={colors.primary}
+              colors={[colors.primary]}
             />
           }
           showsVerticalScrollIndicator={false}
@@ -617,7 +623,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   createButtonEmptyText: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
   },
