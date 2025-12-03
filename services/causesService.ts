@@ -17,6 +17,13 @@ import {
 } from '../types';
 import { formatStorageUrl } from '../utils/storageHelpers';
 
+// Helper to check if string is a valid UUID
+const isValidUUID = (str: string): boolean => {
+  if (!str) return false;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+};
+
 // ==================== HELPER FUNCTIONS ====================
 
 /**
@@ -126,12 +133,6 @@ function transformDonorBadge(row: any): DonorBadge {
   };
 }
 
-function isValidUUID(str: string): boolean {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(str);
-}
-
-
 // ==================== CAUSE FUNCTIONS ====================
 
 /**
@@ -219,32 +220,22 @@ export async function getCauses(options?: {
 }
 
 /**
- * Fetch a single cause by slug (with UUID fallback)
+ * Fetch a single cause by identifier (UUID or slug)
  */
-export async function getCauseBySlug(identifier: string): Promise<ApiResponse<Cause>> {
+export async function getCauseById(identifier: string): Promise<ApiResponse<Cause>> {
   try {
-    let { data, error } = await supabase
+    const baseQuery = supabase
       .from('causes')
       .select(`
         *,
         creator:users!created_by(id, full_name, avatar_url)
-      `)
-      .eq('slug', identifier)
-      .single();
+      `);
 
-    if ((error || !data) && isValidUUID(identifier)) {
-      const fallback = await supabase
-        .from('causes')
-        .select(`
-          *,
-          creator:users!created_by(id, full_name, avatar_url)
-        `)
-        .eq('id', identifier)
-        .single();
+    const finalQuery = isValidUUID(identifier)
+      ? baseQuery.eq('id', identifier)
+      : baseQuery.eq('slug', identifier);
 
-      data = fallback.data;
-      error = fallback.error;
-    }
+    const { data, error } = await finalQuery.single();
 
     if (error) throw error;
 
@@ -259,8 +250,8 @@ export async function getCauseBySlug(identifier: string): Promise<ApiResponse<Ca
   }
 }
 
-export async function getCauseById(causeId: string): Promise<ApiResponse<Cause>> {
-  return getCauseBySlug(causeId);
+export async function getCauseBySlug(identifier: string): Promise<ApiResponse<Cause>> {
+  return getCauseById(identifier);
 }
 
 /**
@@ -392,7 +383,7 @@ export async function deleteCause(causeId: string): Promise<ApiResponse<void>> {
  * Fetch donations for a specific cause (public ones)
  */
 export async function getCauseDonations(
-  causeId: string,
+  identifier: string,
   options?: {
     limit?: number;
     offset?: number;
@@ -400,6 +391,14 @@ export async function getCauseDonations(
   }
 ): Promise<ApiResponse<Donation[]>> {
   try {
+    const causeResult = await getCauseById(identifier);
+
+    if (!causeResult.success || !causeResult.data) {
+      return { success: false, error: causeResult.error || 'Cause not found' };
+    }
+
+    const causeId = causeResult.data.id;
+
     let query = supabase
       .from('donations')
       .select(`
