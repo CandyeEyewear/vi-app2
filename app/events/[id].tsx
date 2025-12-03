@@ -10,7 +10,7 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
+  Pressable,
   Image,
   useColorScheme,
   RefreshControl,
@@ -64,10 +64,37 @@ import Card from '../../components/Card';
 import Button from '../../components/Button';
 import { ShimmerSkeleton } from '../../components/ShimmerSkeleton';
 
-const screenWidth = Dimensions.get('window').width;
-const isSmallScreen = screenWidth < 380;
+// Responsive System
+const getResponsiveValues = () => {
+  const width = Dimensions.get('window').width;
+  const isSmallMobile = width < 380;
+  const isMobile = width < 768;
+  const isTablet = width >= 768 && width < 1024;
+  const isDesktop = width >= 1024;
+  
+  return {
+    isSmallMobile, isMobile, isTablet, isDesktop,
+    spacing: {
+      xs: isSmallMobile ? 4 : 6,
+      sm: isSmallMobile ? 8 : 10,
+      md: isSmallMobile ? 12 : 16,
+      lg: isSmallMobile ? 16 : 20,
+      xl: isSmallMobile ? 20 : 24,
+      xxl: isSmallMobile ? 24 : 32,
+    },
+    fontSize: {
+      xs: isSmallMobile ? 10 : 11,
+      sm: isSmallMobile ? 12 : 13,
+      md: isSmallMobile ? 14 : 15,
+      lg: isSmallMobile ? 16 : 17,
+      xl: isSmallMobile ? 18 : 20,
+      xxl: isSmallMobile ? 22 : 26,
+      header: isSmallMobile ? 22 : isTablet ? 28 : 26,
+    },
+  };
+};
 
-// Modern Typography Scale
+// Modern Typography Scale (using responsive values)
 const Typography = {
   title1: { fontSize: 32, fontWeight: '800' as const, lineHeight: 38 },
   title2: { fontSize: 26, fontWeight: '700' as const, lineHeight: 32 },
@@ -77,7 +104,7 @@ const Typography = {
   caption: { fontSize: 12, fontWeight: '500' as const, lineHeight: 16 },
 };
 
-// Modern Spacing System
+// Modern Spacing System (keeping for compatibility, but use responsive.spacing instead)
 const Spacing = {
   xs: 4,
   sm: 8,
@@ -187,31 +214,37 @@ function EventHeader({
         borderBottomColor: colors.border,
       }
     ]}>
-      <TouchableOpacity
-        style={[styles.headerButton, { backgroundColor: colors.card }]}
-        onPress={() => {
-          // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          onBack();
-        }}
+      <Pressable
+        style={({ pressed }) => [
+          styles.headerButton, 
+          { 
+            backgroundColor: colors.card,
+            transform: [{ scale: pressed ? 0.95 : 1 }],
+          }
+        ]}
+        onPress={onBack}
         accessibilityRole="button"
         accessibilityLabel="Go back"
         accessibilityHint="Returns to previous screen"
       >
         <ArrowLeft size={24} color={colors.text} />
-      </TouchableOpacity>
+      </Pressable>
 
-      <TouchableOpacity
-        style={[styles.headerButton, { backgroundColor: colors.card }]}
-        onPress={() => {
-          // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          onShare();
-        }}
+      <Pressable
+        style={({ pressed }) => [
+          styles.headerButton, 
+          { 
+            backgroundColor: colors.card,
+            transform: [{ scale: pressed ? 0.95 : 1 }],
+          }
+        ]}
+        onPress={onShare}
         accessibilityRole="button"
         accessibilityLabel="Share event"
         accessibilityHint="Opens share options for this event"
       >
         <Share2 size={24} color={colors.text} />
-      </TouchableOpacity>
+      </Pressable>
     </View>
   );
 }
@@ -286,16 +319,16 @@ function EventInfoCard({
   colors: any;
   badge?: React.ReactNode;
 }) {
-  const Component = onPress ? TouchableOpacity : View;
+  const Component = onPress ? Pressable : View;
 
   return (
     <Card style={styles.infoCard}>
       <Component
-        style={styles.infoCardContent}
-        onPress={onPress ? () => {
-          // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          onPress();
-        } : undefined}
+        style={onPress ? ({ pressed }: any) => [
+          styles.infoCardContent,
+          { backgroundColor: pressed ? colors.surfacePressed : 'transparent' }
+        ] : styles.infoCardContent}
+        onPress={onPress}
         accessibilityRole={onPress ? "button" : undefined}
       >
         <View style={[styles.infoIcon, { backgroundColor: colors.cardSecondary }]}>
@@ -771,8 +804,11 @@ export default function EventDetailScreen() {
                 </Text>
                 <View style={styles.contactActions}>
                   {event.contactPhone && (
-                    <TouchableOpacity 
-                      style={styles.contactButton}
+                    <Pressable 
+                      style={({ pressed }) => [
+                        styles.contactButton,
+                        { opacity: pressed ? 0.7 : 1 }
+                      ]}
                       onPress={handleCall}
                       accessibilityRole="button"
                       accessibilityLabel={`Call ${event.contactPhone}`}
@@ -781,11 +817,14 @@ export default function EventDetailScreen() {
                       <Text style={[styles.contactButtonText, { color: colors.primary }]}>
                         Call
                       </Text>
-                    </TouchableOpacity>
+                    </Pressable>
                   )}
                   {event.contactEmail && (
-                    <TouchableOpacity 
-                      style={styles.contactButton}
+                    <Pressable 
+                      style={({ pressed }) => [
+                        styles.contactButton,
+                        { opacity: pressed ? 0.7 : 1 }
+                      ]}
                       onPress={handleEmail}
                       accessibilityRole="button"
                       accessibilityLabel={`Email ${event.contactEmail}`}
@@ -794,7 +833,7 @@ export default function EventDetailScreen() {
                       <Text style={[styles.contactButtonText, { color: colors.primary }]}>
                         Email
                       </Text>
-                    </TouchableOpacity>
+                    </Pressable>
                   )}
                 </View>
               </Card>
@@ -927,6 +966,17 @@ const styles = StyleSheet.create({
   },
   infoCard: {
     marginBottom: Spacing.md,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
   infoCardContent: {
     flexDirection: 'row',
@@ -976,6 +1026,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: Spacing.lg,
     gap: Spacing.xs,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
   statValue: {
     fontSize: 18,
@@ -1000,6 +1061,17 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: Spacing.xl,
     padding: Spacing.lg,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
   sectionTitle: {
     fontSize: 18,
