@@ -798,10 +798,15 @@ export function getDaysUntilEvent(dateString: string): number {
  * Format currency for display (JMD)
  */
 export function formatCurrency(amount: number, currency: string = 'JMD'): string {
-  return new Intl.NumberFormat('en-JM', {
+  const formatter = new Intl.NumberFormat('en-JM', {
     style: 'currency',
-    currency: currency,
+    currency,
+    currencyDisplay: 'symbol',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(amount);
+  });
+
+  const formatted = formatter.format(amount);
+
+  return currency === 'JMD' ? formatted.replace('JMD', 'J$').replace('JA$', 'J$') : formatted;
 }
