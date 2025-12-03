@@ -973,7 +973,14 @@ export default function EventDetailScreen() {
                   <View style={[styles.statIcon, { backgroundColor: colors.primarySoft }]}>
                     <IconComponent size={20} color={colors.primary} />
                   </View>
-                  <Text style={[styles.statValue, { color: colors.text }]}>{value}</Text>
+                  <Text
+                    style={[styles.statValue, { color: colors.text }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.6}
+                  >
+                    {value}
+                  </Text>
                   <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{label}</Text>
                 </View>
               ))}
@@ -1269,7 +1276,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statValue: {
-    fontSize: 24,
+    fontSize: 20, // Changed from 24
     fontWeight: '700',
   },
   statLabel: {
