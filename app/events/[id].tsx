@@ -305,6 +305,90 @@ function EventImage({
   );
 }
 
+// Gradient Button Component with animations and depth
+function GradientButton({ 
+  onPress, 
+  icon: Icon, 
+  label, 
+  variant = 'primary',
+  loading = false,
+  disabled = false,
+  colors,
+}: { 
+  onPress: () => void; 
+  icon: any; 
+  label: string; 
+  variant?: 'primary' | 'secondary' | 'danger';
+  loading?: boolean;
+  disabled?: boolean;
+  colors: typeof Colors.light;
+}) {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const responsive = getResponsiveValues();
+
+  const handlePressIn = () => {
+    if (!disabled && !loading) {
+      Animated.spring(scaleAnim, {
+        toValue: 0.97,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  const handlePressOut = () => {
+    if (!disabled && !loading) {
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 3,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  const gradientColors = variant === 'danger' 
+    ? [colors.error, colors.errorDark]
+    : variant === 'secondary'
+    ? [colors.surfaceElevated, colors.surface2]
+    : Colors.gradients.primary;
+
+  const textColor = variant === 'secondary' ? colors.text : colors.textOnPrimary;
+
+  return (
+    <Animated.View style={[styles.gradientButtonWrapper, { transform: [{ scale: scaleAnim }], opacity: disabled ? 0.5 : 1 }]}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={styles.gradientButtonPressable}
+        disabled={disabled || loading}
+      >
+        <LinearGradient
+          colors={gradientColors}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={[styles.gradientButton, { height: responsive.buttonHeight || 52 }]}
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color={textColor} />
+          ) : (
+            <>
+              <Icon size={20} color={textColor} />
+              <Text style={[styles.gradientButtonText, { color: textColor }]}>{label}</Text>
+            </>
+          )}
+        </LinearGradient>
+      </Pressable>
+      {/* Shadow layer for depth */}
+      {variant === 'primary' && !disabled && (
+        <View style={[styles.buttonShadow, { backgroundColor: colors.primary }]} />
+      )}
+      {variant === 'danger' && !disabled && (
+        <View style={[styles.buttonShadow, { backgroundColor: colors.error }]} />
+      )}
+    </Animated.View>
+  );
+}
+
 // Event Info Cards
 function EventInfoCard({
   icon,
@@ -846,7 +930,7 @@ export default function EventDetailScreen() {
           </View>
         </ScrollView>
 
-        {/* Bottom Action Button */}
+        {/* Bottom Action Button with Gradient */}
         {!isPastEvent && (
           <View style={[
             styles.bottomBar, 
@@ -855,23 +939,20 @@ export default function EventDetailScreen() {
               borderTopColor: colors.border,
             }
           ]}>
-            <Button
-              variant={registration ? "outline" : "primary"}
-              size="lg"
+            <GradientButton
+              variant={registration ? "danger" : "primary"}
               loading={registering}
               disabled={!registration && isSoldOut}
               onPress={handleRegister}
-              style={styles.actionButton}
-              icon={registration ? 
-                <X size={20} color={colors.error} /> : 
-                event.isFree ? <Ticket size={20} color={colors.textOnPrimary} /> : <DollarSign size={20} color={colors.textOnPrimary} />
+              icon={registration ? X : event.isFree ? Ticket : DollarSign}
+              label={
+                registering ? 'Processing...' :
+                registration ? 'Cancel Registration' :
+                isSoldOut ? 'Sold Out' :
+                event.isFree ? 'Register for Free' : `Buy Tickets - ${formatCurrency(event.ticketPrice)}`
               }
-            >
-              {registering ? 'Processing...' :
-               registration ? 'Cancel Registration' :
-               isSoldOut ? 'Sold Out' :
-               event.isFree ? 'Register for Free' : `Buy Tickets - ${formatCurrency(event.ticketPrice)}`}
-            </Button>
+              colors={colors}
+            />
           </View>
         )}
       </SafeAreaView>
@@ -1123,6 +1204,42 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     width: '100%',
+  },
+  // Gradient Button Styles
+  gradientButtonWrapper: {
+    position: 'relative',
+    width: '100%',
+    marginBottom: 8,
+  },
+  gradientButtonPressable: {
+    width: '100%',
+  },
+  gradientButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  gradientButtonText: {
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  buttonShadow: {
+    position: 'absolute',
+    bottom: -6,
+    left: 12,
+    right: 12,
+    height: 10,
+    borderRadius: 16,
+    opacity: 0.3,
+    zIndex: -1,
   },
   errorContainer: {
     flex: 1,
