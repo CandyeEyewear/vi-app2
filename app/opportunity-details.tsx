@@ -1,21 +1,32 @@
 /**
- * Opportunity Details Screen
+ * Opportunity Details Screen - Modern UI
  * Shows full opportunity information with sign-up for volunteers
  * and edit/delete options for admins
+ * 
+ * Modern features:
+ * - Enhanced animations and micro-interactions
+ * - Shimmer loading states with modern skeleton screens
+ * - Modern typography scale and spacing system
+ * - Pull-to-refresh functionality
+ * - Share and bookmark capabilities
+ * - Improved accessibility and responsive design
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   ScrollView,
   Image,
   StyleSheet,
+  RefreshControl,
+  Animated,
+  Platform,
+  Share as RNShare,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
-import { Colors } from '../constants/colors';
 import { useThemeStyles } from '../hooks/useThemeStyles';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -32,10 +43,14 @@ import {
   AlertCircle,
   Award,
   FileText,
+  Share2,
+  Bookmark,
+  BookmarkCheck,
 } from 'lucide-react-native';
 import { Opportunity } from '../types';
 import { supabase } from '../services/supabase';
 import CustomAlert from '../components/CustomAlert';
+import { showToast } from '../utils/toast';
 
 export default function OpportunityDetailsScreen() {
   const { colors, responsive, cardShadow } = useThemeStyles();
@@ -45,11 +60,23 @@ export default function OpportunityDetailsScreen() {
   const params = useLocalSearchParams();
   const opportunityId = params.id as string;
 
+  // State
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [isSignedUp, setIsSignedUp] = useState(false);
   const [signupStatus, setSignupStatus] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [savingBookmark, setSavingBookmark] = useState(false);
+
+  // Animations
+  const scrollY = useMemo(() => new Animated.Value(0), []);
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
 
   // Alert state
   const [alertVisible, setAlertVisible] = useState(false);
@@ -59,15 +86,105 @@ export default function OpportunityDetailsScreen() {
     type: 'success' as 'success' | 'error' | 'warning',
   });
 
-  const showAlert = (title: string, message: string, type: 'success' | 'error' | 'warning' = 'success') => {
+  const showAlert = useCallback((title: string, message: string, type: 'success' | 'error' | 'warning' = 'success') => {
     setAlertConfig({ title, message, type });
     setAlertVisible(true);
-  };
+  }, []);
 
   useEffect(() => {
     loadOpportunityDetails();
     checkSignupStatus();
+    checkSavedStatus();
   }, [opportunityId]);
+
+  // Pull to refresh
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([
+      loadOpportunityDetails(),
+      checkSignupStatus(),
+      checkSavedStatus(),
+    ]);
+    setRefreshing(false);
+  }, [opportunityId]);
+
+  // Check if opportunity is saved/bookmarked
+  const checkSavedStatus = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('saved_opportunities')
+        .select('id')
+        .eq('opportunity_id', opportunityId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') throw error;
+      setIsSaved(!!data);
+    } catch (error) {
+      console.error('Error checking saved status:', error);
+    }
+  }, [opportunityId, user]);
+
+  // Toggle save/bookmark
+  const toggleSave = useCallback(async () => {
+    if (!user) {
+      showToast('Please log in to save opportunities', 'error');
+      return;
+    }
+
+    try {
+      setSavingBookmark(true);
+
+      if (isSaved) {
+        // Remove from saved
+        const { error } = await supabase
+          .from('saved_opportunities')
+          .delete()
+          .eq('opportunity_id', opportunityId)
+          .eq('user_id', user.id);
+
+        if (error) throw error;
+        setIsSaved(false);
+        showToast('Removed from saved', 'success');
+      } else {
+        // Add to saved
+        const { error } = await supabase
+          .from('saved_opportunities')
+          .insert({
+            opportunity_id: opportunityId,
+            user_id: user.id,
+          });
+
+        if (error) throw error;
+        setIsSaved(true);
+        showToast('Saved for later!', 'success');
+      }
+    } catch (error: any) {
+      console.error('Error toggling save:', error);
+      showToast(error.message || 'Failed to save', 'error');
+    } finally {
+      setSavingBookmark(false);
+    }
+  }, [user, isSaved, opportunityId, showToast]);
+
+  // Share opportunity
+  const handleShare = useCallback(async () => {
+    if (!opportunity) return;
+
+    try {
+      await RNShare.share({
+        title: opportunity.title,
+        message: `Check out this volunteering opportunity: ${opportunity.title}\n\n${opportunity.description}\n\nOrganization: ${opportunity.organizationName}\nLocation: ${opportunity.location}`,
+      });
+    } catch (error: any) {
+      // User cancelled or error occurred
+      if (error.message) {
+        console.error('Error sharing:', error);
+      }
+    }
+  }, [opportunity]);
 
   const loadOpportunityDetails = async () => {
     try {
@@ -260,42 +377,91 @@ export default function OpportunityDetailsScreen() {
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { paddingTop: insets.top + responsive.spacing.lg, borderBottomColor: colors.border }]}>
-          <AnimatedPressable
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            style={({ pressed }) => [
-              styles.roundedIconButton,
-              {
-                backgroundColor: pressed ? colors.surfacePressed : colors.surfaceElevated,
-              },
-            ]}
-            onPress={() => router.back()}
-          >
-            <ChevronLeft size={responsive.iconSize.lg} color={colors.text} />
-          </AnimatedPressable>
+        {/* Loading Header */}
+        <View style={[styles.header, { paddingTop: insets.top + responsive.spacing.lg, borderBottomColor: colors.border, opacity: 1 }]}>
+          <View style={styles.headerContent}>
+            <AnimatedPressable
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+              style={({ pressed }) => [
+                styles.roundedIconButton,
+                {
+                  backgroundColor: pressed ? colors.surfacePressed : colors.surfaceElevated,
+                },
+              ]}
+              onPress={() => router.back()}
+            >
+              <ChevronLeft size={responsive.iconSize.lg} color={colors.text} />
+            </AnimatedPressable>
+          </View>
         </View>
-        <View style={styles.loadingContainer}>
+        
+        {/* Modern Loading Skeleton */}
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.loadingContainer}
+        >
+          {/* Image Skeleton */}
           <ShimmerSkeleton
             colors={colors}
             style={{
-              height: 220,
-              borderRadius: 20,
-              marginBottom: responsive.spacing.lg,
+              width: '100%',
+              height: 250,
+              borderRadius: 0,
+              marginBottom: 0,
             }}
           />
-          {[...Array(4).keys()].map((index) => (
-            <ShimmerSkeleton
-              key={`skeleton-${index}`}
-              colors={colors}
-              style={{
-                height: 80,
-                borderRadius: 16,
-                marginBottom: responsive.spacing.md,
-              }}
+          
+          {/* Content Skeleton */}
+          <View style={{ padding: 16 }}>
+            {/* Badge Row */}
+            <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12 }}>
+              <ShimmerSkeleton colors={colors} style={{ width: 80, height: 24, borderRadius: 12 }} />
+              <ShimmerSkeleton colors={colors} style={{ width: 70, height: 24, borderRadius: 12 }} />
+            </View>
+            
+            {/* Title */}
+            <ShimmerSkeleton 
+              colors={colors} 
+              style={{ width: '90%', height: 32, borderRadius: 8, marginBottom: 8 }} 
             />
-          ))}
-        </View>
+            <ShimmerSkeleton 
+              colors={colors} 
+              style={{ width: '70%', height: 32, borderRadius: 8, marginBottom: 16 }} 
+            />
+            
+            {/* Organization */}
+            <ShimmerSkeleton 
+              colors={colors} 
+              style={{ width: '50%', height: 18, borderRadius: 8, marginBottom: 24 }} 
+            />
+            
+            {/* Info Cards Grid */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
+              {[...Array(4)].map((_, i) => (
+                <ShimmerSkeleton 
+                  key={i}
+                  colors={colors} 
+                  style={{ width: '48%', height: 100, borderRadius: 12 }} 
+                />
+              ))}
+            </View>
+            
+            {/* Description */}
+            {[...Array(5)].map((_, i) => (
+              <ShimmerSkeleton 
+                key={`desc-${i}`}
+                colors={colors} 
+                style={{ 
+                  width: i === 4 ? '60%' : '100%', 
+                  height: 16, 
+                  borderRadius: 8, 
+                  marginBottom: 8 
+                }} 
+              />
+            ))}
+          </View>
+        </ScrollView>
       </View>
     );
   }
@@ -303,24 +469,30 @@ export default function OpportunityDetailsScreen() {
   if (!opportunity) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { paddingTop: insets.top + responsive.spacing.lg, borderBottomColor: colors.border }]}>
-          <AnimatedPressable
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            style={({ pressed }) => [
-              styles.roundedIconButton,
-              {
-                backgroundColor: pressed ? colors.surfacePressed : colors.surfaceElevated,
-              },
-            ]}
-            onPress={() => router.back()}
-          >
-            <ChevronLeft size={responsive.iconSize.lg} color={colors.text} />
-          </AnimatedPressable>
+        <View style={[styles.header, { paddingTop: insets.top + responsive.spacing.lg, borderBottomColor: colors.border, opacity: 1 }]}>
+          <View style={styles.headerContent}>
+            <AnimatedPressable
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+              style={({ pressed }) => [
+                styles.roundedIconButton,
+                {
+                  backgroundColor: pressed ? colors.surfacePressed : colors.surfaceElevated,
+                },
+              ]}
+              onPress={() => router.back()}
+            >
+              <ChevronLeft size={responsive.iconSize.lg} color={colors.text} />
+            </AnimatedPressable>
+          </View>
         </View>
         <View style={styles.errorContainer}>
-          <Text style={[styles.errorText, { color: colors.error }]}>
+          <AlertCircle size={48} color={colors.error} />
+          <Text style={[styles.errorText, { color: colors.text }]}>
             Opportunity not found
+          </Text>
+          <Text style={[styles.errorSubtext, { color: colors.textSecondary }]}>
+            This opportunity may have been removed or doesn't exist.
           </Text>
         </View>
       </View>
@@ -334,56 +506,131 @@ export default function OpportunityDetailsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + responsive.spacing.lg, borderBottomColor: colors.border }]}>
-        <AnimatedPressable
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          style={({ pressed }) => [
-            styles.roundedIconButton,
-            {
-              backgroundColor: pressed ? colors.surfacePressed : colors.surfaceElevated,
-            },
-          ]}
-          onPress={() => router.back()}
-        >
-          <ChevronLeft size={responsive.iconSize.lg} color={colors.text} />
-        </AnimatedPressable>
-        
-        {/* Admin Actions */}
-        {isAdmin && (
-          <View style={styles.adminActions}>
-            <AnimatedPressable
-              style={({ pressed }) => [
-                styles.roundedIconButton,
-                {
-                  backgroundColor: pressed ? colors.primarySoft : colors.surfaceElevated,
-                },
-              ]}
-              onPress={() => router.push(`/edit-opportunity?id=${opportunityId}`)}
-            >
-              <Edit size={responsive.iconSize.md} color={colors.primary} />
-            </AnimatedPressable>
-            <AnimatedPressable
-              style={({ pressed }) => [
-                styles.roundedIconButton,
-                {
-                  backgroundColor: pressed ? colors.errorSoft : colors.surfaceElevated,
-                },
-              ]}
-              onPress={handleDelete}
-              disabled={submitting}
-            >
-              <Trash2 size={responsive.iconSize.md} color={colors.error} />
-            </AnimatedPressable>
+      {/* Animated Header */}
+      <Animated.View 
+        style={[
+          styles.header, 
+          { 
+            paddingTop: insets.top + responsive.spacing.lg, 
+            borderBottomColor: colors.border,
+            backgroundColor: colors.background,
+            opacity: headerOpacity,
+          }
+        ]}
+      >
+        <View style={styles.headerContent}>
+          <AnimatedPressable
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            style={({ pressed }) => [
+              styles.roundedIconButton,
+              {
+                backgroundColor: pressed ? colors.surfacePressed : colors.surfaceElevated,
+              },
+            ]}
+            onPress={() => router.back()}
+          >
+            <ChevronLeft size={responsive.iconSize.lg} color={colors.text} />
+          </AnimatedPressable>
+          
+          {/* Right Actions */}
+          <View style={styles.headerActions}>
+            {/* Share Button */}
+            {!isAdmin && (
+              <AnimatedPressable
+                accessibilityRole="button"
+                accessibilityLabel="Share opportunity"
+                style={({ pressed }) => [
+                  styles.roundedIconButton,
+                  {
+                    backgroundColor: pressed ? colors.surfacePressed : colors.surfaceElevated,
+                  },
+                ]}
+                onPress={handleShare}
+              >
+                <Share2 size={responsive.iconSize.md} color={colors.text} />
+              </AnimatedPressable>
+            )}
+            
+            {/* Save/Bookmark Button */}
+            {!isAdmin && (
+              <AnimatedPressable
+                accessibilityRole="button"
+                accessibilityLabel={isSaved ? 'Remove from saved' : 'Save for later'}
+                style={({ pressed }) => [
+                  styles.roundedIconButton,
+                  {
+                    backgroundColor: pressed 
+                      ? colors.primarySoft 
+                      : isSaved 
+                      ? colors.primarySoft 
+                      : colors.surfaceElevated,
+                  },
+                ]}
+                onPress={toggleSave}
+                disabled={savingBookmark}
+              >
+                {isSaved ? (
+                  <BookmarkCheck size={responsive.iconSize.md} color={colors.primary} />
+                ) : (
+                  <Bookmark size={responsive.iconSize.md} color={colors.text} />
+                )}
+              </AnimatedPressable>
+            )}
+            
+            {/* Admin Actions */}
+            {isAdmin && (
+              <>
+                <AnimatedPressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit opportunity"
+                  style={({ pressed }) => [
+                    styles.roundedIconButton,
+                    {
+                      backgroundColor: pressed ? colors.primarySoft : colors.surfaceElevated,
+                    },
+                  ]}
+                  onPress={() => router.push(`/edit-opportunity/${opportunityId}`)}
+                >
+                  <Edit size={responsive.iconSize.md} color={colors.primary} />
+                </AnimatedPressable>
+                <AnimatedPressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete opportunity"
+                  style={({ pressed }) => [
+                    styles.roundedIconButton,
+                    {
+                      backgroundColor: pressed ? colors.errorSoft : colors.surfaceElevated,
+                    },
+                  ]}
+                  onPress={handleDelete}
+                  disabled={submitting}
+                >
+                  <Trash2 size={responsive.iconSize.md} color={colors.error} />
+                </AnimatedPressable>
+              </>
+            )}
           </View>
-        )}
-      </View>
+        </View>
+      </Animated.View>
 
-      <ScrollView 
+      <Animated.ScrollView 
         style={styles.scrollView} 
         contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
         showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
+        scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
       >
         {/* Image */}
         {opportunity.imageUrl && (
@@ -507,7 +754,7 @@ export default function OpportunityDetailsScreen() {
             </View>
           )}
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* Bottom Action Button (Only for non-admins) */}
       {!isAdmin && (
@@ -598,12 +845,24 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
     paddingHorizontal: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
   },
   roundedIconButton: {
     width: 44,
@@ -611,27 +870,40 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  adminActions: {
-    flexDirection: 'row',
-    gap: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
   scrollView: {
     flex: 1,
   },
   loadingContainer: {
-    flex: 1,
-    padding: 24,
+    paddingTop: 0,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
+    gap: 12,
   },
   errorText: {
     fontSize: 18,
     fontWeight: '600',
+    marginTop: 16,
+  },
+  errorSubtext: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
   },
   image: {
     width: '100%',

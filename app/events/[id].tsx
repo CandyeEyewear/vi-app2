@@ -62,6 +62,7 @@ import { showToast } from '../../utils/toast';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import Card from '../../components/Card';
 import Button from '../../components/Button';
+import { ShimmerSkeleton } from '../../components/ShimmerSkeleton';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
@@ -550,7 +551,7 @@ export default function EventDetailScreen() {
     });
   }, [event]);
 
-  // Loading state
+  // Loading state with modern shimmer skeleton
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -560,9 +561,64 @@ export default function EventDetailScreen() {
           onShare={() => {}} 
           colors={colors} 
         />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#38B6FF" />
-        </View>
+        <ScrollView style={styles.scrollView}>
+          {/* Image Skeleton */}
+          <ShimmerSkeleton 
+            colors={colors} 
+            style={{ width: '100%', height: 300, borderRadius: 0 }} 
+          />
+          
+          <View style={{ padding: Spacing.lg }}>
+            {/* Category Badge Skeleton */}
+            <ShimmerSkeleton 
+              colors={colors} 
+              style={{ width: 100, height: 28, borderRadius: 14, marginBottom: Spacing.md }} 
+            />
+            
+            {/* Title Skeleton */}
+            <ShimmerSkeleton 
+              colors={colors} 
+              style={{ width: '90%', height: 32, borderRadius: 8, marginBottom: Spacing.sm }} 
+            />
+            <ShimmerSkeleton 
+              colors={colors} 
+              style={{ width: '70%', height: 32, borderRadius: 8, marginBottom: Spacing.xxl }} 
+            />
+            
+            {/* Info Cards Grid */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginBottom: Spacing.xxl }}>
+              {[...Array(4)].map((_, i) => (
+                <ShimmerSkeleton 
+                  key={i}
+                  colors={colors} 
+                  style={{ 
+                    width: screenWidth > 600 ? '23%' : '48%', 
+                    height: 100, 
+                    borderRadius: 12 
+                  }} 
+                />
+              ))}
+            </View>
+            
+            {/* Description Section */}
+            <ShimmerSkeleton 
+              colors={colors} 
+              style={{ width: 120, height: 24, borderRadius: 8, marginBottom: Spacing.md }} 
+            />
+            {[...Array(6)].map((_, i) => (
+              <ShimmerSkeleton 
+                key={`desc-${i}`}
+                colors={colors} 
+                style={{ 
+                  width: i === 5 ? '70%' : '100%', 
+                  height: 16, 
+                  borderRadius: 8, 
+                  marginBottom: Spacing.sm 
+                }} 
+              />
+            ))}
+          </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
