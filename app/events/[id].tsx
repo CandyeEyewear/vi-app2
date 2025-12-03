@@ -11,7 +11,6 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  Image,
   useColorScheme,
   RefreshControl,
   Share,
@@ -25,11 +24,11 @@ import {
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Image } from 'expo-image';
 import {
   ArrowLeft,
   Share2,
   Calendar,
-  Clock,
   MapPin,
   Users,
   Video,
@@ -39,14 +38,13 @@ import {
   Phone,
   Mail,
   DollarSign,
-  Heart,
   Check,
   X,
   AlertCircle,
 } from 'lucide-react-native';
 import { Colors } from '../../constants/colors';
 import { EVENT_CATEGORY_CONFIG } from '../../constants/eventCategories';
-import { Event, EventCategory, EventRegistration } from '../../types';
+import { Event, EventRegistration } from '../../types';
 import {
   getEventById,
   checkUserRegistration,
@@ -64,12 +62,24 @@ import { useAuth } from '../../contexts/AuthContext';
 import { showToast } from '../../utils/toast';
 import { logImageDebugInfo } from '../../utils/webImageDebug';
 import ErrorBoundary from '../../components/ErrorBoundary';
-import Card from '../../components/Card';
 import Button from '../../components/Button';
 import { ShimmerSkeleton } from '../../components/ShimmerSkeleton';
 
-// Screen width constant
-const screenWidth = Dimensions.get('window').width;
+const getPremiumShadow = (colors: any) =>
+  Platform.select({
+    ios: {
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.08,
+      shadowRadius: 12,
+    },
+    android: {
+      elevation: 4,
+    },
+    web: {
+      boxShadow: '0 12px 30px rgba(15, 23, 42, 0.12)',
+    },
+  });
 
 // Responsive System
 const getResponsiveValues = () => {
@@ -212,6 +222,7 @@ function EventHeader({
       <Pressable
         style={({ pressed }) => [
           styles.headerButton, 
+          getPremiumShadow(colors),
           { 
             backgroundColor: colors.card,
             transform: [{ scale: pressed ? 0.95 : 1 }],
@@ -228,6 +239,7 @@ function EventHeader({
       <Pressable
         style={({ pressed }) => [
           styles.headerButton, 
+          getPremiumShadow(colors),
           { 
             backgroundColor: colors.card,
             transform: [{ scale: pressed ? 0.95 : 1 }],
@@ -245,26 +257,26 @@ function EventHeader({
 }
 
 // Event Image Component with modern loading
-function EventImage({ 
-  event, 
-  colors 
-}: { 
-  event: Event; 
+function EventImage({
+  event,
+  colors,
+}: {
+  event: Event;
   colors: any;
 }) {
-  // Use useRef to avoid re-renders
+  const responsive = getResponsiveValues();
+  const heroHeight = responsive.isSmallMobile
+    ? 280
+    : responsive.isTablet || responsive.isDesktop
+    ? 400
+    : 320;
+  const categoryConfig = EVENT_CATEGORY_CONFIG[event.category] || EVENT_CATEGORY_CONFIG.other;
+  const imageSource = useMemo(() => (event.imageUrl ? { uri: event.imageUrl } : null), [event.imageUrl]);
   const imageLoadingRef = useRef(true);
   const [imageError, setImageError] = useState(false);
   const [showLoader, setShowLoader] = useState(true);
-  const categoryConfig = EVENT_CATEGORY_CONFIG[event.category] || EVENT_CATEGORY_CONFIG.other;
 
-  // Memoize the source object to prevent recreation on every render
-  const imageSource = useMemo(() => {
-    return event.imageUrl ? { uri: event.imageUrl } : null;
-  }, [event.imageUrl]);
-
-  // Debug: Log image URL (only once per URL change)
-  React.useEffect(() => {
+  useEffect(() => {
     if (event.imageUrl) {
       logImageDebugInfo(event.imageUrl, `EventImage: ${event.title}`);
     } else {
@@ -272,29 +284,31 @@ function EventImage({
     }
   }, [event.imageUrl, event.title]);
 
-  // Memoize callbacks to prevent recreation
   const handleLoadStart = useCallback(() => {
-    console.log('[EventImage] Image load started:', event.imageUrl);
     imageLoadingRef.current = true;
+    setShowLoader(true);
+    console.log('[EventImage] Image load started:', event.imageUrl);
   }, [event.imageUrl]);
 
   const handleLoadEnd = useCallback(() => {
-    console.log('[EventImage] Image load ended successfully:', event.imageUrl);
     imageLoadingRef.current = false;
     setShowLoader(false);
+    console.log('[EventImage] Image load ended successfully:', event.imageUrl);
   }, [event.imageUrl]);
 
-  const handleError = useCallback((error: any) => {
-    console.error('[EventImage] Image load error for:', event.title);
-    console.error('  URL:', event.imageUrl);
-    console.error('  Error:', error.nativeEvent);
-    console.error('  Tip: Open URL in new tab to test if accessible');
-    setImageError(true);
-    setShowLoader(false);
-  }, [event.title, event.imageUrl]);
+  const handleError = useCallback(
+    (error: any) => {
+      console.error('[EventImage] Image load error for:', event.title);
+      console.error('  URL:', event.imageUrl);
+      console.error('  Error:', error.nativeEvent);
+      setImageError(true);
+      setShowLoader(false);
+    },
+    [event.title, event.imageUrl]
+  );
 
   return (
-    <View style={styles.imageContainer}>
+    <View style={[styles.imageContainer, { height: heroHeight }]}>
       {imageSource && !imageError ? (
         <>
           <Image
@@ -313,27 +327,55 @@ function EventImage({
           )}
         </>
       ) : (
-        <View style={[styles.placeholderImage, { backgroundColor: categoryConfig.color }]}>
-          <Text style={styles.placeholderEmoji}>
-            {categoryConfig.emoji}
-          </Text>
+        <View
+          style={[
+            styles.placeholderImage,
+            {
+              backgroundColor: categoryConfig.color,
+              height: heroHeight,
+            },
+          ]}
+        >
+          <Text style={styles.placeholderEmoji}>{categoryConfig.emoji}</Text>
         </View>
       )}
-      
-      {/* Category Badge */}
-      <View style={[styles.categoryBadge, { backgroundColor: categoryConfig.color }]}>
+
+      <LinearGradient
+        colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.7)']}
+        style={[styles.heroGradient]}
+        pointerEvents="none"
+      />
+
+      <View
+        style={[
+          styles.categoryBadge,
+          { backgroundColor: categoryConfig.color },
+          getPremiumShadow(colors),
+        ]}
+      >
         <Text style={[styles.categoryBadgeText, { color: colors.textOnPrimary }]}>
           {categoryConfig.emoji} {categoryConfig.label}
         </Text>
       </View>
-      
-      {/* Featured Badge */}
+
       {event.isFeatured && (
-        <View style={[styles.featuredBadge, { backgroundColor: colors.eventFeaturedGold }]}>
-          <Star size={14} color="#000" fill="#000" />
-          <Text style={[styles.featuredText, { color: '#000' }]}>Featured</Text>
+        <View
+          style={[
+            styles.featuredBadge,
+            { backgroundColor: colors.eventFeaturedGold },
+            getPremiumShadow(colors),
+          ]}
+        >
+          <Star size={14} color={colors.textInverse} fill={colors.textInverse} />
+          <Text style={[styles.featuredText, { color: colors.textInverse }]}>Featured</Text>
         </View>
       )}
+
+      <View style={styles.heroMeta}>
+        <Text style={[styles.heroTitle, { color: colors.textOnPrimary }]} numberOfLines={2}>
+          {event.title}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -351,72 +393,75 @@ function GradientButton({
   onPress: () => void; 
   icon: any; 
   label: string; 
-  variant?: 'primary' | 'secondary' | 'danger';
+  variant?: 'primary' | 'danger';
   loading?: boolean;
   disabled?: boolean;
   colors: typeof Colors.light;
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const responsive = getResponsiveValues();
+  const gradientColors = variant === 'danger'
+    ? [colors.error, colors.errorDark]
+    : [colors.primary, colors.primaryDark];
 
   const handlePressIn = () => {
-    if (!disabled && !loading) {
-      Animated.spring(scaleAnim, {
-        toValue: 0.97,
-        useNativeDriver: true,
-      }).start();
-    }
+    if (disabled || loading) return;
+    Animated.spring(scaleAnim, {
+      toValue: 0.97,
+      useNativeDriver: true,
+    }).start();
   };
 
   const handlePressOut = () => {
-    if (!disabled && !loading) {
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 3,
-        useNativeDriver: true,
-      }).start();
-    }
+    if (disabled || loading) return;
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      friction: 4,
+      useNativeDriver: true,
+    }).start();
   };
 
-  const gradientColors = variant === 'danger' 
-    ? [colors.error, colors.errorDark]
-    : variant === 'secondary'
-    ? [colors.surfaceElevated, colors.surface2]
-    : Colors.gradients.primary;
-
-  const textColor = variant === 'secondary' ? colors.text : colors.textOnPrimary;
-
   return (
-    <Animated.View style={[styles.gradientButtonWrapper, { transform: [{ scale: scaleAnim }], opacity: disabled ? 0.5 : 1 }]}>
+    <Animated.View
+      style={[
+        styles.gradientButtonWrapper,
+        { transform: [{ scale: scaleAnim }], opacity: disabled ? 0.6 : 1 },
+      ]}
+    >
       <Pressable
         onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        style={styles.gradientButtonPressable}
         disabled={disabled || loading}
+        style={styles.gradientButtonPressable}
       >
         <LinearGradient
           colors={gradientColors}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
-          style={[styles.gradientButton, { height: responsive.buttonHeight || 52 }]}
+          style={styles.gradientButton}
         >
           {loading ? (
-            <ActivityIndicator size="small" color={textColor} />
+            <ActivityIndicator size="small" color={colors.textOnPrimary} />
           ) : (
             <>
-              <Icon size={20} color={textColor} />
-              <Text style={[styles.gradientButtonText, { color: textColor }]}>{label}</Text>
+              <Icon size={20} color={colors.textOnPrimary} />
+              <Text style={[styles.gradientButtonText, { color: colors.textOnPrimary }]}>
+                {label}
+              </Text>
             </>
           )}
         </LinearGradient>
       </Pressable>
-      {/* Shadow layer for depth */}
-      {variant === 'primary' && !disabled && (
-        <View style={[styles.buttonShadow, { backgroundColor: colors.primary }]} />
-      )}
-      {variant === 'danger' && !disabled && (
-        <View style={[styles.buttonShadow, { backgroundColor: colors.error }]} />
+
+      {!disabled && (
+        <View
+          style={[
+            styles.buttonShadow,
+            {
+              backgroundColor: gradientColors[0],
+            },
+          ]}
+        />
       )}
     </Animated.View>
   );
@@ -438,63 +483,116 @@ function EventInfoCard({
   colors: any;
   badge?: React.ReactNode;
 }) {
-  const Component = onPress ? Pressable : View;
+  const responsive = getResponsiveValues();
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const animateTo = (value: number) =>
+    Animated.spring(scaleAnim, {
+      toValue: value,
+      useNativeDriver: true,
+      friction: 6,
+    }).start();
+
+  const cardContent = (
+    <Animated.View
+      style={[
+        styles.infoCard,
+        {
+          padding: responsive.spacing.lg,
+          marginBottom: responsive.spacing.md,
+          backgroundColor: colors.card,
+          transform: [{ scale: scaleAnim }],
+        },
+        getPremiumShadow(colors),
+      ]}
+    >
+      <View style={[styles.infoIcon, { backgroundColor: colors.primarySoft }]}>
+        {icon}
+      </View>
+      <View style={styles.infoContent}>
+        <View style={styles.infoTitleRow}>
+          <Text style={[styles.infoTitle, { color: colors.text }]}>{title}</Text>
+          {badge}
+        </View>
+        {subtitle && (
+          <Text style={[styles.infoSubtitle, { color: colors.textSecondary }]} numberOfLines={2}>
+            {subtitle}
+          </Text>
+        )}
+      </View>
+      {onPress && <ExternalLink size={20} color={colors.textSecondary} />}
+    </Animated.View>
+  );
+
+  if (!onPress) {
+    return cardContent;
+  }
 
   return (
-    <Card style={styles.infoCard}>
-      <Component
-        style={onPress ? ({ pressed }: any) => [
-          styles.infoCardContent,
-          { backgroundColor: pressed ? colors.surfacePressed : 'transparent' }
-        ] : styles.infoCardContent}
-        onPress={onPress}
-        accessibilityRole={onPress ? "button" : undefined}
-      >
-        <View style={[styles.infoIcon, { backgroundColor: colors.cardSecondary }]}>
-          {icon}
-        </View>
-        <View style={styles.infoContent}>
-          <View style={styles.infoTitleRow}>
-            <Text style={[styles.infoTitle, { color: colors.text }]}>
-              {title}
-            </Text>
-            {badge}
-          </View>
-          {subtitle && (
-            <Text style={[styles.infoSubtitle, { color: colors.textSecondary }]}>
-              {subtitle}
-            </Text>
-          )}
-        </View>
-        {onPress && (
-          <ExternalLink size={20} color={colors.textSecondary} />
-        )}
-      </Component>
-    </Card>
+    <Pressable
+      onPress={onPress}
+      onPressIn={() => animateTo(0.98)}
+      onPressOut={() => animateTo(1)}
+      accessibilityRole="button"
+    >
+      {cardContent}
+    </Pressable>
   );
 }
 
 // Registration Status Banner
 function RegistrationStatusBanner({
   registration,
-  event,
   colors,
 }: {
   registration: EventRegistration | null;
-  event: Event;
   colors: any;
 }) {
+  const responsive = getResponsiveValues();
+  const iconScale = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(iconScale, {
+      toValue: 1,
+      friction: 5,
+      useNativeDriver: true,
+    }).start();
+  }, [iconScale]);
+
   if (!registration) return null;
 
   return (
-    <Card style={[styles.statusBanner, { backgroundColor: colors.successSoft }]}>
-      <View style={styles.statusContent}>
-        <Check size={20} color={colors.success} />
+    <View
+      style={[
+        styles.statusBanner,
+        {
+          backgroundColor: colors.successSoft,
+          borderLeftColor: colors.success,
+          padding: responsive.spacing.lg,
+        },
+        getPremiumShadow(colors),
+      ]}
+    >
+      <Animated.View
+        style={[
+          styles.statusIcon,
+          {
+            backgroundColor: colors.success,
+            transform: [{ scale: iconScale }],
+          },
+        ]}
+      >
+        <Check size={20} color={colors.textOnPrimary} />
+      </Animated.View>
+      <View style={styles.statusCopy}>
         <Text style={[styles.statusText, { color: colors.successText }]}>
           You're registered for this event
         </Text>
+        <Text style={[styles.statusSubtext, { color: colors.textSecondary }]}>
+          We’ll send reminders and important updates before it begins.
+        </Text>
       </View>
-    </Card>
+    </View>
   );
 }
 
@@ -533,6 +631,7 @@ export default function EventDetailScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const { user } = useAuth();
+  const responsive = getResponsiveValues();
 
   const {
     event,
@@ -709,6 +808,12 @@ export default function EventDetailScreen() {
 
   // Loading state with modern shimmer skeleton
   if (loading) {
+    const heroHeight = responsive.isSmallMobile
+      ? 280
+      : responsive.isTablet || responsive.isDesktop
+      ? 400
+      : 320;
+
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
@@ -718,58 +823,56 @@ export default function EventDetailScreen() {
           colors={colors} 
         />
         <ScrollView style={styles.scrollView}>
-          {/* Image Skeleton */}
           <ShimmerSkeleton 
             colors={colors} 
-            style={{ width: '100%', height: 300, borderRadius: 0 }} 
+            style={{ width: '100%', height: heroHeight, borderRadius: 0 }} 
           />
           
-          <View style={{ padding: Spacing.lg }}>
-            {/* Category Badge Skeleton */}
+          <View style={{ padding: responsive.spacing.lg, gap: responsive.spacing.md }}>
             <ShimmerSkeleton 
               colors={colors} 
-              style={{ width: 100, height: 28, borderRadius: 14, marginBottom: Spacing.md }} 
+              style={{ width: 140, height: 32, borderRadius: 16 }} 
             />
             
-            {/* Title Skeleton */}
             <ShimmerSkeleton 
               colors={colors} 
-              style={{ width: '90%', height: 32, borderRadius: 8, marginBottom: Spacing.sm }} 
+              style={{ width: '85%', height: 34, borderRadius: 10 }} 
             />
             <ShimmerSkeleton 
               colors={colors} 
-              style={{ width: '70%', height: 32, borderRadius: 8, marginBottom: Spacing.xxl }} 
+              style={{ width: '55%', height: 34, borderRadius: 10, marginBottom: responsive.spacing.md }} 
             />
             
-            {/* Info Cards Grid */}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginBottom: Spacing.xxl }}>
-              {[...Array(4)].map((_, i) => (
+            {[...Array(2)].map((_, i) => (
+              <ShimmerSkeleton 
+                key={`info-${i}`}
+                colors={colors} 
+                style={{ width: '100%', height: 96, borderRadius: 16 }} 
+              />
+            ))}
+
+            <View style={{ flexDirection: 'row', gap: responsive.spacing.md }}>
+              {[...Array(3)].map((_, i) => (
                 <ShimmerSkeleton 
-                  key={i}
+                  key={`stat-${i}`}
                   colors={colors} 
-                  style={{ 
-                    width: screenWidth > 600 ? '23%' : '48%', 
-                    height: 100, 
-                    borderRadius: 12 
-                  }} 
+                  style={{ flex: 1, height: 120, borderRadius: 16 }} 
                 />
               ))}
             </View>
             
-            {/* Description Section */}
             <ShimmerSkeleton 
               colors={colors} 
-              style={{ width: 120, height: 24, borderRadius: 8, marginBottom: Spacing.md }} 
+              style={{ width: 160, height: 24, borderRadius: 10 }} 
             />
-            {[...Array(6)].map((_, i) => (
+            {[...Array(4)].map((_, i) => (
               <ShimmerSkeleton 
-                key={`desc-${i}`}
+                key={`about-${i}`}
                 colors={colors} 
                 style={{ 
-                  width: i === 5 ? '70%' : '100%', 
-                  height: 16, 
-                  borderRadius: 8, 
-                  marginBottom: Spacing.sm 
+                  width: i === 3 ? '75%' : '100%', 
+                  height: 18, 
+                  borderRadius: 8 
                 }} 
               />
             ))}
@@ -799,6 +902,31 @@ export default function EventDetailScreen() {
   const spotsLeft = event.spotsRemaining ?? event.capacity ?? 999;
   const isSoldOut = spotsLeft <= 0;
   const isPastEvent = isEventPast(event.eventDate);
+  const stats = useMemo(() => {
+    const list: Array<{ key: string; icon: any; value: string | number; label: string }> = [
+      { key: 'registered', icon: Users, value: registrations.length || 0, label: 'Registered' },
+    ];
+
+    if (event.capacity) {
+      list.push({
+        key: 'spots',
+        icon: Ticket,
+        value: Math.max(spotsLeft, 0),
+        label: 'Spots Left',
+      });
+    }
+
+    if (!event.isFree) {
+      list.push({
+        key: 'price',
+        icon: DollarSign,
+        value: formatCurrency(event.ticketPrice),
+        label: 'Price',
+      });
+    }
+
+    return list;
+  }, [event.capacity, event.isFree, event.ticketPrice, registrations.length, spotsLeft]);
 
   return (
     <ErrorBoundary>
@@ -824,12 +952,11 @@ export default function EventDetailScreen() {
           <EventImage event={event} colors={colors} />
 
           {/* Content */}
-          <View style={[styles.content, { backgroundColor: colors.background }]}>
+          <View style={[styles.content, { backgroundColor: colors.surface }]}>
             
             {/* Registration Status */}
             <RegistrationStatusBanner 
               registration={registration} 
-              event={event} 
               colors={colors} 
             />
 
@@ -868,56 +995,55 @@ export default function EventDetailScreen() {
 
             {/* Stats Row */}
             <View style={styles.statsRow}>
-              <Card style={styles.statCard}>
-                <Users size={20} color={colors.primary} />
-                <Text style={[styles.statValue, { color: colors.text }]}>
-                  {registrations.length}
-                </Text>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-                  Registered
-                </Text>
-              </Card>
-
-              {event.capacity && (
-                <Card style={styles.statCard}>
-                  <Ticket size={20} color={colors.primary} />
+              {stats.map(({ key, icon: IconComponent, value, label }) => (
+                <View
+                  key={key}
+                  style={[
+                    styles.statCard,
+                    { backgroundColor: colors.card },
+                    getPremiumShadow(colors),
+                  ]}
+                >
+                  <View style={[styles.statIcon, { backgroundColor: colors.primarySoft }]}>
+                    <IconComponent size={20} color={colors.primary} />
+                  </View>
                   <Text style={[styles.statValue, { color: colors.text }]}>
-                    {spotsLeft}
+                    {value}
                   </Text>
                   <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-                    Spots Left
+                    {label}
                   </Text>
-                </Card>
-              )}
-
-              {!event.isFree && (
-                <Card style={styles.statCard}>
-                  <DollarSign size={20} color={colors.primary} />
-                  <Text style={[styles.statValue, { color: colors.text }]}>
-                    {formatCurrency(event.ticketPrice)}
-                  </Text>
-                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-                    Price
-                  </Text>
-                </Card>
-              )}
+                </View>
+              ))}
             </View>
 
             {/* Description */}
             {event.description && (
-              <Card style={styles.section}>
+              <View
+                style={[
+                  styles.sectionCard,
+                  { backgroundColor: colors.card, padding: responsive.spacing.xl },
+                  getPremiumShadow(colors),
+                ]}
+              >
                 <Text style={[styles.sectionTitle, { color: colors.text }]}>
                   About This Event
                 </Text>
-                <Text style={[styles.description, { color: colors.text }, Typography.body1]}>
+                <Text style={[styles.description, { color: colors.text }]}>
                   {event.description}
                 </Text>
-              </Card>
+              </View>
             )}
 
             {/* Contact Information */}
             {(event.contactEmail || event.contactPhone) && (
-              <Card style={styles.section}>
+              <View
+                style={[
+                  styles.sectionCard,
+                  { backgroundColor: colors.card, padding: responsive.spacing.xl },
+                  getPremiumShadow(colors),
+                ]}
+              >
                 <Text style={[styles.sectionTitle, { color: colors.text }]}>
                   Contact
                 </Text>
@@ -926,7 +1052,10 @@ export default function EventDetailScreen() {
                     <Pressable 
                       style={({ pressed }) => [
                         styles.contactButton,
-                        { opacity: pressed ? 0.7 : 1 }
+                        {
+                          backgroundColor: colors.primarySoft,
+                          opacity: pressed ? 0.7 : 1,
+                        },
                       ]}
                       onPress={handleCall}
                       accessibilityRole="button"
@@ -942,7 +1071,10 @@ export default function EventDetailScreen() {
                     <Pressable 
                       style={({ pressed }) => [
                         styles.contactButton,
-                        { opacity: pressed ? 0.7 : 1 }
+                        {
+                          backgroundColor: colors.primarySoft,
+                          opacity: pressed ? 0.7 : 1,
+                        },
                       ]}
                       onPress={handleEmail}
                       accessibilityRole="button"
@@ -955,7 +1087,7 @@ export default function EventDetailScreen() {
                     </Pressable>
                   )}
                 </View>
-              </Card>
+              </View>
             )}
 
             {/* Bottom spacing for fixed button */}
@@ -1032,29 +1164,34 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 100, // Space for bottom button
+    paddingBottom: 120,
   },
   imageContainer: {
     position: 'relative',
+    width: '100%',
+    overflow: 'hidden',
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
   },
   eventImage: {
     width: '100%',
-    height: 300,
+    height: '100%',
   },
   imageLoadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.8)', // Keep visible for detail screen
   },
   placeholderImage: {
     width: '100%',
-    height: 300,
     justifyContent: 'center',
     alignItems: 'center',
   },
   placeholderEmoji: {
     fontSize: 64,
+  },
+  heroGradient: {
+    ...StyleSheet.absoluteFillObject,
   },
   categoryBadge: {
     position: 'absolute',
@@ -1068,42 +1205,57 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  content: {
-    flex: 1,
-    padding: Spacing.lg,
-    marginTop: -20,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-  },
-  title: {
-    ...Typography.title2,
-    marginBottom: Spacing.xl,
-    lineHeight: 32,
-  },
-  infoCard: {
-    marginBottom: Spacing.md,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
-  },
-  infoCardContent: {
+  featuredBadge: {
+    position: 'absolute',
+    top: Spacing.lg,
+    right: Spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: Spacing.lg,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: 20,
+    gap: 4,
+  },
+  featuredText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  heroMeta: {
+    position: 'absolute',
+    left: Spacing.xl,
+    right: Spacing.xl,
+    bottom: Spacing.xl,
+  },
+  heroTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+    lineHeight: 32,
+  },
+  content: {
+    flex: 1,
+    padding: Spacing.xl,
+    marginTop: -32,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+    lineHeight: 32,
+    marginBottom: Spacing.xl,
+  },
+  infoCard: {
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.lg,
   },
   infoIcon: {
     width: 48,
     height: 48,
-    borderRadius: 12,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1116,12 +1268,13 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   infoTitle: {
-    ...Typography.body1,
+    fontSize: 16,
     fontWeight: '600',
   },
   infoSubtitle: {
-    ...Typography.body2,
-    marginTop: 2,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 4,
   },
   todayBadge: {
     paddingHorizontal: Spacing.sm,
@@ -1129,33 +1282,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   todayBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  featuredBadge: {
-    position: 'absolute',
-    top: Spacing.lg,
-    right: Spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 4,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
-  },
-  featuredText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   statsRow: {
@@ -1166,54 +1293,56 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     alignItems: 'center',
-    padding: Spacing.lg,
-    gap: Spacing.xs,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.md,
+    gap: Spacing.sm,
+    borderRadius: 16,
+  },
+  statIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   statValue: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: '700',
   },
   statLabel: {
-    ...Typography.caption,
+    fontSize: 12,
+    fontWeight: '500',
   },
   statusBanner: {
-    marginBottom: Spacing.lg,
-  },
-  statusContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: Spacing.lg,
+    borderLeftWidth: 4,
+    borderRadius: 16,
+    marginBottom: Spacing.xl,
     gap: Spacing.md,
   },
+  statusIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statusCopy: {
+    flex: 1,
+  },
   statusText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
   },
-  section: {
+  statusSubtext: {
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  sectionCard: {
     marginBottom: Spacing.xl,
-    padding: Spacing.lg,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
+    padding: Spacing.xl,
+    borderRadius: 16,
   },
   sectionTitle: {
     fontSize: 18,
@@ -1221,45 +1350,36 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   description: {
-    ...Typography.body1,
+    fontSize: 15,
+    lineHeight: 24,
   },
   contactActions: {
     flexDirection: 'row',
-    gap: Spacing.xl,
+    gap: Spacing.lg,
+    marginTop: Spacing.md,
   },
   contactButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
   },
   contactButtonText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
   },
   bottomSpacing: {
-    height: 20,
+    height: Spacing.xxl,
   },
   bottomBar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    padding: Spacing.lg,
+    padding: Spacing.xl,
     borderTopWidth: 1,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 8,
-      },
-      web: {
-        boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
-      },
-    }),
   },
   actionButton: {
     width: '100%',
@@ -1277,13 +1397,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    height: 56,
     borderRadius: 16,
     gap: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
+    ...Platform.select({
+      ios: {
+        shadowColor: 'rgba(15,23,42,0.3)',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 6,
+      },
+      web: {
+        boxShadow: '0 12px 24px rgba(15,23,42,0.2)',
+      },
+    }),
   },
   gradientButtonText: {
     fontSize: 17,
@@ -1292,10 +1422,10 @@ const styles = StyleSheet.create({
   },
   buttonShadow: {
     position: 'absolute',
-    bottom: -6,
+    bottom: -4,
     left: 12,
     right: 12,
-    height: 10,
+    height: 12,
     borderRadius: 16,
     opacity: 0.3,
     zIndex: -1,
