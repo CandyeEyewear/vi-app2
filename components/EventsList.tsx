@@ -20,12 +20,14 @@ import {
   Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Search, X, Calendar, Filter, Check } from 'lucide-react-native';
+import { Search, X, Calendar, Filter, Check, Bookmark, TrendingUp, Zap } from 'lucide-react-native';
 import { Event, EventCategory } from '../types';
 import { Colors } from '../constants/colors';
 import { getEvents } from '../services/eventsService';
 import { EventCard } from './cards/EventCard';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../services/supabase';
+import { showToast } from '../utils/toast';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
@@ -40,6 +42,13 @@ const EVENT_CATEGORIES: { value: EventCategory | 'all'; label: string; emoji: st
   { value: 'celebration', label: 'Celebrations', emoji: '' },
   { value: 'networking', label: 'Networking', emoji: '' },
   { value: 'other', label: 'Other', emoji: '' },
+];
+
+// Quick filter options
+const QUICK_FILTERS = [
+  { id: 'featured', label: 'Featured', icon: TrendingUp, description: 'Featured events' },
+  { id: 'thisWeek', label: 'This Week', icon: Zap, description: 'Happening this week' },
+  { id: 'saved', label: 'Saved', icon: Bookmark, description: 'Your bookmarks' },
 ];
 
 interface EventsListProps {
@@ -172,7 +181,70 @@ export function EventsList({
   const [selectedCategory, setSelectedCategory] = useState<EventCategory | 'all'>(initialCategory || 'all');
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
+  const [savedEventIds, setSavedEventIds] = useState<string[]>([]);
+  const [selectedQuickFilter, setSelectedQuickFilter] = useState<string | null>(null);
   const PAGE_SIZE = limit || 10;
+
+  // Load saved events
+  const loadSavedEventIds = useCallback(async () => {
+    if (!user?.id) { 
+      setSavedEventIds([]);
+      return;
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .from('saved_events')
+        .select('event_id')
+        .eq('user_id', user.id);
+      
+      if (error) throw error;
+      setSavedEventIds(data?.map(item => item.event_id) || []);
+    } catch (error) {
+      console.error('Error loading saved events:', error);
+      setSavedEventIds([]);
+    }
+  }, [user?.id]);
+
+  // Toggle save
+  const handleToggleSave = useCallback(async (event: Event) => {
+    if (!user) {
+      showToast('Please log in to save events', 'error');
+      return;
+    }
+    
+    const isSaved = savedEventIds.includes(event.id);
+    
+    try {
+      if (isSaved) {
+        const { error } = await supabase
+          .from('saved_events')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('event_id', event.id);
+        
+        if (!error) {
+          setSavedEventIds(prev => prev.filter(id => id !== event.id));
+          showToast('Removed from saved', 'success');
+        }
+      } else {
+        const { error } = await supabase
+          .from('saved_events')
+          .insert({
+            user_id: user.id,
+            event_id: event.id,
+          });
+        
+        if (!error) {
+          setSavedEventIds(prev => [...prev, event.id]);
+          showToast('Saved for later!', 'success');
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling save:', error);
+      showToast('Failed to save', 'error');
+    }
+  }, [user, savedEventIds]);
 
   // Fetch events
   const fetchEvents = useCallback(async (reset: boolean = false) => {
@@ -217,6 +289,41 @@ export function EventsList({
     fetchEvents(true);
   }, [selectedCategory, searchQuery]);
 
+  // Load saved events on mount and when user changes
+  useEffect(() => {
+    if (user?.id) {
+      loadSavedEventIds();
+    } else {
+      setSavedEventIds([]);
+    }
+  }, [user?.id, loadSavedEventIds]);
+
+  // Filter events based on quick filters
+  const filteredEvents = React.useMemo(() => {
+    let results = [...events];
+    
+    if (selectedQuickFilter === 'featured') {
+      results = results.filter(event => event.isFeatured);
+    } else if (selectedQuickFilter === 'thisWeek') {
+      // Filter events happening within the next 7 days
+      const now = new Date();
+      const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      results = results.filter(event => {
+        if (!event.eventDate) return false;
+        const eventDate = new Date(event.eventDate);
+        return eventDate >= now && eventDate <= sevenDaysFromNow;
+      }).sort((a, b) => {
+        const aDate = a.eventDate ? new Date(a.eventDate).getTime() : 0;
+        const bDate = b.eventDate ? new Date(b.eventDate).getTime() : 0;
+        return aDate - bDate;
+      });
+    } else if (selectedQuickFilter === 'saved') {
+      results = results.filter(event => savedEventIds.includes(event.id));
+    }
+    
+    return results;
+  }, [events, selectedQuickFilter, savedEventIds]);
+
   // Pull to refresh
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
@@ -260,8 +367,10 @@ export function EventsList({
       event={item}
       onPress={() => handleEventPress(item)}
       onRegisterPress={() => handleRegisterPress(item)}
+      isSaved={savedEventIds.includes(item.id)}
+      onToggleSave={() => handleToggleSave(item)}
     />
-  ), [handleEventPress, handleRegisterPress]);
+  ), [handleEventPress, handleRegisterPress, savedEventIds, handleToggleSave]);
 
   // Render empty state
   const renderEmptyComponent = useCallback(() => {
@@ -322,7 +431,7 @@ export function EventsList({
         </View>
       )}
 
-      {/* Category Filters */}
+      {/* Category Filters and Quick Filters */}
       {showFilters && (
         <View style={styles.filtersContainer}>
           <ScrollView
@@ -334,8 +443,30 @@ export function EventsList({
               <AnimatedFilterChip
                 key={category.value}
                 label={`${category.emoji ? category.emoji + ' ' : ''}${category.label}`}
-                isSelected={selectedCategory === category.value}
-                onPress={() => setSelectedCategory(category.value)}
+                isSelected={selectedCategory === category.value && !selectedQuickFilter}
+                onPress={() => {
+                  setSelectedCategory(category.value);
+                  setSelectedQuickFilter(null);
+                }}
+                colors={colors}
+              />
+            ))}
+            
+            <View style={[styles.filterDivider, { backgroundColor: colors.border }]} />
+            
+            {QUICK_FILTERS.map((filter) => (
+              <AnimatedFilterChip
+                key={filter.id}
+                label={filter.label}
+                isSelected={selectedQuickFilter === filter.id}
+                onPress={() => {
+                  if (selectedQuickFilter === filter.id) {
+                    setSelectedQuickFilter(null);
+                  } else {
+                    setSelectedQuickFilter(filter.id);
+                    setSelectedCategory('all');
+                  }
+                }}
                 colors={colors}
               />
             ))}
@@ -344,10 +475,10 @@ export function EventsList({
       )}
 
       {/* Results count */}
-      {!loading && events.length > 0 && (
+      {!loading && filteredEvents.length > 0 && (
         <View style={styles.resultsInfo}>
           <Text style={[styles.resultsText, { color: colors.textSecondary }]}>
-            {events.length} {events.length === 1 ? 'event' : 'events'} found
+            {filteredEvents.length} {filteredEvents.length === 1 ? 'event' : 'events'} found
           </Text>
         </View>
       )}
@@ -391,7 +522,7 @@ export function EventsList({
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <FlatList
-        data={events}
+        data={filteredEvents}
         renderItem={renderEventItem}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
@@ -449,6 +580,12 @@ const styles = StyleSheet.create({
   },
   categoriesContent: {
     gap: 8,
+  },
+  filterDivider: {
+    width: 1,
+    height: 24,
+    marginHorizontal: 8,
+    alignSelf: 'center',
   },
   categoryChip: {
     flexDirection: 'row',

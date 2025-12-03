@@ -21,13 +21,15 @@ import {
   Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Search, X, Check } from 'lucide-react-native';
+import { Search, X, Check, Bookmark, TrendingUp, Zap } from 'lucide-react-native';
 import { Cause, CauseCategory } from '../types';
 import { Colors } from '../constants/colors';
 import { getCauses } from '../services/causesService';
 import { CauseCard } from './cards/CauseCard';
 import { EmptyState } from './EmptyState';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../services/supabase';
+import { showToast } from '../utils/toast';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
@@ -42,6 +44,13 @@ const CAUSE_CATEGORIES: { value: CauseCategory | 'all'; label: string; emoji: st
   { value: 'community', label: 'Community', emoji: '' },
   { value: 'poverty', label: 'Poverty Relief', emoji: '' },
   { value: 'other', label: 'Other', emoji: '' },
+];
+
+// Quick filter options
+const QUICK_FILTERS = [
+  { id: 'trending', label: 'Trending', icon: TrendingUp, description: 'Most popular causes' },
+  { id: 'ending', label: 'Ending Soon', icon: Zap, description: 'Ending this week' },
+  { id: 'saved', label: 'Saved', icon: Bookmark, description: 'Your bookmarks' },
 ];
 
 interface CausesListProps {
@@ -180,6 +189,8 @@ export function CausesList({
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
   const [internalIsSearchExpanded, setInternalIsSearchExpanded] = useState(false);
+  const [savedCauseIds, setSavedCauseIds] = useState<string[]>([]);
+  const [selectedQuickFilter, setSelectedQuickFilter] = useState<string | null>(null);
   const searchInputRef = useRef<TextInput>(null);
   const PAGE_SIZE = limit || 10;
   
@@ -192,6 +203,67 @@ export function CausesList({
       setInternalIsSearchExpanded(expanded);
     }
   };
+
+  // Load saved causes
+  const loadSavedCauseIds = useCallback(async () => {
+    if (!user?.id) { 
+      setSavedCauseIds([]);
+      return;
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .from('saved_causes')
+        .select('cause_id')
+        .eq('user_id', user.id);
+      
+      if (error) throw error;
+      setSavedCauseIds(data?.map(item => item.cause_id) || []);
+    } catch (error) {
+      console.error('Error loading saved causes:', error);
+      setSavedCauseIds([]);
+    }
+  }, [user?.id]);
+
+  // Toggle save
+  const handleToggleSave = useCallback(async (cause: Cause) => {
+    if (!user) {
+      showToast('Please log in to save causes', 'error');
+      return;
+    }
+    
+    const isSaved = savedCauseIds.includes(cause.id);
+    
+    try {
+      if (isSaved) {
+        const { error } = await supabase
+          .from('saved_causes')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('cause_id', cause.id);
+        
+        if (!error) {
+          setSavedCauseIds(prev => prev.filter(id => id !== cause.id));
+          showToast('Removed from saved', 'success');
+        }
+      } else {
+        const { error } = await supabase
+          .from('saved_causes')
+          .insert({
+            user_id: user.id,
+            cause_id: cause.id,
+          });
+        
+        if (!error) {
+          setSavedCauseIds(prev => [...prev, cause.id]);
+          showToast('Saved for later!', 'success');
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling save:', error);
+      showToast('Failed to save', 'error');
+    }
+  }, [user, savedCauseIds]);
 
   // Fetch causes
   const fetchCauses = useCallback(async (reset: boolean = false) => {
@@ -235,6 +307,42 @@ export function CausesList({
   useEffect(() => {
     fetchCauses(true);
   }, [selectedCategory, searchQuery]);
+
+  // Load saved causes on mount and when user changes
+  useEffect(() => {
+    if (user?.id) {
+      loadSavedCauseIds();
+    } else {
+      setSavedCauseIds([]);
+    }
+  }, [user?.id, loadSavedCauseIds]);
+
+  // Filter causes based on quick filters
+  const filteredCauses = React.useMemo(() => {
+    let results = [...causes];
+    
+    if (selectedQuickFilter === 'trending') {
+      // Sort by most donors
+      results.sort((a, b) => (b.donorCount || 0) - (a.donorCount || 0));
+    } else if (selectedQuickFilter === 'ending') {
+      // Filter causes ending within 7 days
+      const now = new Date();
+      const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      results = results.filter(cause => {
+        if (!cause.endDate) return false;
+        const endDate = new Date(cause.endDate);
+        return endDate >= now && endDate <= sevenDaysFromNow;
+      }).sort((a, b) => {
+        const aDate = a.endDate ? new Date(a.endDate).getTime() : 0;
+        const bDate = b.endDate ? new Date(b.endDate).getTime() : 0;
+        return aDate - bDate;
+      });
+    } else if (selectedQuickFilter === 'saved') {
+      results = results.filter(cause => savedCauseIds.includes(cause.id));
+    }
+    
+    return results;
+  }, [causes, selectedQuickFilter, savedCauseIds]);
 
   // Focus search input when expanded
   useEffect(() => {
@@ -288,8 +396,10 @@ export function CausesList({
       cause={item}
       onPress={() => handleCausePress(item)}
       onDonatePress={() => handleDonatePress(item)}
+      isSaved={savedCauseIds.includes(item.id)}
+      onToggleSave={() => handleToggleSave(item)}
     />
-  ), [handleCausePress, handleDonatePress]);
+  ), [handleCausePress, handleDonatePress, savedCauseIds, handleToggleSave]);
 
   // Render empty state
   const renderEmptyComponent = useCallback(() => {
@@ -371,7 +481,7 @@ export function CausesList({
         </View>
       )}
 
-      {/* Category Filters */}
+      {/* Category Filters and Quick Filters */}
       {showFilters && (
         <View style={styles.filtersContainer}>
           <ScrollView
@@ -383,8 +493,30 @@ export function CausesList({
               <AnimatedFilterChip
                 key={category.value}
                 label={category.label}
-                isSelected={selectedCategory === category.value}
-                onPress={() => setSelectedCategory(category.value)}
+                isSelected={selectedCategory === category.value && !selectedQuickFilter}
+                onPress={() => {
+                  setSelectedCategory(category.value);
+                  setSelectedQuickFilter(null);
+                }}
+                colors={colors}
+              />
+            ))}
+            
+            <View style={[styles.filterDivider, { backgroundColor: colors.border }]} />
+            
+            {QUICK_FILTERS.map((filter) => (
+              <AnimatedFilterChip
+                key={filter.id}
+                label={filter.label}
+                isSelected={selectedQuickFilter === filter.id}
+                onPress={() => {
+                  if (selectedQuickFilter === filter.id) {
+                    setSelectedQuickFilter(null);
+                  } else {
+                    setSelectedQuickFilter(filter.id);
+                    setSelectedCategory('all');
+                  }
+                }}
                 colors={colors}
               />
             ))}
@@ -393,10 +525,10 @@ export function CausesList({
       )}
 
       {/* Results count */}
-      {!loading && causes.length > 0 && (
+      {!loading && filteredCauses.length > 0 && (
         <View style={styles.resultsInfo}>
           <Text style={[styles.resultsText, { color: colors.textSecondary }]}>
-            {causes.length} {causes.length === 1 ? 'cause' : 'causes'} found
+            {filteredCauses.length} {filteredCauses.length === 1 ? 'cause' : 'causes'} found
           </Text>
         </View>
       )}
@@ -440,7 +572,7 @@ export function CausesList({
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <FlatList
-        data={causes}
+        data={filteredCauses}
         renderItem={renderCauseItem}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
@@ -510,6 +642,12 @@ const styles = StyleSheet.create({
   },
   categoriesContent: {
     gap: 8,
+  },
+  filterDivider: {
+    width: 1,
+    height: 24,
+    marginHorizontal: 8,
+    alignSelf: 'center',
   },
   categoryChip: {
     flexDirection: 'row',
