@@ -65,6 +65,10 @@ import ErrorBoundary from '../../components/ErrorBoundary';
 import Button from '../../components/Button';
 import { ShimmerSkeleton } from '../../components/ShimmerSkeleton';
 
+// ============================================================================
+// UTILITIES & CONSTANTS
+// ============================================================================
+
 const getPremiumShadow = (colors: any) =>
   Platform.select({
     ios: {
@@ -88,9 +92,12 @@ const getResponsiveValues = () => {
   const isMobile = width < 768;
   const isTablet = width >= 768 && width < 1024;
   const isDesktop = width >= 1024;
-  
+
   return {
-    isSmallMobile, isMobile, isTablet, isDesktop,
+    isSmallMobile,
+    isMobile,
+    isTablet,
+    isDesktop,
     spacing: {
       xs: isSmallMobile ? 4 : 6,
       sm: isSmallMobile ? 8 : 10,
@@ -111,7 +118,7 @@ const getResponsiveValues = () => {
   };
 };
 
-// Modern Typography Scale (using responsive values)
+// Modern Typography Scale
 const Typography = {
   title1: { fontSize: 32, fontWeight: '800' as const, lineHeight: 38 },
   title2: { fontSize: 26, fontWeight: '700' as const, lineHeight: 32 },
@@ -121,7 +128,7 @@ const Typography = {
   caption: { fontSize: 12, fontWeight: '500' as const, lineHeight: 16 },
 };
 
-// Modern Spacing System (keeping for compatibility, but use responsive.spacing instead)
+// Modern Spacing System
 const Spacing = {
   xs: 4,
   sm: 8,
@@ -132,9 +139,10 @@ const Spacing = {
   xxxl: 32,
 };
 
-// Note: Category configuration now imported from shared constants
+// ============================================================================
+// CUSTOM HOOKS
+// ============================================================================
 
-// Custom Hook for Event Data
 function useEventDetails(eventId: string | undefined) {
   const [event, setEvent] = useState<Event | null>(null);
   const [registration, setRegistration] = useState<EventRegistration | null>(null);
@@ -198,35 +206,41 @@ function useEventDetails(eventId: string | undefined) {
   };
 }
 
+// ============================================================================
+// SUB-COMPONENTS
+// ============================================================================
+
 // Modern Header Component
-function EventHeader({ 
-  onBack, 
-  onShare, 
-  colors 
-}: { 
-  onBack: () => void; 
-  onShare: () => void; 
+function EventHeader({
+  onBack,
+  onShare,
+  colors,
+}: {
+  onBack: () => void;
+  onShare: () => void;
   colors: any;
 }) {
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[
-      styles.header, 
-      { 
-        paddingTop: insets.top + Spacing.lg,
-        backgroundColor: colors.background,
-        borderBottomColor: colors.border,
-      }
-    ]}>
+    <View
+      style={[
+        styles.header,
+        {
+          paddingTop: insets.top + Spacing.lg,
+          backgroundColor: colors.background,
+          borderBottomColor: colors.border,
+        },
+      ]}
+    >
       <Pressable
         style={({ pressed }) => [
-          styles.headerButton, 
+          styles.headerButton,
           getPremiumShadow(colors),
-          { 
+          {
             backgroundColor: colors.card,
             transform: [{ scale: pressed ? 0.95 : 1 }],
-          }
+          },
         ]}
         onPress={onBack}
         accessibilityRole="button"
@@ -238,12 +252,12 @@ function EventHeader({
 
       <Pressable
         style={({ pressed }) => [
-          styles.headerButton, 
+          styles.headerButton,
           getPremiumShadow(colors),
-          { 
+          {
             backgroundColor: colors.card,
             transform: [{ scale: pressed ? 0.95 : 1 }],
-          }
+          },
         ]}
         onPress={onShare}
         accessibilityRole="button"
@@ -257,21 +271,22 @@ function EventHeader({
 }
 
 // Event Image Component with modern loading
-function EventImage({
-  event,
-  colors,
-}: {
-  event: Event;
-  colors: any;
-}) {
+function EventImage({ event, colors }: { event: Event; colors: any }) {
   const responsive = getResponsiveValues();
   const heroHeight = responsive.isSmallMobile
     ? 280
     : responsive.isTablet || responsive.isDesktop
     ? 400
     : 320;
+
   const categoryConfig = EVENT_CATEGORY_CONFIG[event.category] || EVENT_CATEGORY_CONFIG.other;
-  const imageSource = useMemo(() => (event.imageUrl ? { uri: event.imageUrl } : null), [event.imageUrl]);
+
+  // Single imageSource declaration - memoized to prevent recreation on every render
+  const imageSource = useMemo(
+    () => (event.imageUrl ? { uri: event.imageUrl } : null),
+    [event.imageUrl]
+  );
+
   const imageLoadingRef = useRef(true);
   const [imageError, setImageError] = useState(false);
   const [showLoader, setShowLoader] = useState(true);
@@ -317,7 +332,7 @@ function EventImage({
             onLoadStart={handleLoadStart}
             onLoadEnd={handleLoadEnd}
             onError={handleError}
-            resizeMode="cover"
+            contentFit="cover"
             accessibilityLabel={`Event image for ${event.title}`}
           />
           {showLoader && (
@@ -342,7 +357,7 @@ function EventImage({
 
       <LinearGradient
         colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.7)']}
-        style={[styles.heroGradient]}
+        style={styles.heroGradient}
         pointerEvents="none"
       />
 
@@ -381,27 +396,26 @@ function EventImage({
 }
 
 // Gradient Button Component with animations and depth
-function GradientButton({ 
-  onPress, 
-  icon: Icon, 
-  label, 
+function GradientButton({
+  onPress,
+  icon: Icon,
+  label,
   variant = 'primary',
   loading = false,
   disabled = false,
   colors,
-}: { 
-  onPress: () => void; 
-  icon: any; 
-  label: string; 
+}: {
+  onPress: () => void;
+  icon: any;
+  label: string;
   variant?: 'primary' | 'danger';
   loading?: boolean;
   disabled?: boolean;
   colors: typeof Colors.light;
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const gradientColors = variant === 'danger'
-    ? [colors.error, colors.errorDark]
-    : [colors.primary, colors.primaryDark];
+  const gradientColors =
+    variant === 'danger' ? [colors.error, colors.errorDark] : [colors.primary, colors.primaryDark];
 
   const handlePressIn = () => {
     if (disabled || loading) return;
@@ -506,9 +520,7 @@ function EventInfoCard({
         getPremiumShadow(colors),
       ]}
     >
-      <View style={[styles.infoIcon, { backgroundColor: colors.primarySoft }]}>
-        {icon}
-      </View>
+      <View style={[styles.infoIcon, { backgroundColor: colors.primarySoft }]}>{icon}</View>
       <View style={styles.infoContent}>
         <View style={styles.infoTitleRow}>
           <Text style={[styles.infoTitle, { color: colors.text }]}>{title}</Text>
@@ -589,7 +601,7 @@ function RegistrationStatusBanner({
           You're registered for this event
         </Text>
         <Text style={[styles.statusSubtext, { color: colors.textSecondary }]}>
-          We’ll send reminders and important updates before it begins.
+          We'll send reminders and important updates before it begins.
         </Text>
       </View>
     </View>
@@ -597,34 +609,25 @@ function RegistrationStatusBanner({
 }
 
 // Error Component
-function ErrorScreen({ 
-  onRetry, 
-  colors 
-}: { 
-  onRetry: () => void; 
-  colors: any;
-}) {
+function ErrorScreen({ onRetry, colors }: { onRetry: () => void; colors: any }) {
   return (
     <View style={[styles.errorContainer, { backgroundColor: colors.background }]}>
       <AlertCircle size={48} color={colors.textSecondary} />
-      <Text style={[styles.errorTitle, { color: colors.text }]}>
-        Something went wrong
-      </Text>
+      <Text style={[styles.errorTitle, { color: colors.text }]}>Something went wrong</Text>
       <Text style={[styles.errorMessage, { color: colors.textSecondary }]}>
         We couldn't load the event details. Please try again.
       </Text>
-      <Button
-        variant="primary"
-        onPress={onRetry}
-        style={styles.retryButton}
-      >
+      <Button variant="primary" onPress={onRetry} style={styles.retryButton}>
         Try Again
       </Button>
     </View>
   );
 }
 
-// Main Component
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
+
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -633,14 +636,7 @@ export default function EventDetailScreen() {
   const { user } = useAuth();
   const responsive = getResponsiveValues();
 
-  const {
-    event,
-    registration,
-    registrations,
-    loading,
-    error,
-    refetch,
-  } = useEventDetails(id);
+  const { event, registration, registrations, loading, error, refetch } = useEventDetails(id);
 
   const [registering, setRegistering] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -648,24 +644,22 @@ export default function EventDetailScreen() {
   // Memoized calculations
   const eventStatus = useMemo(() => {
     if (!event) return null;
-    
+
     if (isEventPast(event.eventDate)) return 'past';
     if (isEventToday(event.eventDate)) return 'today';
-    
+
     const days = getDaysUntilEvent(event.eventDate);
     if (days <= 1) return 'tomorrow';
     if (days <= 7) return 'soon';
-    
+
     return 'upcoming';
   }, [event]);
 
-  // Event handlers with haptic feedback
+  // Event handlers
   const handleShare = useCallback(async () => {
     if (!event) return;
 
     try {
-      // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      
       const message = `Join me at "${event.title}"!\n\n📅 ${formatEventDate(event.eventDate)}\n⏰ ${formatEventTime(event.startTime)}\n📍 ${event.isVirtual ? 'Virtual Event' : event.location}\n\nRegister on Volunteers Inc!`;
 
       await Share.share({
@@ -687,14 +681,12 @@ export default function EventDetailScreen() {
       return;
     }
 
-    // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
     // If already registered, handle cancellation
     if (registration) {
-      // Show confirmation (you'd implement a proper modal here)
-      const confirmed = Platform.OS === 'web' 
-        ? window.confirm('Cancel your registration for this event?')
-        : true; // Implement proper modal for mobile
+      const confirmed =
+        Platform.OS === 'web'
+          ? window.confirm('Cancel your registration for this event?')
+          : true; // Implement proper modal for mobile
 
       if (!confirmed) return;
 
@@ -730,15 +722,12 @@ export default function EventDetailScreen() {
       });
 
       if (response.success && response.data) {
-        // Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         showToast('Successfully registered! 🎉', 'success');
         refetch();
       } else {
-        // Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         showToast(response.error || 'Failed to register', 'error');
       }
     } catch (error) {
-      // Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       showToast('Something went wrong', 'error');
     } finally {
       setRegistering(false);
@@ -747,7 +736,6 @@ export default function EventDetailScreen() {
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await refetch();
     setRefreshing(false);
   }, [refetch]);
@@ -755,8 +743,6 @@ export default function EventDetailScreen() {
   // Location handlers
   const handleOpenMap = useCallback(() => {
     if (!event) return;
-    
-    // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     let url: string;
     if (event.mapLink) {
@@ -777,9 +763,7 @@ export default function EventDetailScreen() {
 
   const handleOpenVirtual = useCallback(() => {
     if (!event?.virtualLink) return;
-    
-    // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    
+
     Linking.openURL(event.virtualLink).catch(() => {
       showToast('Could not open virtual meeting', 'error');
     });
@@ -788,9 +772,7 @@ export default function EventDetailScreen() {
   // Contact handlers
   const handleCall = useCallback(() => {
     if (!event?.contactPhone) return;
-    
-    // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    
+
     Linking.openURL(`tel:${event.contactPhone}`).catch(() => {
       showToast('Could not make call', 'error');
     });
@@ -798,9 +780,7 @@ export default function EventDetailScreen() {
 
   const handleEmail = useCallback(() => {
     if (!event?.contactEmail) return;
-    
-    // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    
+
     Linking.openURL(`mailto:${event.contactEmail}`).catch(() => {
       showToast('Could not open email', 'error');
     });
@@ -817,63 +797,58 @@ export default function EventDetailScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <EventHeader 
-          onBack={() => router.back()} 
-          onShare={() => {}} 
-          colors={colors} 
-        />
+        <EventHeader onBack={() => router.back()} onShare={() => {}} colors={colors} />
         <ScrollView style={styles.scrollView}>
-          <ShimmerSkeleton 
-            colors={colors} 
-            style={{ width: '100%', height: heroHeight, borderRadius: 0 }} 
+          <ShimmerSkeleton
+            colors={colors}
+            style={{ width: '100%', height: heroHeight, borderRadius: 0 }}
           />
-          
+
           <View style={{ padding: responsive.spacing.lg, gap: responsive.spacing.md }}>
-            <ShimmerSkeleton 
-              colors={colors} 
-              style={{ width: 140, height: 32, borderRadius: 16 }} 
+            <ShimmerSkeleton
+              colors={colors}
+              style={{ width: 140, height: 32, borderRadius: 16 }}
             />
-            
-            <ShimmerSkeleton 
-              colors={colors} 
-              style={{ width: '85%', height: 34, borderRadius: 10 }} 
+
+            <ShimmerSkeleton colors={colors} style={{ width: '85%', height: 34, borderRadius: 10 }} />
+            <ShimmerSkeleton
+              colors={colors}
+              style={{
+                width: '55%',
+                height: 34,
+                borderRadius: 10,
+                marginBottom: responsive.spacing.md,
+              }}
             />
-            <ShimmerSkeleton 
-              colors={colors} 
-              style={{ width: '55%', height: 34, borderRadius: 10, marginBottom: responsive.spacing.md }} 
-            />
-            
+
             {[...Array(2)].map((_, i) => (
-              <ShimmerSkeleton 
+              <ShimmerSkeleton
                 key={`info-${i}`}
-                colors={colors} 
-                style={{ width: '100%', height: 96, borderRadius: 16 }} 
+                colors={colors}
+                style={{ width: '100%', height: 96, borderRadius: 16 }}
               />
             ))}
 
             <View style={{ flexDirection: 'row', gap: responsive.spacing.md }}>
               {[...Array(3)].map((_, i) => (
-                <ShimmerSkeleton 
+                <ShimmerSkeleton
                   key={`stat-${i}`}
-                  colors={colors} 
-                  style={{ flex: 1, height: 120, borderRadius: 16 }} 
+                  colors={colors}
+                  style={{ flex: 1, height: 120, borderRadius: 16 }}
                 />
               ))}
             </View>
-            
-            <ShimmerSkeleton 
-              colors={colors} 
-              style={{ width: 160, height: 24, borderRadius: 10 }} 
-            />
+
+            <ShimmerSkeleton colors={colors} style={{ width: 160, height: 24, borderRadius: 10 }} />
             {[...Array(4)].map((_, i) => (
-              <ShimmerSkeleton 
+              <ShimmerSkeleton
                 key={`about-${i}`}
-                colors={colors} 
-                style={{ 
-                  width: i === 3 ? '75%' : '100%', 
-                  height: 18, 
-                  borderRadius: 8 
-                }} 
+                colors={colors}
+                style={{
+                  width: i === 3 ? '75%' : '100%',
+                  height: 18,
+                  borderRadius: 8,
+                }}
               />
             ))}
           </View>
@@ -887,11 +862,7 @@ export default function EventDetailScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <EventHeader 
-          onBack={() => router.back()} 
-          onShare={() => {}} 
-          colors={colors} 
-        />
+        <EventHeader onBack={() => router.back()} onShare={() => {}} colors={colors} />
         <ErrorBoundary>
           <ErrorScreen onRetry={refetch} colors={colors} />
         </ErrorBoundary>
@@ -902,31 +873,30 @@ export default function EventDetailScreen() {
   const spotsLeft = event.spotsRemaining ?? event.capacity ?? 999;
   const isSoldOut = spotsLeft <= 0;
   const isPastEvent = isEventPast(event.eventDate);
-  const stats = useMemo(() => {
-    const list: Array<{ key: string; icon: any; value: string | number; label: string }> = [
-      { key: 'registered', icon: Users, value: registrations.length || 0, label: 'Registered' },
-    ];
 
-    if (event.capacity) {
-      list.push({
-        key: 'spots',
-        icon: Ticket,
-        value: Math.max(spotsLeft, 0),
-        label: 'Spots Left',
-      });
-    }
-
-    if (!event.isFree) {
-      list.push({
-        key: 'price',
-        icon: DollarSign,
-        value: formatCurrency(event.ticketPrice),
-        label: 'Price',
-      });
-    }
-
-    return list;
-  }, [event.capacity, event.isFree, event.ticketPrice, registrations.length, spotsLeft]);
+  const stats = [
+    { key: 'registered', icon: Users, value: registrations.length || 0, label: 'Registered' },
+    ...(event.capacity
+      ? [
+          {
+            key: 'spots',
+            icon: Ticket,
+            value: Math.max(spotsLeft, 0),
+            label: 'Spots Left',
+          },
+        ]
+      : []),
+    ...(!event.isFree
+      ? [
+          {
+            key: 'price',
+            icon: DollarSign,
+            value: formatCurrency(event.ticketPrice),
+            label: 'Price',
+          },
+        ]
+      : []),
+  ];
 
   return (
     <ErrorBoundary>
@@ -953,12 +923,8 @@ export default function EventDetailScreen() {
 
           {/* Content */}
           <View style={[styles.content, { backgroundColor: colors.surface }]}>
-            
             {/* Registration Status */}
-            <RegistrationStatusBanner 
-              registration={registration} 
-              colors={colors} 
-            />
+            <RegistrationStatusBanner registration={registration} colors={colors} />
 
             {/* Event Title */}
             <Text style={[styles.title, { color: colors.text }, Typography.title2]}>
@@ -970,25 +936,29 @@ export default function EventDetailScreen() {
               icon={<Calendar size={24} color={colors.primary} />}
               title={formatEventDate(event.eventDate)}
               subtitle={`${formatEventTime(event.startTime)}${event.endTime ? ` - ${formatEventTime(event.endTime)}` : ''}`}
-              badge={eventStatus === 'today' && (
-                <View style={[styles.todayBadge, { backgroundColor: colors.eventTodayRed }]}>
-                  <Text style={[styles.todayBadgeText, { color: colors.textOnPrimary }]}>TODAY</Text>
-                </View>
-              )}
+              badge={
+                eventStatus === 'today' && (
+                  <View style={[styles.todayBadge, { backgroundColor: colors.eventTodayRed }]}>
+                    <Text style={[styles.todayBadgeText, { color: colors.textOnPrimary }]}>
+                      TODAY
+                    </Text>
+                  </View>
+                )
+              }
               colors={colors}
             />
 
             {/* Location Card */}
             <EventInfoCard
-              icon={event.isVirtual ? 
-                <Video size={24} color={colors.primary} /> : 
-                <MapPin size={24} color={colors.primary} />
+              icon={
+                event.isVirtual ? (
+                  <Video size={24} color={colors.primary} />
+                ) : (
+                  <MapPin size={24} color={colors.primary} />
+                )
               }
               title={event.isVirtual ? 'Virtual Event' : event.location}
-              subtitle={event.isVirtual ? 
-                'Join online from anywhere' : 
-                event.locationAddress
-              }
+              subtitle={event.isVirtual ? 'Join online from anywhere' : event.locationAddress}
               onPress={event.isVirtual ? handleOpenVirtual : handleOpenMap}
               colors={colors}
             />
@@ -998,21 +968,13 @@ export default function EventDetailScreen() {
               {stats.map(({ key, icon: IconComponent, value, label }) => (
                 <View
                   key={key}
-                  style={[
-                    styles.statCard,
-                    { backgroundColor: colors.card },
-                    getPremiumShadow(colors),
-                  ]}
+                  style={[styles.statCard, { backgroundColor: colors.card }, getPremiumShadow(colors)]}
                 >
                   <View style={[styles.statIcon, { backgroundColor: colors.primarySoft }]}>
                     <IconComponent size={20} color={colors.primary} />
                   </View>
-                  <Text style={[styles.statValue, { color: colors.text }]}>
-                    {value}
-                  </Text>
-                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-                    {label}
-                  </Text>
+                  <Text style={[styles.statValue, { color: colors.text }]}>{value}</Text>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{label}</Text>
                 </View>
               ))}
             </View>
@@ -1026,12 +988,8 @@ export default function EventDetailScreen() {
                   getPremiumShadow(colors),
                 ]}
               >
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                  About This Event
-                </Text>
-                <Text style={[styles.description, { color: colors.text }]}>
-                  {event.description}
-                </Text>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>About This Event</Text>
+                <Text style={[styles.description, { color: colors.text }]}>{event.description}</Text>
               </View>
             )}
 
@@ -1044,12 +1002,10 @@ export default function EventDetailScreen() {
                   getPremiumShadow(colors),
                 ]}
               >
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                  Contact
-                </Text>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Contact</Text>
                 <View style={styles.contactActions}>
                   {event.contactPhone && (
-                    <Pressable 
+                    <Pressable
                       style={({ pressed }) => [
                         styles.contactButton,
                         {
@@ -1062,13 +1018,11 @@ export default function EventDetailScreen() {
                       accessibilityLabel={`Call ${event.contactPhone}`}
                     >
                       <Phone size={16} color={colors.primary} />
-                      <Text style={[styles.contactButtonText, { color: colors.primary }]}>
-                        Call
-                      </Text>
+                      <Text style={[styles.contactButtonText, { color: colors.primary }]}>Call</Text>
                     </Pressable>
                   )}
                   {event.contactEmail && (
-                    <Pressable 
+                    <Pressable
                       style={({ pressed }) => [
                         styles.contactButton,
                         {
@@ -1081,9 +1035,7 @@ export default function EventDetailScreen() {
                       accessibilityLabel={`Email ${event.contactEmail}`}
                     >
                       <Mail size={16} color={colors.primary} />
-                      <Text style={[styles.contactButtonText, { color: colors.primary }]}>
-                        Email
-                      </Text>
+                      <Text style={[styles.contactButtonText, { color: colors.primary }]}>Email</Text>
                     </Pressable>
                   )}
                 </View>
@@ -1097,24 +1049,31 @@ export default function EventDetailScreen() {
 
         {/* Bottom Action Button with Gradient */}
         {!isPastEvent && (
-          <View style={[
-            styles.bottomBar, 
-            { 
-              backgroundColor: colors.background,
-              borderTopColor: colors.border,
-            }
-          ]}>
+          <View
+            style={[
+              styles.bottomBar,
+              {
+                backgroundColor: colors.background,
+                borderTopColor: colors.border,
+              },
+            ]}
+          >
             <GradientButton
-              variant={registration ? "danger" : "primary"}
+              variant={registration ? 'danger' : 'primary'}
               loading={registering}
               disabled={!registration && isSoldOut}
               onPress={handleRegister}
               icon={registration ? X : event.isFree ? Ticket : DollarSign}
               label={
-                registering ? 'Processing...' :
-                registration ? 'Cancel Registration' :
-                isSoldOut ? 'Sold Out' :
-                event.isFree ? 'Register for Free' : `Buy Tickets - ${formatCurrency(event.ticketPrice)}`
+                registering
+                  ? 'Processing...'
+                  : registration
+                  ? 'Cancel Registration'
+                  : isSoldOut
+                  ? 'Sold Out'
+                  : event.isFree
+                  ? 'Register for Free'
+                  : `Buy Tickets - ${formatCurrency(event.ticketPrice)}`
               }
               colors={colors}
             />
@@ -1124,6 +1083,10 @@ export default function EventDetailScreen() {
     </ErrorBoundary>
   );
 }
+
+// ============================================================================
+// STYLES
+// ============================================================================
 
 const styles = StyleSheet.create({
   container: {
@@ -1384,7 +1347,6 @@ const styles = StyleSheet.create({
   actionButton: {
     width: '100%',
   },
-  // Gradient Button Styles
   gradientButtonWrapper: {
     position: 'relative',
     width: '100%',
