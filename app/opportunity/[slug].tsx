@@ -301,6 +301,11 @@ export default function OpportunityDetailsScreen() {
   // Flag to prevent unnecessary reloading
   const [dataLoaded, setDataLoaded] = useState(false);
 
+  // Memoized image source to prevent flickering
+  const imageSource = useMemo(() => {
+    return opportunity?.imageUrl ? { uri: opportunity.imageUrl } : null;
+  }, [opportunity?.imageUrl]);
+
   const showAlert = useCallback((title: string, message: string, type: 'success' | 'error' | 'warning' = 'success') => {
     setAlertConfig({ title, message, type });
     setAlertVisible(true);
