@@ -646,6 +646,7 @@ export default function EventDetailScreen() {
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const { user } = useAuth();
   const responsive = getResponsiveValues();
+  const insets = useSafeAreaInsets();
 
   const { event, registration, registrations, loading, error, refetch } = useEventDetails(slug);
 
@@ -920,7 +921,10 @@ export default function EventDetailScreen() {
 
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: 120 + insets.bottom },
+          ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -1073,7 +1077,7 @@ export default function EventDetailScreen() {
             )}
 
             {/* Bottom spacing for fixed button */}
-            <View style={styles.bottomSpacing} />
+            <View style={[styles.bottomSpacing, { height: 120 + insets.bottom }]} />
           </View>
         </ScrollView>
 
@@ -1085,6 +1089,7 @@ export default function EventDetailScreen() {
               {
                 backgroundColor: colors.background,
                 borderTopColor: colors.border,
+                paddingBottom: Spacing.xl + insets.bottom,
               },
             ]}
           >
@@ -1374,7 +1379,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   bottomSpacing: {
-    height: Spacing.xxl,
+    height: 120, // Account for bottom bar (56px button + 40px padding + safe area)
   },
   bottomBar: {
     position: 'absolute',
