@@ -1280,7 +1280,7 @@ const styles = StyleSheet.create({
   // Content
   content: {
     flex: 1,
-    paddingTop: 24,
+    paddingTop: 32,
     marginTop: -24,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
@@ -1289,7 +1289,7 @@ const styles = StyleSheet.create({
   // Title
   title: {
     fontWeight: '700',
-    marginBottom: 20,
+    marginBottom: 16,
     lineHeight: 34,
     letterSpacing: -0.3,
   },
