@@ -6,6 +6,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { ReceiptService } from '../../services/receiptService';
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -288,6 +289,14 @@ async function handleSuccessfulPayment(transaction: any) {
   }
 
   console.log(`Successfully processed ${order_type} payment for ${reference_id}`);
+
+  // Generate receipt after successful payment processing
+  try {
+    await generateReceiptForTransaction(transaction);
+  } catch (receiptError) {
+    console.error('Receipt generation error:', receiptError);
+    // Don't fail the payment if receipt fails
+  }
 }
 
 async function handleSuccessfulSubscriptionPayment(subscription: any) {
@@ -400,4 +409,58 @@ async function updateUserMembership(
     .from('users')
     .update(updateData)
     .eq('id', userId);
+}
+
+// ==================== RECEIPT GENERATION ====================
+
+function mapOrderTypeToReceiptType(orderType: string): 'donation' | 'subscription' | 'event' | 'membership' {
+  const mapping: Record<string, 'donation' | 'subscription' | 'event' | 'membership'> = {
+    donation: 'donation',
+    recurring_donation: 'subscription',
+    event_registration: 'event',
+    membership: 'membership',
+    organization_membership: 'membership',
+  };
+  return mapping[orderType] || 'donation';
+}
+
+function generateLineItemsFromTransaction(transaction: any) {
+  return [{
+    description: transaction.description || `${transaction.order_type} payment`,
+    quantity: 1,
+    unitPrice: parseFloat(transaction.amount),
+    amount: parseFloat(transaction.amount),
+  }];
+}
+
+function calculateProcessingFee(amount: number): number {
+  // eZeePayments fee structure: 3% or minimum $135 JMD
+  return Math.max(135, amount * 0.03);
+}
+
+async function generateReceiptForTransaction(transaction: any) {
+  try {
+    if (!transaction.transaction_number || !transaction.customer_email) {
+      console.warn('Cannot generate receipt: missing transaction_number or customer_email');
+      return;
+    }
+
+    await ReceiptService.createReceipt({
+      transactionId: transaction.id,
+      transactionNumber: transaction.transaction_number,
+      customerName: transaction.customer_name || 'Customer',
+      customerEmail: transaction.customer_email,
+      receiptType: mapOrderTypeToReceiptType(transaction.order_type),
+      lineItems: generateLineItemsFromTransaction(transaction),
+      subtotal: parseFloat(transaction.amount),
+      processingFee: calculateProcessingFee(parseFloat(transaction.amount)),
+      totalAmount: parseFloat(transaction.amount),
+      paymentMethod: 'Credit Card',
+    });
+
+    console.log(`Receipt generated for transaction ${transaction.transaction_number}`);
+  } catch (error) {
+    console.error('Error generating receipt:', error);
+    throw error;
+  }
 }
