@@ -167,17 +167,17 @@ function AppContent() {
           <Stack.Screen name="edit-profile" />
           <Stack.Screen name="settings" />
           <Stack.Screen name="conversation/[id]" />
-          <Stack.Screen name="opportunity/[id]" />
-          <Stack.Screen name="profile/[id]" />
+          <Stack.Screen name="opportunity/[slug]" />
+          <Stack.Screen name="profile/[slug]" />
           <Stack.Screen name="post/[id]" />
           <Stack.Screen name="propose-opportunity" />
           <Stack.Screen name="membership-features" />
           <Stack.Screen name="membership" />
           <Stack.Screen name="membership/subscribe" />
-          <Stack.Screen name="causes/[id]" />
-          <Stack.Screen name="causes/[id]/donate" />
-          <Stack.Screen name="events/[id]" />
-          <Stack.Screen name="events/[id]/register" />
+          <Stack.Screen name="causes/[slug]" />
+          <Stack.Screen name="causes/[slug]/donate" />
+          <Stack.Screen name="events/[slug]" />
+          <Stack.Screen name="events/[slug]/register" />
           <Stack.Screen name="(admin)" />
         </Stack>
       </View>
