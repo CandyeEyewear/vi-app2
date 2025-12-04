@@ -674,7 +674,9 @@ function EmptyDonorsState({ colors }: { colors: typeof Colors.light }) {
 // MAIN COMPONENT
 // ============================================================================
 export default function CauseDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ slug?: string | string[] }>();
+  const slugParam = params.slug;
+  const id = Array.isArray(slugParam) ? slugParam[0] : slugParam;
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
