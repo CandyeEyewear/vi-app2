@@ -233,11 +233,12 @@ function DetailSkeleton({ colors }: { colors: typeof Colors.light }) {
       <View style={[
         styles.skeletonContent, 
         { 
-          padding: responsive.spacing.md,
+          paddingHorizontal: responsive.spacing.md,
+          paddingTop: 24,
           marginTop: -24,
           backgroundColor: colors.background,
-          borderTopLeftRadius: 24,
-          borderTopRightRadius: 24,
+          borderTopLeftRadius: 28,
+          borderTopRightRadius: 28,
         }
       ]}>
         {/* Title */}
@@ -1244,7 +1245,7 @@ const styles = StyleSheet.create({
   // Badges
   categoryBadge: {
     position: 'absolute',
-    bottom: 40,
+    bottom: 16,
     left: 16,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -1257,7 +1258,7 @@ const styles = StyleSheet.create({
   },
   featuredBadge: {
     position: 'absolute',
-    bottom: 40,
+    bottom: 16,
     right: 16,
     borderRadius: 20,
     overflow: 'hidden',
@@ -1279,8 +1280,8 @@ const styles = StyleSheet.create({
   // Content
   content: {
     flex: 1,
-    paddingTop: 20,
-    marginTop: -28,
+    paddingTop: 32,
+    marginTop: -24,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
   },
@@ -1288,7 +1289,7 @@ const styles = StyleSheet.create({
   // Title
   title: {
     fontWeight: '700',
-    marginBottom: 20,
+    marginBottom: 16,
     lineHeight: 34,
     letterSpacing: -0.3,
   },
