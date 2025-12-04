@@ -62,3 +62,5 @@ ios/
 # 📦 OS-generated
 # ===================================
 desktop.ini
+*.md
+*.md
