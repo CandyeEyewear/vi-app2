@@ -195,7 +195,7 @@ export function CausesList({
     if (onCausePress) {
       onCausePress(cause);
     } else {
-      router.push(`/causes/${cause.id}`);
+      router.push(`/causes/${cause.slug}`);
     }
   }, [onCausePress, router]);
 
@@ -204,7 +204,7 @@ export function CausesList({
     if (onDonatePress) {
       onDonatePress(cause);
     } else {
-      router.push(`/causes/${cause.id}/donate`);
+      router.push(`/causes/${cause.slug}/donate`);
     }
   }, [onDonatePress, router]);
 

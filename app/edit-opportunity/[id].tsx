@@ -114,6 +114,7 @@ export default function EditOpportunityScreen() {
   });
   const [visibility, setVisibility] = useState<VisibilityType>('public');
   const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
+  const [opportunitySlug, setOpportunitySlug] = useState<string | null>(null);
 
   // Geocoding state
   const [geocodingLocation, setGeocodingLocation] = useState<GeocodeResult | null>(null);
@@ -257,6 +258,7 @@ export default function EditOpportunityScreen() {
       setSkillsNeeded(data.skills_needed || []);
       setLinks(data.links || []);
       setVisibility(data.visibility || 'public');
+      setOpportunitySlug(data.slug);
     } catch (error) {
       console.error('Error loading opportunity:', error);
       showAlert('Error', 'Failed to load opportunity data', 'error');
@@ -478,7 +480,7 @@ export default function EditOpportunityScreen() {
 
       // Navigate back to opportunity details page
       setTimeout(() => {
-        router.push(`/opportunity/${opportunityId}`);
+        router.push(`/opportunity/${opportunitySlug || opportunityId}`);
       }, 1500);
     } catch (error: any) {
       console.error('Error updating opportunity:', error);

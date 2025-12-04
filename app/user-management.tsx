@@ -253,7 +253,7 @@ export default function UserManagementScreen() {
           
           <View style={styles.userInfo}>
   <View style={styles.nameRow}>
-    <TouchableOpacity onPress={() => router.push(`/profile/${user.id}`)}>
+    <TouchableOpacity onPress={() => router.push(`/profile/${user.slug || user.id}`)}>
       <Text style={[styles.userName, { color: colors.text }]}>
         {user.fullName}
       </Text>

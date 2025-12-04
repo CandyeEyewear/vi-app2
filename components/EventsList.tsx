@@ -167,7 +167,7 @@ export function EventsList({
     if (onEventPress) {
       onEventPress(event);
     } else {
-      router.push(`/events/${event.id}`);
+      router.push(`/events/${event.slug}`);
     }
   }, [onEventPress, router]);
 
@@ -176,7 +176,7 @@ export function EventsList({
     if (onRegisterPress) {
       onRegisterPress(event);
     } else {
-      router.push(`/events/${event.id}/register`);
+      router.push(`/events/${event.slug}/register`);
     }
   }, [onRegisterPress, router]);
 

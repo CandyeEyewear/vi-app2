@@ -51,7 +51,7 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
   }, [event.imageUrl]);
 
   const handlePress = () => {
-    router.push(`/events/${event.id}` as any);
+    router.push(`/events/${event.slug}` as any);
   };
 
   // Memoize callbacks to prevent recreation

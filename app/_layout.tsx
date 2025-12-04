@@ -66,13 +66,13 @@ function AppContent() {
       if (data.type && data.id) {
         switch (data.type) {
           case 'circle_request':
-            router.push(`/profile/${data.id}` as any);
+            router.push(`/profile/${data.slug || data.id}` as any);
             break;
           case 'announcement':
             router.push('/feed' as any);
             break;
           case 'opportunity':
-            router.push(`/opportunity/${data.id}` as any);
+            router.push(`/opportunity/${data.slug || data.id}` as any);
             break;
           case 'message':
             router.push({
@@ -88,13 +88,13 @@ function AppContent() {
             break;
           case 'opportunity_approved':
           case 'opportunity_rejected':
-            router.push(`/opportunity/${data.id}` as any);
+            router.push(`/opportunity/${data.slug || data.id}` as any);
             break;
           case 'cause':
-            router.push(`/causes/${data.id}` as any);
+            router.push(`/causes/${data.slug || data.id}` as any);
             break;
           case 'event':
-            router.push(`/events/${data.id}` as any);
+            router.push(`/events/${data.slug || data.id}` as any);
             break;
         }
       }

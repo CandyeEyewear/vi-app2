@@ -84,13 +84,13 @@ function handleNotificationNavigation(
 
   switch (data.type) {
     case 'circle_request':
-      navigate(`/profile/${data.id}`);
+      navigate(`/profile/${data.slug || data.id}`);
       break;
     case 'announcement':
       navigate('/(tabs)');
       break;
     case 'opportunity':
-      navigate(`/opportunity/${data.id}`);
+      navigate(`/opportunity/${data.slug || data.id}`);
       break;
     case 'message':
       navigate(`/conversation/${data.id}`);
@@ -103,13 +103,13 @@ function handleNotificationNavigation(
       break;
     case 'opportunity_approved':
     case 'opportunity_rejected':
-      navigate(`/opportunity/${data.id}`);
+      navigate(`/opportunity/${data.slug || data.id}`);
       break;
     case 'cause':
-      navigate(`/causes/${data.id}`);
+      navigate(`/causes/${data.slug || data.id}`);
       break;
     case 'event':
-      navigate(`/events/${data.id}`);
+      navigate(`/events/${data.slug || data.id}`);
       break;
     default:
       console.log('[FCM] ⚠️ Unknown notification type:', data.type);

@@ -43,7 +43,7 @@ export default function SharedCauseCard({ cause }: SharedCauseCardProps) {
   const daysRemaining = getCauseDaysRemaining(cause);
 
   const handlePress = () => {
-    router.push(`/causes/${cause.id}` as any);
+    router.push(`/causes/${cause.slug}` as any);
   };
 
   return (

@@ -360,7 +360,7 @@ export default function AdminEventsScreen() {
 
   // Handle view
   const handleView = useCallback((event: Event) => {
-    router.push(`/events/${event.id}`);
+    router.push(`/events/${event.slug}`);
   }, [router]);
 
   // Handle edit

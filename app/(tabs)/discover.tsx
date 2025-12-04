@@ -912,7 +912,7 @@ export default function DiscoverScreen() {
   const suggestions = useMemo(() => opportunities.length === 0 || !debouncedSearchQuery || debouncedSearchQuery.trim().length < 2 ? [] : generateSearchSuggestions(opportunities, debouncedSearchQuery, 5), [debouncedSearchQuery, opportunities]);
 
   // Handlers
-  const handleOpportunityPress = useCallback((opportunity: Opportunity) => { trackSearchAnalytics(searchQuery, filteredOpportunities.length, opportunity.id); router.push(`/opportunity/${opportunity.id}`); }, [router, searchQuery, filteredOpportunities.length]);
+  const handleOpportunityPress = useCallback((opportunity: Opportunity) => { trackSearchAnalytics(searchQuery, filteredOpportunities.length, opportunity.id); router.push(`/opportunity/${opportunity.slug}`); }, [router, searchQuery, filteredOpportunities.length]);
   const handleToggleSave = useCallback(async (opportunity: Opportunity) => {
     if (!user) return;
     const isSaved = savedOpportunityIds.includes(opportunity.id);
@@ -921,7 +921,7 @@ export default function DiscoverScreen() {
       else { const { error } = await supabase.from('saved_opportunities').insert({ user_id: user.id, opportunity_id: opportunity.id }); if (!error) setSavedOpportunityIds(prev => [...prev, opportunity.id]); }
     } catch (error) { console.error('Error toggling save:', error); }
   }, [user, savedOpportunityIds]);
-  const handleShareOpportunity = useCallback((opportunity: Opportunity) => { router.push(`/opportunity/${opportunity.id}`); }, [router]);
+  const handleShareOpportunity = useCallback((opportunity: Opportunity) => { router.push(`/opportunity/${opportunity.slug}`); }, [router]);
 
   const renderLeftActions = useCallback((opportunity: Opportunity) => {
     const isSaved = savedOpportunityIds.includes(opportunity.id);
@@ -1035,7 +1035,7 @@ export default function DiscoverScreen() {
           </View>
 
           <View style={[styles.tabContent, activeTab !== 'causes' && styles.tabContentHidden]}>
-            <CausesList showSearch={false} showFilters={true} onCausePress={(cause) => router.push(`/causes/${cause.id}`)} />
+            <CausesList showSearch={false} showFilters={true} onCausePress={(cause) => router.push(`/causes/${cause.slug}`)} />
           </View>
 
           <View style={[styles.tabContent, activeTab !== 'events' && styles.tabContentHidden]}>

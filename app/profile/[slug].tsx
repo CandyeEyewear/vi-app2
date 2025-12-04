@@ -65,7 +65,7 @@ interface CheckInData {
 
 export default function ViewProfileScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { slug } = useLocalSearchParams<{ slug: string }>();
   const { user: currentUser } = useAuth();
   const { refreshFeed, posts: allPosts } = useFeed();
   const { getOrCreateConversation } = useMessaging();
@@ -89,17 +89,17 @@ export default function ViewProfileScreen() {
   const [checkIns, setCheckIns] = useState<CheckInData[]>([]);
   const [checkInsLoading, setCheckInsLoading] = useState(false);
 
-  const isOwnProfile = currentUser?.id === id;
+  const isOwnProfile = currentUser?.slug === slug || currentUser?.id === slug;
   const isPrivateProfile = profileUser?.isPrivate && !isOwnProfile;
   const isInCircle = circleStatus === 'accepted';
   const canViewFullProfile = isOwnProfile || !isPrivateProfile || isInCircle;
   const isOrganization = profileUser?.account_type === 'organization';
 
   useEffect(() => {
-    if (id) {
+    if (slug) {
       loadProfile();
     }
-  }, [id]);
+  }, [slug]);
 
   useEffect(() => {
     if (profileUser && !isOwnProfile) {
@@ -109,10 +109,10 @@ export default function ViewProfileScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
-      if (id && !loading) {
+      if (slug && !loading) {
         loadProfile();
       }
-    }, [id])
+    }, [slug])
   );
 
   useEffect(() => {
@@ -127,7 +127,7 @@ export default function ViewProfileScreen() {
     try {
       setLoading(true);
 
-      const cacheKey = CacheKeys.userProfile(id!);
+      const cacheKey = CacheKeys.userProfile(slug!);
       const cachedUser = cache.get<User>(cacheKey);
       if (cachedUser) {
         setProfileUser(cachedUser);
@@ -135,10 +135,12 @@ export default function ViewProfileScreen() {
         return;
       }
 
+      // Check if slug is a UUID (backward compatibility)
+      const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(slug!);
       const { data, error } = await supabase
         .from('users')
         .select('*')
-        .eq('id', id)
+        .eq(isValidUUID ? 'id' : 'slug', slug!)
         .single();
 
       if (error) throw error;
@@ -183,14 +185,14 @@ export default function ViewProfileScreen() {
   };
 
   const checkCircleStatus = async () => {
-    if (!currentUser?.id || !id) return;
+    if (!currentUser?.id || !slug) return;
 
     try {
       const { data, error } = await supabase
         .from('user_circles')
         .select('status')
         .eq('user_id', currentUser.id)
-        .eq('circle_user_id', id)
+        .eq('circle_user_id', profileUser?.id || slug)
         .single();
 
       if (error && error.code !== 'PGRST116') {
@@ -513,7 +515,7 @@ export default function ViewProfileScreen() {
   const renderCheckInCard = ({ item }: { item: CheckInData }) => (
     <TouchableOpacity
       style={[styles.checkInCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-      onPress={() => router.push(`/opportunity/${item.opportunity.id}` as any)}
+      onPress={() => router.push(`/opportunity/${item.opportunity.slug}` as any)}
       activeOpacity={0.7}
     >
       {item.opportunity.imageUrl && (

@@ -46,7 +46,7 @@ export default function SharedOpportunityCard({ opportunity }: SharedOpportunity
   const isLimited = spotsLeft <= 5;
 
   const handlePress = () => {
-    router.push(`/opportunity/${opportunity.id}` as any);
+    router.push(`/opportunity/${opportunity.slug}` as any);
   };
 
   return (

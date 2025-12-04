@@ -285,7 +285,7 @@ export default function ParticipantsList({
             
             <View style={styles.participantDetails}>
               {/* ✅ FIXED: Made name clickable */}
-              <TouchableOpacity onPress={() => router.push(`/profile/${user.id}`)}>
+              <TouchableOpacity onPress={() => router.push(`/profile/${user.slug || user.id}`)}>
                 <UserNameWithBadge
                   name={user.full_name}
                   role={user.role || 'volunteer'}

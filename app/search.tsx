@@ -239,7 +239,7 @@ const renderPendingRequest = ({ item }: { item: SearchUser }) => (
   const renderUser = ({ item }: { item: SearchUser }) => (
     <TouchableOpacity
       style={[styles.userCard, { backgroundColor: colors.background, borderBottomColor: colors.border }]}
-      onPress={() => router.push(`/profile/${item.id}`)}
+      onPress={() => router.push(`/profile/${item.slug || item.id}`)}
       activeOpacity={0.7}
     >
       <View style={styles.userInfo}>
