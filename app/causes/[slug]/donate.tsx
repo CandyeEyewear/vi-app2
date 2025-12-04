@@ -732,7 +732,11 @@ function FrequencyPicker({
 // MAIN COMPONENT
 // ============================================================================
 export default function DonateScreen() {
-  const { id, recurring: recurringParam } = useLocalSearchParams<{ id: string; recurring?: string }>();
+  const params = useLocalSearchParams<{ slug?: string | string[]; recurring?: string | string[] }>();
+  const slugParam = params.slug;
+  const recurringParamRaw = params.recurring;
+  const id = Array.isArray(slugParam) ? slugParam[0] : slugParam;
+  const recurringParam = Array.isArray(recurringParamRaw) ? recurringParamRaw[0] : recurringParamRaw;
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();

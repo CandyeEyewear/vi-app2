@@ -82,7 +82,9 @@ function DonorItem({ donation, colors }: { donation: Donation; colors: any }) {
 }
 
 export default function DonorsScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ slug?: string | string[] }>();
+  const slugParam = params.slug;
+  const id = Array.isArray(slugParam) ? slugParam[0] : slugParam;
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
