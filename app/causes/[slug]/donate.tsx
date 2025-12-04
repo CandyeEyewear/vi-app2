@@ -883,7 +883,7 @@ export default function DonateScreen() {
 
   // Handle submission
   const handleSubmit = useCallback(async () => {
-    if (!validateForm() || !cause || !id) return;
+    if (!validateForm() || !cause) return;
 
     setSubmitting(true);
 
@@ -893,7 +893,7 @@ export default function DonateScreen() {
 
       if (isRecurring && user) {
         const donationResponse = await createDonation({
-          causeId: id,
+          causeId: cause.id,
           amount: finalAmount,
           userId: user.id,
           donorName: donorNameValue,
@@ -938,7 +938,7 @@ export default function DonateScreen() {
 
       // One-time donation
       const donationResponse = await createDonation({
-        causeId: id,
+        causeId: cause.id,
         amount: finalAmount,
         userId: user?.id,
         donorName: donorNameValue,
@@ -985,7 +985,7 @@ export default function DonateScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [validateForm, cause, id, isRecurring, user, finalAmount, frequency, isAnonymous, donorName, donorEmail, message, router]);
+  }, [validateForm, cause, isRecurring, user, finalAmount, frequency, isAnonymous, donorName, donorEmail, message, router]);
 
   const selectedFrequency = FREQUENCY_OPTIONS.find(f => f.value === frequency);
 
