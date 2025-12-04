@@ -240,12 +240,16 @@ export async function openPaymentPage(
   paymentData?: Record<string, string>
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    console.log('Opening payment page:', paymentUrl);
+    
     // On web, use window.location to redirect
     if (Platform.OS === 'web') {
       if (typeof window !== 'undefined') {
+        console.log('Redirecting on web to:', paymentUrl);
         window.location.href = paymentUrl;
         return { success: true };
       }
+      console.error('Window not available on web');
       return { success: false, error: 'Window not available' };
     }
     
@@ -256,12 +260,16 @@ export async function openPaymentPage(
       
       // Check if openBrowserAsync exists and is a function
       if (WebBrowser && typeof WebBrowser.openBrowserAsync === 'function') {
+        console.log('Opening browser with expo-web-browser...');
         const result = await WebBrowser.openBrowserAsync(paymentUrl, {
           showTitle: true,
           enableBarCollapsing: true,
         });
+        console.log('Browser opened:', result);
         // On mobile, success means browser was opened (dismiss/cancel means user came back)
         return { success: true };
+      } else {
+        console.warn('expo-web-browser.openBrowserAsync not available');
       }
     } catch (webBrowserError) {
       // If expo-web-browser fails (native module not available), fallback to Linking
@@ -269,11 +277,14 @@ export async function openPaymentPage(
     }
     
     // Fallback: Use Linking.openURL if expo-web-browser is not available
+    console.log('Falling back to Linking.openURL...');
     const canOpen = await Linking.canOpenURL(paymentUrl);
     if (canOpen) {
+      console.log('Can open URL, opening with Linking...');
       await Linking.openURL(paymentUrl);
       return { success: true };
     } else {
+      console.error('Cannot open payment URL:', paymentUrl);
       return { success: false, error: 'Cannot open payment URL' };
     }
   } catch (error) {
@@ -303,32 +314,55 @@ export async function processPayment(params: CreatePaymentParams): Promise<{
   }
 
   try {
-  // Create payment token
-  const paymentResult = await createPayment(params);
+    // Create payment token
+    console.log('Creating payment token...', { 
+      amount: params.amount, 
+      orderType: params.orderType,
+      orderId: params.orderId 
+    });
+    
+    const paymentResult = await createPayment(params);
 
-  if (!paymentResult.success || !paymentResult.paymentUrl || !paymentResult.paymentData) {
-    return {
-      success: false,
-      error: paymentResult.error || 'Failed to create payment',
-    };
-  }
+    if (!paymentResult.success || !paymentResult.paymentUrl || !paymentResult.paymentData) {
+      console.error('Payment creation failed:', paymentResult);
+      return {
+        success: false,
+        error: paymentResult.error || 'Failed to create payment',
+      };
+    }
 
-  // Open payment page
-  const browserResult = await openPaymentPage(paymentResult.paymentUrl, paymentResult.paymentData);
-
-  // For web, the page redirects so we won't get a response
-  if (Platform.OS === 'web') {
-    return {
-      success: true,  // Assume success since we're redirecting
+    console.log('Payment token created, opening payment page...', {
+      paymentUrl: paymentResult.paymentUrl,
       transactionId: paymentResult.transactionId,
-    };
-  }
+    });
 
-  return {
-    success: browserResult.success,
-    transactionId: paymentResult.transactionId,
-    error: browserResult.error,
-  };
+    // Open payment page
+    const browserResult = await openPaymentPage(paymentResult.paymentUrl, paymentResult.paymentData);
+
+    if (!browserResult.success) {
+      console.error('Failed to open payment page:', browserResult.error);
+      return {
+        success: false,
+        error: browserResult.error || 'Failed to open payment page',
+        transactionId: paymentResult.transactionId,
+      };
+    }
+
+    // For web, the page redirects so we won't get a response
+    if (Platform.OS === 'web') {
+      console.log('Payment page opened on web, redirecting...');
+      return {
+        success: true,  // Assume success since we're redirecting
+        transactionId: paymentResult.transactionId,
+      };
+    }
+
+    console.log('Payment page opened on mobile');
+    return {
+      success: browserResult.success,
+      transactionId: paymentResult.transactionId,
+      error: browserResult.error,
+    };
   } catch (error) {
     console.error('Process payment error:', error);
     return {

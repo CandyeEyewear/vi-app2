@@ -47,9 +47,10 @@ export default async function handler(req: any, res: any) {
   }
 
   // Determine payment URL based on environment
+  // eZeePayments payment endpoint format: https://secure.ezeepayments.com/pay
   const paymentUrl = EZEE_API_URL.includes('test')
-    ? 'https://secure-test.ezeepayments.com'
-    : 'https://secure.ezeepayments.com';
+    ? 'https://secure-test.ezeepayments.com/pay'
+    : 'https://secure.ezeepayments.com/pay';
 
   // Escape HTML to prevent XSS
   const escapeHtml = (str: string) => {
@@ -102,7 +103,7 @@ export default async function handler(req: any, res: any) {
         }
       </style>
     </head>
-    <body onload="document.getElementById('paymentForm').submit();">
+    <body>
       <div class="container">
         <div class="spinner"></div>
         <p>Redirecting to secure payment page...</p>
@@ -120,6 +121,30 @@ export default async function handler(req: any, res: any) {
         ${subscription_id ? `<input type="hidden" name="subscription_id" value="${escapeHtml(subscription_id)}" />` : ''}
         ${recurring ? `<input type="hidden" name="recurring" value="true" />` : ''}
       </form>
+      <script>
+        // Multiple methods to ensure form submission works
+        (function() {
+          function submitForm() {
+            const form = document.getElementById('paymentForm');
+            if (form) {
+              form.submit();
+            }
+          }
+          
+          // Try immediately
+          submitForm();
+          
+          // Also try on load (backup)
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', submitForm);
+          } else {
+            window.addEventListener('load', submitForm);
+          }
+          
+          // Fallback timeout
+          setTimeout(submitForm, 100);
+        })();
+      </script>
     </body>
     </html>
   `;

@@ -912,7 +912,7 @@ export default function DonateScreen() {
           amount: finalAmount,
           frequency: mapFrequency(frequency),
           subscriptionType: 'recurring_donation',
-          referenceId: donation.id,
+          referenceId: cause.id, // Use cause ID (UUID) for recurring donations
           userId: user.id,
           customerEmail: donorEmailValue || user.email || '',
           customerName: donorNameValue || user.fullName,

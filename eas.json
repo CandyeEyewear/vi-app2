@@ -9,8 +9,7 @@
       "distribution": "internal",
       "channel": "development",
       "android": {
-        "buildType": "apk",
-        "googleServicesFile": "./google-services.json"
+        "buildType": "apk"
       },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://drshtkrhszeaxpmectex.supabase.co",
@@ -26,10 +25,6 @@
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://drshtkrhszeaxpmectex.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRyc2h0a3Joc3plYXhwbWVjdGV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIyNTUwNTAsImV4cCI6MjA3NzgzMTA1MH0.TAz9TFcCogE66Ivvkr06wJGaILQQHBxk2ldF6Tj8-oU"
-      },
-      "android": {
-        "buildType": "apk",
-        "googleServicesFile": "./google-services.json"
       }
     },
     "production": {
@@ -41,10 +36,6 @@
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://drshtkrhszeaxpmectex.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRyc2h0a3Joc3plYXhwbWVjdGV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIyNTUwNTAsImV4cCI6MjA3NzgzMTA1MH0.TAz9TFcCogE66Ivvkr06wJGaILQQHBxk2ldF6Tj8-oU"
-      },
-      "android": {
-        "buildType": "apk",
-        "googleServicesFile": "./google-services.json"
       }
     }
   },
