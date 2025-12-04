@@ -837,5 +837,6 @@ export function formatCurrency(amount: number, currency: string = 'JMD'): string
 
   const formatted = formatter.format(amount);
 
-  return currency === 'JMD' ? formatted.replace('JMD', 'J$').replace('JA$', 'J$') : formatted;
+  // Replace "JMD " (with space) with "J$" for shorter display
+  return currency === 'JMD' ? formatted.replace('JMD ', 'J$').replace('JMD', 'J$').replace('JA$', 'J$') : formatted;
 }

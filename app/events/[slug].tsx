@@ -1289,7 +1289,9 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
+    flexDirection: 'column',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: Spacing.lg,
     paddingHorizontal: Spacing.md,
     gap: Spacing.sm,
