@@ -187,10 +187,11 @@ async function fetchWithTimeout(
  */
 export async function createPayment(params: CreatePaymentParams): Promise<PaymentResponse> {
   try {
-    // Default to 'app' if platform not specified
+    // Auto-detect platform if not specified
+    const detectedPlatform = params.platform || (Platform.OS === 'web' ? 'web' : 'app');
     const requestBody = {
       ...params,
-      platform: params.platform || 'app',
+      platform: detectedPlatform,
     };
 
     const response = await fetchWithTimeout(
@@ -381,10 +382,11 @@ export async function processPayment(params: CreatePaymentParams): Promise<{
  */
 export async function createSubscription(params: CreateSubscriptionParams): Promise<SubscriptionResponse> {
   try {
-    // Default to 'app' if platform not specified
+    // Auto-detect platform if not specified
+    const detectedPlatform = params.platform || (Platform.OS === 'web' ? 'web' : 'app');
     const requestBody = {
       ...params,
-      platform: params.platform || 'app',
+      platform: detectedPlatform,
     };
 
     const response = await fetchWithTimeout(
