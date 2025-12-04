@@ -986,7 +986,13 @@ export default function CauseDetailScreen() {
             </View>
 
             {/* Donation Buttons */}
-            <View style={[styles.buttonsContainer, { gap: responsive.spacing.sm }]}>
+            <View style={[
+              styles.buttonsContainer, 
+              { 
+                gap: responsive.spacing.sm,
+                flexDirection: responsive.isMobile ? 'column' : 'row',
+              }
+            ]}>
               <DonateButton
                 onPress={handleDonate}
                 icon={Heart}
@@ -1406,7 +1412,6 @@ const styles = StyleSheet.create({
 
   // Buttons
   buttonsContainer: {
-    flexDirection: 'row',
     marginBottom: 28,
   },
   donateButtonWrapper: {
