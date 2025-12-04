@@ -524,7 +524,7 @@ function EventInfoCard({
         styles.infoCard,
         {
           padding: responsive.spacing.lg,
-          marginBottom: responsive.spacing.md,
+          marginBottom: responsive.spacing.lg,
           backgroundColor: colors.card,
           transform: [{ scale: scaleAnim }],
         },
@@ -1217,7 +1217,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: Spacing.xl,
     right: Spacing.xl,
-    bottom: Spacing.xl,
+    bottom: Spacing.md,
   },
   heroTitle: {
     fontSize: 26,
@@ -1228,7 +1228,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: Spacing.xl,
-    marginTop: -32,
+    marginTop: -24,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
   },
@@ -1237,7 +1237,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: -0.5,
     lineHeight: 32,
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.lg,
   },
   infoCard: {
     borderRadius: 16,
@@ -1281,6 +1281,7 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     gap: Spacing.md,
+    marginTop: Spacing.md,
     marginBottom: Spacing.xl,
   },
   statsRowStacked: {
