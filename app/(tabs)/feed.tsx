@@ -21,7 +21,6 @@ import {
   Platform,
   useWindowDimensions,
 } from 'react-native';
-import WebContainer from '../../components/WebContainer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Plus, Search, Camera, Image as ImageIcon } from 'lucide-react-native';
@@ -454,11 +453,10 @@ const renderTabs = () => (
         <title>Feed | VIbe</title>
       </Head>
       {!isDesktop && renderHeader()}
-      <WebContainer>
-        {renderTabs()}
-        
-        <FlatList
-          data={sortedPosts}
+      {renderTabs()}
+      
+      <FlatList
+        data={sortedPosts}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <FeedPostCard post={item} />}
         contentContainerStyle={styles.listContent}
@@ -485,9 +483,8 @@ const renderTabs = () => (
           )
         }
       />
-      </WebContainer>
       
-      {/* Floating Add Button - Outside WebContainer for proper positioning */}
+      {/* Floating Add Button - kept outside content flow for consistent positioning */}
       <TouchableOpacity
         style={[
           styles.floatingButton, 
