@@ -592,6 +592,8 @@ export default function EventRegisterScreen() {
         customerEmail: user.email || '',
         customerName: user.fullName,
         description: `${event.title} - ${ticketCount} ticket${ticketCount !== 1 ? 's' : ''}`,
+        platform: Platform.OS === 'web' ? 'web' : 'app',
+        returnPath: `/events/${slug}`, // Return to event page after payment
       });
 
       if (!paymentResult.success) {

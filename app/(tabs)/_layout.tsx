@@ -41,18 +41,30 @@ export default function TabsLayout() {
   const [windowWidth, setWindowWidth] = React.useState(width);
   
   React.useEffect(() => {
+    if (!isWebPlatform) {
+      // On native, just use the width from useResponsive
+      setWindowWidth(width);
+      return;
+    }
+
+    // On web, use window dimensions
     const updateWidth = () => {
-      if (isWebPlatform) {
-        setWindowWidth(window.innerWidth || width);
+      if (typeof window !== 'undefined' && window.innerWidth) {
+        setWindowWidth(window.innerWidth);
       } else {
         setWindowWidth(width);
       }
     };
     
-    if (isWebPlatform) {
-      updateWidth();
+    // Initial update
+    updateWidth();
+    
+    // Listen for resize events
+    if (typeof window !== 'undefined') {
       window.addEventListener('resize', updateWidth);
-      return () => window.removeEventListener('resize', updateWidth);
+      return () => {
+        window.removeEventListener('resize', updateWidth);
+      };
     }
   }, [width, isWebPlatform]);
   

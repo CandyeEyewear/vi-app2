@@ -63,6 +63,7 @@ export default async function handler(req: any, res: any) {
      customerName,
      description,
      platform,  // 'web' or 'app'
+     returnPath,  // Path to redirect to after successful payment
     } = req.body;
 
    // ========== DEBUG LOGGING START ==========
@@ -94,9 +95,15 @@ export default async function handler(req: any, res: any) {
    // Determine redirect URLs based on platform
    const isApp = platform === 'app';
    const postBackUrl = `${APP_URL}/api/ezee/webhook`;
+   
+   // Build return URL with returnPath if provided
+   const returnParams = new URLSearchParams({ orderId: uniqueOrderId });
+   if (returnPath) {
+     returnParams.append('returnPath', returnPath);
+   }
    const returnUrl = isApp 
-     ? `vibe://payment/success?orderId=${uniqueOrderId}`
-     : `${APP_URL}/payment/success?orderId=${uniqueOrderId}`;
+     ? `vibe://payment/success?${returnParams.toString()}`
+     : `${APP_URL}/payment/success?${returnParams.toString()}`;
    const cancelUrl = isApp 
      ? `vibe://payment/cancel?orderId=${uniqueOrderId}`
      : `${APP_URL}/payment/cancel?orderId=${uniqueOrderId}`;

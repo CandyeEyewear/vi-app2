@@ -94,22 +94,22 @@ export default async function handler(req: any, res: any) {
 
       // Update transaction if it exists
       if (existingTransaction) {
-        const { data: transaction, error: updateError } = await supabase
-          .from('payment_transactions')
-          .update({
-            status: isSuccessful ? 'completed' : 'failed',
-            transaction_number: TransactionNumber,
-            response_code: ResponseCode?.toString() || null,
-            response_description: ResponseDescription || null,
-            updated_at: new Date().toISOString(),
-            completed_at: isSuccessful ? new Date().toISOString() : null,
-          })
+      const { data: transaction, error: updateError } = await supabase
+    .from('payment_transactions')
+    .update({
+      status: isSuccessful ? 'completed' : 'failed',
+          transaction_number: TransactionNumber,
+          response_code: ResponseCode?.toString() || null,
+          response_description: ResponseDescription || null,
+          updated_at: new Date().toISOString(),
+          completed_at: isSuccessful ? new Date().toISOString() : null,
+    })
           .eq('id', existingTransaction.id)
-          .select('*, metadata')
-          .single();
+    .select('*, metadata')
+    .single();
 
-        if (updateError) {
-          console.error('Transaction update error:', updateError);
+      if (updateError) {
+        console.error('Transaction update error:', updateError);
           console.error('Transaction ID:', existingTransaction.id);
           console.error('Webhook body:', JSON.stringify(body, null, 2));
         } else if (transaction && isSuccessful) {
@@ -224,13 +224,13 @@ export default async function handler(req: any, res: any) {
             }
           }
         }
-      }
-    }
+  }
+}
 
     // Handle subscription payment
     if (subscription_id) {
       const { data: subscription, error: subUpdateError } = await supabase
-        .from('payment_subscriptions')
+    .from('payment_subscriptions')
         .update({
           status: isSuccessful ? 'active' : 'failed',
           transaction_number: TransactionNumber || null,
@@ -238,23 +238,23 @@ export default async function handler(req: any, res: any) {
           updated_at: new Date().toISOString(),
         })
         .eq('ezee_subscription_id', subscription_id)
-        .select()
-        .single();
+    .select()
+    .single();
 
       if (subUpdateError) {
         console.error('Subscription update error:', subUpdateError);
-      }
+  }
 
       if (subscription && isSuccessful) {
         // Calculate next billing date
-        const nextBillingDate = calculateNextBillingDate(subscription.frequency);
-        await supabase
-          .from('payment_subscriptions')
+  const nextBillingDate = calculateNextBillingDate(subscription.frequency);
+  await supabase
+    .from('payment_subscriptions')
           .update({ next_billing_date: nextBillingDate })
-          .eq('id', subscription.id);
+    .eq('id', subscription.id);
 
         try {
-          await handleSuccessfulSubscriptionPayment(subscription);
+        await handleSuccessfulSubscriptionPayment(subscription);
           
           // Verify subscription payment was processed correctly
           const { data: verifySubPayment } = await supabase
@@ -391,14 +391,14 @@ async function handleSuccessfulPayment(transaction: any) {
           paymentStatus: verifyEvent.payment_status,
         });
         // Retry the update
-        await supabase
-          .from('event_registrations')
+      await supabase
+        .from('event_registrations')
           .update({ 
             payment_status: 'paid', 
             status: 'confirmed',
             transaction_number: transaction.transaction_number || null,
           })
-          .eq('id', reference_id);
+        .eq('id', reference_id);
       }
       break;
 
@@ -434,15 +434,15 @@ async function handleSuccessfulPayment(transaction: any) {
             status: verifySubscription.status,
           });
           // Retry the update
-          await supabase
-            .from('payment_subscriptions')
-            .update({ 
-              status: 'active',
+        await supabase
+          .from('payment_subscriptions')
+          .update({ 
+            status: 'active',
               transaction_number: transaction.transaction_number || null,
-              last_billing_date: new Date().toISOString().split('T')[0],
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', transaction.metadata.payment_subscriptions_id);
+            last_billing_date: new Date().toISOString().split('T')[0],
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', transaction.metadata.payment_subscriptions_id);
         }
       }
       

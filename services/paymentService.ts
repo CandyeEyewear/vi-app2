@@ -52,6 +52,7 @@ export interface CreatePaymentParams {
   customerName?: string;
   description?: string;
   platform?: 'web' | 'app'; // Platform source for smart redirects
+  returnPath?: string; // Path to redirect to after successful payment (e.g., '/causes/[slug]', '/events/[slug]', '/membership')
 }
 
 export interface CreateSubscriptionParams {
@@ -65,6 +66,7 @@ export interface CreateSubscriptionParams {
   description?: string;
   endDate?: string;
   platform?: 'web' | 'app'; // Platform source for smart redirects
+  returnPath?: string; // Path to redirect to after successful payment (e.g., '/causes/[slug]', '/events/[slug]', '/membership')
 }
 
 export interface PaymentResponse {

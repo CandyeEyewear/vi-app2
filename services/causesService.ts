@@ -201,8 +201,8 @@ export async function getCauses(options?: {
     if (options?.status) {
       if (isAdmin) {
         // Admins can see any status they request
-        query = query.eq('status', options.status);
-      } else {
+      query = query.eq('status', options.status);
+    } else {
         // Non-admin users can only see active causes, regardless of requested status
         query = query.eq('status', 'active');
       }

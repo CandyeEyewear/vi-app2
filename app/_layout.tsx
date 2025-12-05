@@ -151,9 +151,32 @@ function AppContent() {
       
       // Handle payment redirects (vibe://payment/success or vibe://payment/cancel)
       if (parsed.scheme === 'vibe' && parsed.path) {
-        if (parsed.path.includes('payment/success') || parsed.path.includes('payment/cancel')) {
-          logger.info('[DEEP LINK] Payment redirect detected, navigating to feed', { path: parsed.path });
-          router.replace('/feed');
+        if (parsed.path.includes('payment/success')) {
+          // Extract returnPath from query params if provided
+          const returnPath = parsed.queryParams?.returnPath || parsed.queryParams?.return_path;
+          const redirectPath = returnPath && typeof returnPath === 'string' 
+            ? returnPath 
+            : '/feed';
+          logger.info('[DEEP LINK] Payment success redirect detected', { 
+            path: parsed.path, 
+            returnPath,
+            redirectPath 
+          });
+          router.replace(redirectPath);
+          return;
+        }
+        if (parsed.path.includes('payment/cancel')) {
+          // For cancel, also check for returnPath but default to feed
+          const returnPath = parsed.queryParams?.returnPath || parsed.queryParams?.return_path;
+          const redirectPath = returnPath && typeof returnPath === 'string' 
+            ? returnPath 
+            : '/feed';
+          logger.info('[DEEP LINK] Payment cancel redirect detected', { 
+            path: parsed.path,
+            returnPath,
+            redirectPath 
+          });
+          router.replace(redirectPath);
           return;
         }
       }

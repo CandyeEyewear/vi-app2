@@ -46,7 +46,7 @@ export default function ShareEventModal({
       handleExternalShare();
     } else {
       onShare(comment.trim() || undefined, type);
-      setComment('');
+    setComment('');
       setShareType('public');
       onClose();
     }

@@ -6,7 +6,7 @@ import { useColorScheme } from 'react-native';
 import { Colors } from '../../constants/colors';
 
 export default function PaymentSuccessScreen() {
-  const { orderId } = useLocalSearchParams();
+  const { orderId, returnPath } = useLocalSearchParams();
   const [countdown, setCountdown] = useState(5);
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
@@ -16,7 +16,11 @@ export default function PaymentSuccessScreen() {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          router.replace('/feed');
+          // Redirect to returnPath if provided, otherwise default to feed
+          const redirectPath = returnPath && typeof returnPath === 'string' 
+            ? returnPath 
+            : '/feed';
+          router.replace(redirectPath);
           return 0;
         }
         return prev - 1;
@@ -24,7 +28,7 @@ export default function PaymentSuccessScreen() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [returnPath, router]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -40,7 +44,7 @@ export default function PaymentSuccessScreen() {
           <Text style={[styles.orderId, { color: colors.textSecondary }]}>Order ID: {orderId}</Text>
         )}
         <Text style={[styles.redirect, { color: '#38B6FF' }]}>
-          Redirecting to home in {countdown} seconds...
+          Redirecting in {countdown} seconds...
         </Text>
       </View>
     </View>

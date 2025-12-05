@@ -155,7 +155,8 @@ export default function SubscribeScreen() {
         customerEmail: user.email || '',
         customerName: user.fullName || 'VIbe Member',
         description: 'VIbe Premium Membership - Annual Plan (Includes VI T-Shirt)',
-        platform: 'app',
+        platform: Platform.OS === 'web' ? 'web' : 'app',
+        returnPath: '/membership', // Return to membership page after payment
       });
 
       console.log('Subscription result:', subscriptionResult);

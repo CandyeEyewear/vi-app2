@@ -917,6 +917,8 @@ export default function DonateScreen() {
           customerEmail: donorEmailValue || user.email || '',
           customerName: donorNameValue || user.fullName,
           description: `Recurring donation to ${cause.title}`,
+          platform: Platform.OS === 'web' ? 'web' : 'app',
+          returnPath: `/causes/${id}`, // Return to cause page after payment
         });
 
         if (!subscriptionResult.success) {
@@ -969,6 +971,7 @@ export default function DonateScreen() {
         customerName: donorNameValue || user?.fullName,
         description: `Donation to ${cause.title}`,
         platform: Platform.OS === 'web' ? 'web' : 'app',
+        returnPath: `/causes/${id}`, // Return to cause page after payment
       });
 
       console.log('🔵 [DONATE] Payment result:', paymentResult);
