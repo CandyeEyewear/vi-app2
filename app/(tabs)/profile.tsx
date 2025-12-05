@@ -124,7 +124,10 @@ export default function ProfileScreen() {
   const achievements = getAchievements();
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.card }]} contentContainerStyle={styles.scrollContent}>
+    <ScrollView 
+      style={[styles.container, { backgroundColor: colors.card }]} 
+      contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
+    >
       <Head>
         <title>Profile | VIbe</title>
       </Head>

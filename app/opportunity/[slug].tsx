@@ -855,9 +855,9 @@ export default function OpportunityDetailsScreen() {
                 disabled={!opportunity.mapLink}
                 activeOpacity={0.7}
               >
-                <MapPin size={18} color={colors.textSecondary} />
-                <Text style={[styles.infoText, { color: colors.text, flex: 1 }]} numberOfLines={1}>{opportunity.location}</Text>
-                {opportunity.mapLink && <ChevronRight size={18} color={colors.textSecondary} />}
+                <MapPin size={18} color={opportunity.mapLink ? colors.primary : colors.textSecondary} />
+                <Text style={[styles.infoText, { color: opportunity.mapLink ? colors.primary : colors.text, flex: 1 }]} numberOfLines={1}>{opportunity.location}</Text>
+                {opportunity.mapLink && <ChevronRight size={18} color={colors.primary} />}
               </TouchableOpacity>
 
               {/* Spots - with urgency styling */}

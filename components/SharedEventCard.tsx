@@ -12,6 +12,7 @@ import {
   StyleSheet,
   useColorScheme,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Calendar, Clock, MapPin, Users, Video, Ticket, Star, ExternalLink } from 'lucide-react-native';
 import { Event, EventCategory } from '../types';
@@ -24,8 +25,10 @@ import {
   getDaysUntilEvent,
   isEventToday,
   formatCurrency,
+  isEventPast,
 } from '../services/eventsService';
 import { AnimatedPressable } from './AnimatedPressable';
+import { useAuth } from '../contexts/AuthContext';
 
 interface SharedEventCardProps {
   event: Event;
@@ -35,6 +38,7 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const router = useRouter();
+  const { isAdmin } = useAuth();
   const [imageError, setImageError] = useState(false);
   const [showLoader, setShowLoader] = useState(true);
   const imageLoadingRef = React.useRef(true);
@@ -42,6 +46,7 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
   const categoryConfig = EVENT_CATEGORY_CONFIG[event.category] || EVENT_CATEGORY_CONFIG.other;
   const daysUntil = event.eventDate ? getDaysUntilEvent(event.eventDate) : null;
   const isToday = event.eventDate ? isEventToday(event.eventDate) : false;
+  const isPast = event.eventDate ? isEventPast(event.eventDate) : false;
   const spotsLeft = event.spotsRemaining ?? event.capacity;
   const hasLimitedSpots = spotsLeft !== undefined && spotsLeft <= 10 && spotsLeft > 0;
 
@@ -51,6 +56,21 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
   }, [event.imageUrl]);
 
   const handlePress = () => {
+    if (!event.slug) {
+      console.error('Event slug is missing, cannot navigate');
+      return;
+    }
+
+    // Check if event has passed and user is not admin
+    if (isPast && !isAdmin) {
+      Alert.alert(
+        'Event No Longer Available',
+        'This event has passed its date and is no longer available for viewing.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     router.push(`/events/${event.slug}` as any);
   };
 

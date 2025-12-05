@@ -11,6 +11,7 @@ import {
   Image,
   StyleSheet,
   useColorScheme,
+  Alert,
 } from 'react-native';
 import { Heart, Users, Clock, TrendingUp, ExternalLink } from 'lucide-react-native';
 import { Cause, CauseCategory } from '../types';
@@ -18,6 +19,7 @@ import { Colors } from '../constants/colors';
 import { useRouter } from 'expo-router';
 import { getCauseProgress, getCauseDaysRemaining, formatCurrency } from '../services/causesService';
 import { AnimatedPressable } from './AnimatedPressable';
+import { useAuth } from '../contexts/AuthContext';
 
 interface SharedCauseCardProps {
   cause: Cause;
@@ -37,12 +39,38 @@ export default function SharedCauseCard({ cause }: SharedCauseCardProps) {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const router = useRouter();
+  const { isAdmin } = useAuth();
 
   const categoryConfig = CATEGORY_CONFIG[cause.category] || CATEGORY_CONFIG.other;
   const progress = getCauseProgress(cause);
   const daysRemaining = getCauseDaysRemaining(cause);
 
+  // Check if cause has passed its end date
+  const isExpired = (): boolean => {
+    if (!cause.endDate) return false;
+    const endDate = new Date(cause.endDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    endDate.setHours(0, 0, 0, 0);
+    return endDate < today;
+  };
+
   const handlePress = () => {
+    if (!cause.slug) {
+      console.error('Cause slug is missing, cannot navigate');
+      return;
+    }
+
+    // Check if cause is expired and user is not admin
+    if (isExpired() && !isAdmin) {
+      Alert.alert(
+        'Cause No Longer Available',
+        'This cause has passed its end date and is no longer available for viewing.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     router.push(`/causes/${cause.slug}` as any);
   };
 

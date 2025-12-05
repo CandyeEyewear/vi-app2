@@ -3,7 +3,7 @@
  * Handles receipt generation and management for payments
  */
 
-import { supabase } from './supabase';
+import { getSupabaseClient } from './supabase';
 
 export interface ReceiptLineItem {
   description: string;
@@ -39,6 +39,7 @@ export class ReceiptService {
 
   static async createReceipt(data: ReceiptData) {
     try {
+      const supabase = getSupabaseClient();
       const receiptNumber = this.generateReceiptNumber();
       
       const { data: receipt, error } = await supabase
@@ -83,6 +84,7 @@ export class ReceiptService {
 
   private static async sendReceiptEmail(receipt: any) {
     try {
+      const supabase = getSupabaseClient();
       const emailHtml = this.generateEmailTemplate(receipt);
       
       // TODO: Integrate with your email service (Resend, SendGrid, etc.)
@@ -100,6 +102,7 @@ export class ReceiptService {
 
     } catch (error) {
       console.error('Email error:', error);
+      const supabase = getSupabaseClient();
       await supabase
         .from('receipts')
         .update({ status: 'failed' })
@@ -162,6 +165,7 @@ export class ReceiptService {
   }
 
   static async getUserReceipts(userEmail: string, limit = 20) {
+    const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('receipts')
       .select('*')
@@ -177,6 +181,7 @@ export class ReceiptService {
   }
 
   static async getReceipt(receiptNumber: string) {
+    const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('receipts')
       .select('*')

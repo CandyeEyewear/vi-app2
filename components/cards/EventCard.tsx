@@ -204,7 +204,7 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
       <View style={styles.content}>
         {/* Title */}
         <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>
-          {event.title}
+          {event.title || ''}
         </Text>
 
         {/* Date & Time */}
@@ -241,7 +241,7 @@ export function EventCard({ event, onPress, onRegisterPress }: EventCardProps) {
             <>
               <MapPin size={14} color={colors.textSecondary} />
               <Text style={[styles.infoText, { color: colors.textSecondary }]} numberOfLines={1}>
-                {event.location}
+                {event.location || ''}
               </Text>
             </>
           )}

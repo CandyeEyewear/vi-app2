@@ -133,12 +133,12 @@ export function CauseCard({ cause, onPress, onDonatePress }: CauseCardProps) {
       <View style={styles.content}>
         {/* Title */}
         <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>
-          {cause.title}
+          {cause.title || ''}
         </Text>
 
         {/* Description */}
         <Text style={[styles.description, { color: colors.textSecondary }]} numberOfLines={2}>
-          {cause.description}
+          {cause.description || ''}
         </Text>
 
         {/* Progress Bar */}

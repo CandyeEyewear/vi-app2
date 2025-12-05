@@ -7,6 +7,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { Post, Comment, ApiResponse, ReactionType, PostReaction, ReactionSummary } from '../types';
 import { supabase } from '../services/supabase';
+import { getCauseById } from '../services/causesService';
 import { useAuth } from './AuthContext';
 
 interface FeedContextType {
@@ -22,6 +23,7 @@ interface FeedContextType {
   shareCauseToFeed: (causeId: string, customMessage?: string, visibility?: 'public' | 'circle') => Promise<ApiResponse<Post>>;
   shareEventToFeed: (eventId: string, customMessage?: string, visibility?: 'public' | 'circle') => Promise<ApiResponse<Post>>;
   deletePost: (postId: string) => Promise<ApiResponse<void>>;
+  updatePost: (postId: string, text: string) => Promise<ApiResponse<Post>>;
   refreshFeed: () => Promise<void>;
   addReaction: (postId: string, reactionType: ReactionType) => Promise<ApiResponse<void>>;
   removeReaction: (postId: string) => Promise<ApiResponse<void>>;
@@ -171,6 +173,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
             if (opportunityData) {
               const opportunity: any = {
                 id: opportunityData.id,
+                slug: opportunityData.slug,
                 title: opportunityData.title,
                 description: opportunityData.description,
                 organizationName: opportunityData.organization_name,
@@ -197,31 +200,10 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
           // Fetch cause data if post references a cause
           if (newPostData.cause_id) {
             console.log('[FEED] 💙 New post with cause, fetching cause data...');
-            const { data: causeData } = await supabase
-              .from('causes')
-              .select('*')
-              .eq('id', newPostData.cause_id)
-              .single();
-
-            if (causeData) {
-              const cause: any = {
-                id: causeData.id,
-                title: causeData.title,
-                description: causeData.description,
-                category: causeData.category,
-                goalAmount: parseFloat(causeData.goal_amount) || 0,
-                amountRaised: parseFloat(causeData.amount_raised) || 0,
-                currency: causeData.currency || 'JMD',
-                donorCount: causeData.donor_count || 0,
-                imageUrl: causeData.image_url,
-                endDate: causeData.end_date,
-                isFeatured: causeData.is_featured,
-                isDonationsPublic: causeData.is_donations_public,
-                status: causeData.status,
-                createdAt: causeData.created_at,
-                updatedAt: causeData.updated_at,
-              };
-              newPost.cause = cause;
+            const causeResponse = await getCauseById(newPostData.cause_id);
+            
+            if (causeResponse.success && causeResponse.data) {
+              newPost.cause = causeResponse.data;
             }
           }
 
@@ -237,6 +219,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
             if (eventData) {
               const event: any = {
                 id: eventData.id,
+                slug: eventData.slug,
                 title: eventData.title,
                 description: eventData.description,
                 category: eventData.category,
@@ -868,6 +851,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
             if (opportunityData) {
               const opportunity: any = {
                 id: opportunityData.id,
+                slug: opportunityData.slug,
                 title: opportunityData.title,
                 description: opportunityData.description,
                 organizationName: opportunityData.organization_name,
@@ -899,31 +883,10 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
         postsWithOpportunities.map(async (post) => {
           if (post.causeId) {
             console.log('[FEED] 💙 Loading cause data for post:', post.id);
-            const { data: causeData } = await supabase
-              .from('causes')
-              .select('*')
-              .eq('id', post.causeId)
-              .single();
-
-            if (causeData) {
-              const cause: any = {
-                id: causeData.id,
-                title: causeData.title,
-                description: causeData.description,
-                category: causeData.category,
-                goalAmount: parseFloat(causeData.goal_amount) || 0,
-                amountRaised: parseFloat(causeData.amount_raised) || 0,
-                currency: causeData.currency || 'JMD',
-                donorCount: causeData.donor_count || 0,
-                imageUrl: causeData.image_url,
-                endDate: causeData.end_date,
-                isFeatured: causeData.is_featured,
-                isDonationsPublic: causeData.is_donations_public,
-                status: causeData.status,
-                createdAt: causeData.created_at,
-                updatedAt: causeData.updated_at,
-              };
-              return { ...post, cause };
+            const causeResponse = await getCauseById(post.causeId);
+            
+            if (causeResponse.success && causeResponse.data) {
+              return { ...post, cause: causeResponse.data };
             }
           }
           return post;
@@ -944,6 +907,7 @@ const postsWithEvents = await Promise.all(
       if (eventData) {
         const event: any = {
           id: eventData.id,
+          slug: eventData.slug,
           title: eventData.title,
           description: eventData.description,
           category: eventData.category,
@@ -1554,16 +1518,14 @@ const postsWithEvents = await Promise.all(
       console.log('[FEED] Custom message:', customMessage || '(none)');
       console.log('[FEED] Visibility:', visibility);
 
-      // Fetch cause details
-      const { data: causeData, error: causeError } = await supabase
-        .from('causes')
-        .select('*')
-        .eq('id', causeId)
-        .single();
+      // Fetch cause details (using service to get recalculated amount_raised)
+      const causeResponse = await getCauseById(causeId);
 
-      if (causeError || !causeData) {
+      if (!causeResponse.success || !causeResponse.data) {
         return { success: false, error: 'Cause not found' };
       }
+
+      const causeData = causeResponse.data;
 
       console.log('[FEED] Creating post with cause reference...');
 
@@ -1574,8 +1536,8 @@ const postsWithEvents = await Promise.all(
           user_id: user.id,
           text: customMessage || '', // User's optional message
           cause_id: causeId, // Reference to cause
-          media_urls: causeData.image_url ? [causeData.image_url] : [],
-          media_types: causeData.image_url ? ['image'] : [],
+          media_urls: causeData.imageUrl ? [causeData.imageUrl] : [],
+          media_types: causeData.imageUrl ? ['image'] : [],
           visibility: visibility,
           likes: [],
           shares: 0,
@@ -1585,22 +1547,8 @@ const postsWithEvents = await Promise.all(
 
       if (error) throw error;
 
-      // Transform cause data to Cause type
-      const cause: any = {
-        id: causeData.id,
-        title: causeData.title,
-        description: causeData.description,
-        category: causeData.category,
-        goalAmount: parseFloat(causeData.goal_amount) || 0,
-        amountRaised: parseFloat(causeData.amount_raised) || 0,
-        currency: causeData.currency || 'JMD',
-        donorCount: causeData.donor_count || 0,
-        imageUrl: causeData.image_url,
-        endDate: causeData.end_date,
-        isFeatured: causeData.is_featured,
-        isDonationsPublic: causeData.is_donations_public,
-        status: causeData.status,
-      };
+      // Use the cause data from the service (already transformed and with recalculated amount_raised)
+      const cause = causeData;
 
       const newPost: Post = {
         id: data.id,
@@ -1808,6 +1756,60 @@ const postsWithEvents = await Promise.all(
   }
 };
 
+  const updatePost = async (postId: string, text: string): Promise<ApiResponse<Post>> => {
+    if (!user) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    try {
+      console.log('[FEED] ✏️ Updating post:', postId);
+      
+      // Check if user is admin or post owner
+      const post = posts.find((p) => p.id === postId);
+      if (!post) {
+        return { success: false, error: 'Post not found' };
+      }
+
+      if (user.role !== 'admin' && post.userId !== user.id) {
+        return { success: false, error: 'Not authorized to edit this post' };
+      }
+
+      // Optimistically update UI
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? { ...p, text: text.trim(), updatedAt: new Date().toISOString() }
+            : p
+        )
+      );
+
+      // Update in database
+      const { data, error } = await supabase
+        .from('posts')
+        .update({
+          text: text.trim(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', postId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      console.log('[FEED] ✅ Post updated successfully');
+      
+      // Reload to get full updated post data
+      await loadFeed();
+      
+      return { success: true, data: post };
+    } catch (error: any) {
+      console.error('[FEED] ❌ Update post error:', error);
+      // Reload feed to restore state if update failed
+      await loadFeed();
+      return { success: false, error: error.message };
+    }
+  };
+
   // ✨ OPTIMISTIC REACTION - Shows instantly!
   const addReaction = async (postId: string, reactionType: ReactionType): Promise<ApiResponse<void>> => {
     if (!user) {
@@ -1985,6 +1987,7 @@ const postsWithEvents = await Promise.all(
         shareCauseToFeed,
         shareEventToFeed,
         deletePost,
+        updatePost,
         refreshFeed,
         addReaction,
         removeReaction,

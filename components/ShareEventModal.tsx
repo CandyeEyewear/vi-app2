@@ -3,7 +3,7 @@
  * Allows users to add an optional comment and choose visibility when sharing an event to their feed
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -13,11 +13,13 @@ import {
   TextInput,
   ScrollView,
   Keyboard,
+  Share,
 } from 'react-native';
-import { X, Send, Users, Globe } from 'lucide-react-native';
+import { X, Send, Users, Globe, Share2 } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
 import { Event } from '../types';
 import SharedEventCard from './SharedEventCard';
+import { formatEventDate, formatEventTime } from '../services/eventsService';
 
 interface ShareEventModalProps {
   visible: boolean;
@@ -35,31 +37,43 @@ export default function ShareEventModal({
   sharing,
 }: ShareEventModalProps) {
   const [comment, setComment] = useState('');
-  const [visibility, setVisibility] = useState<'public' | 'circle'>('public');
+  const [shareType, setShareType] = useState<'public' | 'circle' | 'external'>('public');
 
-  const handleShare = () => {
+  const handleShare = (type: 'public' | 'circle' | 'external') => {
     Keyboard.dismiss();
-    onShare(comment.trim() || undefined, visibility);
-    setComment('');
-    setVisibility('public');
+    
+    if (type === 'external') {
+      handleExternalShare();
+    } else {
+      onShare(comment.trim() || undefined, type);
+      setComment('');
+      setShareType('public');
+      onClose();
+    }
   };
-
-  const { buttonText, buttonIcon } = useMemo(() => {
-    const isCircle = visibility === 'circle';
-    return {
-      buttonText: isCircle ? 'Share to Circle' : 'Share to Feed',
-      buttonIcon: isCircle ? (
-        <Users size={20} color="#FFFFFF" />
-      ) : (
-        <Globe size={20} color="#FFFFFF" />
-      ),
-    };
-  }, [visibility]);
 
   const handleClose = () => {
     setComment('');
-    setVisibility('public');
+    setShareType('public');
     onClose();
+  };
+
+  const handleExternalShare = async () => {
+    try {
+      const shareUrl = `https://vibe.volunteersinc.org/events/${event.slug}`;
+      const message = `Join me at "${event.title}"!\n\n📅 ${formatEventDate(event.eventDate)}\n⏰ ${formatEventTime(event.startTime)}\n📍 ${event.isVirtual ? 'Virtual Event' : event.location}\n\nSave your spot: ${shareUrl}`;
+      
+      await Share.share({
+        message,
+        url: shareUrl,
+        title: `Event: ${event.title}`,
+      });
+      setComment('');
+      setShareType('public');
+      onClose();
+    } catch (error) {
+      console.error('Error sharing externally:', error);
+    }
   };
 
   return (
@@ -96,24 +110,25 @@ export default function ShareEventModal({
               <Text style={styles.charCount}>{comment.length}/500</Text>
             </View>
 
-            {/* Visibility Selection */}
+            {/* Share to Selection */}
             <View style={styles.visibilitySection}>
               <Text style={styles.label}>Share to:</Text>
               <View style={styles.visibilityOptions}>
                 <TouchableOpacity
                   style={[
                     styles.visibilityOption,
-                    visibility === 'public' && styles.visibilityOptionActive,
+                    shareType === 'public' && styles.visibilityOptionActive,
                   ]}
-                  onPress={() => setVisibility('public')}
+                  onPress={() => handleShare('public')}
                   activeOpacity={0.7}
+                  disabled={sharing}
                 >
-                  <Globe size={20} color={visibility === 'public' ? Colors.light.primary : Colors.light.textSecondary} />
+                  <Globe size={20} color={shareType === 'public' ? Colors.light.primary : Colors.light.textSecondary} />
                   <View style={styles.visibilityOptionText}>
                     <Text
                       style={[
                         styles.visibilityOptionTitle,
-                        visibility === 'public' && styles.visibilityOptionTitleActive,
+                        shareType === 'public' && styles.visibilityOptionTitleActive,
                       ]}
                     >
                       General Feed
@@ -122,23 +137,24 @@ export default function ShareEventModal({
                       Everyone can see this
                     </Text>
                   </View>
-                  {visibility === 'public' && <View style={styles.radioActive} />}
+                  {shareType === 'public' && <View style={styles.radioActive} />}
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={[
                     styles.visibilityOption,
-                    visibility === 'circle' && styles.visibilityOptionActive,
+                    shareType === 'circle' && styles.visibilityOptionActive,
                   ]}
-                  onPress={() => setVisibility('circle')}
+                  onPress={() => handleShare('circle')}
                   activeOpacity={0.7}
+                  disabled={sharing}
                 >
-                  <Users size={20} color={visibility === 'circle' ? Colors.light.primary : Colors.light.textSecondary} />
+                  <Users size={20} color={shareType === 'circle' ? Colors.light.primary : Colors.light.textSecondary} />
                   <View style={styles.visibilityOptionText}>
                     <Text
                       style={[
                         styles.visibilityOptionTitle,
-                        visibility === 'circle' && styles.visibilityOptionTitleActive,
+                        shareType === 'circle' && styles.visibilityOptionTitleActive,
                       ]}
                     >
                       My Circle
@@ -147,7 +163,32 @@ export default function ShareEventModal({
                       Only your circle can see this
                     </Text>
                   </View>
-                  {visibility === 'circle' && <View style={styles.radioActive} />}
+                  {shareType === 'circle' && <View style={styles.radioActive} />}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.visibilityOption,
+                    shareType === 'external' && styles.visibilityOptionActive,
+                  ]}
+                  onPress={() => handleShare('external')}
+                  activeOpacity={0.7}
+                >
+                  <Share2 size={20} color={shareType === 'external' ? Colors.light.primary : Colors.light.textSecondary} />
+                  <View style={styles.visibilityOptionText}>
+                    <Text
+                      style={[
+                        styles.visibilityOptionTitle,
+                        shareType === 'external' && styles.visibilityOptionTitleActive,
+                      ]}
+                    >
+                      External
+                    </Text>
+                    <Text style={styles.visibilityOptionSubtitle}>
+                      Share via other apps
+                    </Text>
+                  </View>
+                  {shareType === 'external' && <View style={styles.radioActive} />}
                 </TouchableOpacity>
               </View>
             </View>
@@ -158,28 +199,6 @@ export default function ShareEventModal({
             {/* Event Preview */}
             <SharedEventCard event={event} />
           </ScrollView>
-
-          {/* Share Button */}
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity
-              style={[styles.shareButton, sharing && styles.shareButtonDisabled]}
-              onPress={handleShare}
-              disabled={sharing}
-              activeOpacity={0.7}
-            >
-              {sharing ? (
-                <>
-                  <Send size={20} color="#FFFFFF" />
-                  <Text style={styles.shareButtonText}>Sharing...</Text>
-                </>
-              ) : (
-                <>
-                  {buttonIcon}
-                  <Text style={styles.shareButtonText}>{buttonText}</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
         </View>
       </View>
     </Modal>
@@ -294,29 +313,6 @@ const styles = StyleSheet.create({
     color: Colors.light.textSecondary,
     marginLeft: 16,
     marginBottom: 8,
-  },
-  buttonContainer: {
-    padding: 16,
-    paddingBottom: 34,
-    borderTopWidth: 1,
-    borderTopColor: Colors.light.border,
-  },
-  shareButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: Colors.light.primary,
-    padding: 16,
-    borderRadius: 12,
-  },
-  shareButtonDisabled: {
-    opacity: 0.6,
-  },
-  shareButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
   },
 });
 

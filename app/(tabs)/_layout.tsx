@@ -1,8 +1,9 @@
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { Home, MessageCircle, Compass, User } from 'lucide-react-native';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useColorScheme, View, Text, StyleSheet } from 'react-native';
 import { useMessaging } from '../../contexts/MessagingContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { Colors } from '../../constants/colors';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,8 +15,18 @@ export default function TabsLayout() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const { totalUnreadCount, refreshConversations } = useMessaging();
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useResponsive();
+
+  // Redirect to login if not authenticated (extra safeguard)
+  useEffect(() => {
+    if (!authLoading && !user) {
+      console.log('[TABS LAYOUT] User not authenticated, redirecting to login');
+      router.replace('/login');
+    }
+  }, [authLoading, user, router]);
 
   // Refresh when the tab bar becomes focused/visible
   useFocusEffect(
@@ -60,9 +71,9 @@ export default function TabsLayout() {
           borderTopColor: colors.border,
           borderTopWidth: 1,
           // Smaller height on mobile web (icons only)
-          height: isDesktop ? 0 : isMobileWeb ? 50 : 70,
-          // Less padding needed without text
-          paddingBottom: isDesktop ? 0 : isMobileWeb ? 8 : 12,
+          height: isDesktop ? 0 : isMobileWeb ? 50 + insets.bottom : 70 + insets.bottom,
+          // Less padding needed without text, but add safe area bottom inset
+          paddingBottom: isDesktop ? 0 : (isMobileWeb ? 8 : 12) + insets.bottom,
           paddingTop: isDesktop ? 0 : isMobileWeb ? 8 : 6,
           // Hide tab bar on desktop (>= 992px)
           ...(isDesktop && {

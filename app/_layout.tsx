@@ -3,8 +3,9 @@
  * Wraps the entire app with providers
  */
 
-import { useEffect, useRef } from 'react';
-import { Stack, useRouter } from 'expo-router';
+
+import React, { useEffect, useRef, useState } from 'react';
+import { Stack, useRouter, useSegments, usePathname } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import * as Linking from 'expo-linking';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -30,6 +31,8 @@ try {
 
 function AppContent() {
   const router = useRouter();
+  const segments = useSegments();
+  const pathname = usePathname();
   const { loading: authLoading, user } = useAuth();
   const responseListener = useRef<any>(null);
   const { width } = useWindowDimensions();
@@ -37,6 +40,45 @@ function AppContent() {
   // Show WebNavigation on desktop (>= 992px) when user is logged in
   const isDesktop = isWeb && width >= 992;
   const showWebNav = isDesktop && !!user;
+
+  // Define public routes that don't require authentication
+  const publicRoutes = ['login', 'register', 'forgot-password', 'reset-password'];
+  
+  // Get current route to check if it's public
+  const currentRoute = segments[0] || pathname?.split('/')[1] || '';
+  const normalizedPath = pathname?.toLowerCase() || '';
+  const isPublicRoute = 
+    publicRoutes.includes(currentRoute) || 
+    normalizedPath.includes('/login') || 
+    normalizedPath.includes('/register') || 
+    normalizedPath.includes('/forgot-password') || 
+    normalizedPath.includes('/reset-password') ||
+    currentRoute === '' || // Root path
+    pathname === '/' || // Root path
+    pathname === '';
+
+  // Redirect unauthenticated users to login (except for public routes)
+  useEffect(() => {
+    if (!authLoading) {
+      // If user is not logged in and trying to access a protected route
+      if (!user && !isPublicRoute) {
+        console.log('[AUTH REDIRECT] User not authenticated, redirecting to login', {
+          currentRoute,
+          pathname,
+          isPublicRoute,
+        });
+        router.replace('/login');
+        return;
+      }
+      
+      // If user is logged in but on login/register page, redirect to feed
+      if (user && isPublicRoute && (currentRoute === 'login' || currentRoute === 'register' || normalizedPath.includes('/login') || normalizedPath.includes('/register'))) {
+        console.log('[AUTH REDIRECT] User authenticated, redirecting from login/register to feed');
+        router.replace('/feed');
+        return;
+      }
+    }
+  }, [authLoading, user, isPublicRoute, currentRoute, router, pathname, normalizedPath]);
 
   useEffect(() => {
     if (!authLoading && SplashScreen) {

@@ -24,7 +24,12 @@ interface OpportunityCardProps {
  * Render text with highlighted search terms
  * Highlighted terms are marked with **text**
  */
-const renderHighlightedText = (text: string, color: string, style: any, numberOfLines?: number) => {
+const renderHighlightedText = (text: string | undefined | null, color: string, style: any, numberOfLines?: number) => {
+  // Handle undefined/null/empty text
+  if (!text || typeof text !== 'string') {
+    return <Text style={[style, { color }]} numberOfLines={numberOfLines} />;
+  }
+
   if (!text.includes('**')) {
     return <Text style={[style, { color }]} numberOfLines={numberOfLines}>{text}</Text>;
   }
@@ -130,7 +135,7 @@ export function OpportunityCard({ opportunity, onPress, onShare }: OpportunityCa
 
         <View style={styles.orgContainer}>
           <Text style={[styles.orgName, { color: colors.textSecondary }]}>
-            {opportunity.organizationName}
+            {opportunity.organizationName || ''}
           </Text>
         </View>
 
@@ -138,7 +143,7 @@ export function OpportunityCard({ opportunity, onPress, onShare }: OpportunityCa
           <View style={styles.detailRow}>
             <MapPin size={14} color={colors.textSecondary} />
             <Text style={[styles.detailText, { color: colors.textSecondary }]} numberOfLines={1}>
-              {opportunity.location}
+              {opportunity.location || ''}
             </Text>
           </View>
           <View style={styles.detailRow}>

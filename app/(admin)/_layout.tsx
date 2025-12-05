@@ -20,13 +20,20 @@ export default function AdminLayout() {
 
   useEffect(() => {
     if (!loading) {
-      // Check if user is authenticated and is admin
-      if (!user || !isAdmin) {
-        // Redirect to login or home if not admin
-        const isAdminRoute = segments[0] === '(admin)';
-        if (isAdminRoute) {
-          router.replace('/(tabs)/profile');
-        }
+      // Check if user is authenticated
+      if (!user) {
+        // Redirect to login if not authenticated
+        console.log('[ADMIN LAYOUT] User not authenticated, redirecting to login');
+        router.replace('/login');
+        return;
+      }
+      
+      // Check if user is admin
+      if (!isAdmin) {
+        // Redirect to profile if not admin
+        console.log('[ADMIN LAYOUT] User not admin, redirecting to profile');
+        router.replace('/(tabs)/profile');
+        return;
       }
     }
   }, [user, isAdmin, loading, segments, router]);

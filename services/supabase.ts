@@ -1,47 +1,34 @@
-/**
- * Supabase Client
- * Main client for interacting with Supabase backend
- */
-
 import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '../config/supabase.config';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Create Supabase client with Realtime configuration
+// Client-side Supabase (for app usage)
 export const supabase = createClient(
   supabaseConfig.url,
   supabaseConfig.anonKey,
   {
     auth: {
-      // Store session in AsyncStorage for React Native
-      storage: AsyncStorage,
+      storage: typeof window !== 'undefined' ? undefined : null,
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
     },
-    realtime: {
-      // Enable presence tracking and broadcast features
-      params: {
-        eventsPerSecond: 10,
-      },
-    },
-    // Enable global realtime features
-    global: {
-      headers: {
-        'X-Client-Info': 'vibe-app',
-      },
-    },
   }
 );
 
-/**
- * Helper function to check if Supabase is properly configured
- */
-export const isSupabaseConfigured = (): boolean => {
-  return (
-    supabaseConfig.url !== 'YOUR_SUPABASE_URL_HERE' &&
-    supabaseConfig.anonKey !== 'YOUR_SUPABASE_ANON_KEY_HERE'
-  );
+// Server-side Supabase (for API/webhook usage)
+export const supabaseServer = createClient(
+  process.env.SUPABASE_URL || supabaseConfig.url,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+// Auto-detect which client to use
+export const getSupabaseClient = () => {
+  // If we're in a server environment (API routes, webhooks)
+  if (typeof window === 'undefined' && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return supabaseServer;
+  }
+  // Otherwise use regular client
+  return supabase;
 };
 
 export default supabase;

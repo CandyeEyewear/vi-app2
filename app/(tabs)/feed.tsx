@@ -459,7 +459,7 @@ const renderTabs = () => (
         data={sortedPosts}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <FeedPostCard post={item} />}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingBottom: 12 + insets.bottom }]}
         ListHeaderComponent={() => {
           return <OrganizationPaymentBanner />;
         }}

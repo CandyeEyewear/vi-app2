@@ -101,7 +101,7 @@ export default function DonorsScreen() {
     if (!id) return;
 
     try {
-      const response = await getCauseById(id);
+      const response = await getCauseById(id, undefined);
       if (response.success && response.data) {
         setCause(response.data);
       }

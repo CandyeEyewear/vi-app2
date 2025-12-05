@@ -38,7 +38,7 @@ import {
 import { Colors } from '../../../constants/colors';
 import { Cause, CauseStatus } from '../../../types';
 import { supabase } from '../../../services/supabase';
-import { formatCurrency, getCauseProgress } from '../../../services/causesService';
+import { formatCurrency, getCauseProgress, getCauses } from '../../../services/causesService';
 import { useAuth } from '../../../contexts/AuthContext';
 import CustomAlert from '../../../components/CustomAlert';
 
@@ -244,43 +244,19 @@ export default function ManageCausesScreen() {
   // Fetch causes
   const fetchCauses = useCallback(async () => {
     try {
-      let query = supabase
-        .from('causes')
-        .select('*')
-        .order('created_at', { ascending: false });
+      setLoading(true);
+      
+      // Use getCauses service which automatically recalculates amount_raised from donations
+      const response = await getCauses({
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        userId: undefined, // Admin sees all causes
+      });
 
-      if (statusFilter !== 'all') {
-        query = query.eq('status', statusFilter);
+      if (response.success && response.data) {
+        setCauses(response.data);
+      } else {
+        throw new Error(response.error || 'Failed to load causes');
       }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      // Transform to camelCase
-      const transformedCauses: Cause[] = (data || []).map((row: any) => ({
-        id: row.id,
-        title: row.title,
-        description: row.description,
-        category: row.category,
-        imageUrl: row.image_url,
-        goalAmount: parseFloat(row.goal_amount) || 0,
-        amountRaised: parseFloat(row.amount_raised) || 0,
-        currency: row.currency || 'JMD',
-        startDate: row.start_date,
-        endDate: row.end_date,
-        isDonationsPublic: row.is_donations_public ?? true,
-        allowRecurring: row.allow_recurring ?? true,
-        minimumDonation: parseFloat(row.minimum_donation) || 0,
-        status: row.status,
-        isFeatured: row.is_featured ?? false,
-        donorCount: row.donor_count || 0,
-        createdBy: row.created_by,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      }));
-
-      setCauses(transformedCauses);
     } catch (error) {
       console.error('Error fetching causes:', error);
       showAlert('error', 'Error', 'Failed to load causes');

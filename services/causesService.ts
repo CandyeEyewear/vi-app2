@@ -27,6 +27,30 @@ const isValidUUID = (str: string): boolean => {
 // ==================== HELPER FUNCTIONS ====================
 
 /**
+ * Calculate real-time amount_raised from completed donations for a cause
+ */
+async function calculateAmountRaised(causeId: string): Promise<number> {
+  try {
+    const { data: donationsData, error: donationsError } = await supabase
+      .from('donations')
+      .select('amount')
+      .eq('cause_id', causeId)
+      .eq('payment_status', 'completed');
+
+    if (donationsError || !donationsData) {
+      return 0;
+    }
+
+    return donationsData.reduce((sum, donation) => {
+      return sum + (parseFloat(donation.amount) || 0);
+    }, 0);
+  } catch (error) {
+    console.error('Error calculating amount raised:', error);
+    return 0;
+  }
+}
+
+/**
  * Transform database row (snake_case) to Cause object (camelCase)
  */
 function transformCause(row: any): Cause {
@@ -171,13 +195,29 @@ export async function getCauses(options?: {
       `)
       .order('created_at', { ascending: false });
 
-    // Apply filters
+    // Apply status filters
+    // For non-admin users: Always filter to only show active causes
+    // Admins can see all statuses if explicitly requested
     if (options?.status) {
-      query = query.eq('status', options.status);
+      if (isAdmin) {
+        // Admins can see any status they request
+        query = query.eq('status', options.status);
+      } else {
+        // Non-admin users can only see active causes, regardless of requested status
+        query = query.eq('status', 'active');
+      }
     } else {
-      // Default to active causes
+      // Default to active causes for everyone
       query = query.eq('status', 'active');
     }
+
+    // For non-admin users: Hide causes that have passed their end date
+    if (!isAdmin) {
+      const today = new Date().toISOString().split('T')[0]; // Get today's date in YYYY-MM-DD format
+      // Only show causes where end_date is null OR end_date >= today
+      query = query.or(`end_date.is.null,end_date.gte.${today}`);
+    }
+    // Admins see all causes regardless of end date
 
     // Filter visibility: non-premium users only see public items
     // Admins see everything (no filter)
@@ -210,9 +250,16 @@ export async function getCauses(options?: {
 
     if (error) throw error;
 
-    const causes = data?.map(transformCause) || [];
+    // Recalculate amount_raised from actual donations for all causes
+    const causesWithRecalculatedAmounts = await Promise.all(
+      (data || []).map(async (cause) => {
+        const realAmountRaised = await calculateAmountRaised(cause.id);
+        cause.amount_raised = realAmountRaised.toString();
+        return transformCause(cause);
+      })
+    );
 
-    return { success: true, data: causes };
+    return { success: true, data: causesWithRecalculatedAmounts };
   } catch (error) {
     console.error('Error fetching causes:', error);
     return { success: false, error: 'Failed to fetch causes' };
@@ -222,8 +269,23 @@ export async function getCauses(options?: {
 /**
  * Fetch a single cause by identifier (UUID or slug)
  */
-export async function getCauseById(identifier: string): Promise<ApiResponse<Cause>> {
+export async function getCauseById(
+  identifier: string,
+  userId?: string
+): Promise<ApiResponse<Cause>> {
   try {
+    // Check if user is admin (if userId provided)
+    let isAdmin = false;
+    if (userId) {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', userId)
+        .single();
+      
+      isAdmin = userData?.role === 'admin';
+    }
+
     const baseQuery = supabase
       .from('causes')
       .select(`
@@ -231,9 +293,17 @@ export async function getCauseById(identifier: string): Promise<ApiResponse<Caus
         creator:users!created_by(id, full_name, avatar_url)
       `);
 
-    const finalQuery = isValidUUID(identifier)
+    let finalQuery = isValidUUID(identifier)
       ? baseQuery.eq('id', identifier)
       : baseQuery.eq('slug', identifier);
+
+    // For non-admin users (or when userId is not provided): Only allow access to active causes that haven't passed their end date
+    if (!isAdmin) {
+      finalQuery = finalQuery.eq('status', 'active');
+      
+      const today = new Date().toISOString().split('T')[0];
+      finalQuery = finalQuery.or(`end_date.is.null,end_date.gte.${today}`);
+    }
 
     const { data, error } = await finalQuery.single();
 
@@ -243,6 +313,12 @@ export async function getCauseById(identifier: string): Promise<ApiResponse<Caus
       return { success: false, error: 'Cause not found' };
     }
 
+    // Calculate real-time amount_raised from completed donations
+    const realAmountRaised = await calculateAmountRaised(data.id);
+    
+    // Update the data with real-time amount_raised (always set, even if 0)
+    data.amount_raised = realAmountRaised.toString();
+
     return { success: true, data: transformCause(data) };
   } catch (error) {
     console.error('Error fetching cause:', error);
@@ -250,8 +326,11 @@ export async function getCauseById(identifier: string): Promise<ApiResponse<Caus
   }
 }
 
-export async function getCauseBySlug(identifier: string): Promise<ApiResponse<Cause>> {
-  return getCauseById(identifier);
+export async function getCauseBySlug(
+  identifier: string,
+  userId?: string
+): Promise<ApiResponse<Cause>> {
+  return getCauseById(identifier, userId);
 }
 
 /**
@@ -391,7 +470,7 @@ export async function getCauseDonations(
   }
 ): Promise<ApiResponse<Donation[]>> {
   try {
-    const causeResult = await getCauseById(identifier);
+    const causeResult = await getCauseById(identifier, undefined);
 
     if (!causeResult.success || !causeResult.data) {
       return { success: false, error: causeResult.error || 'Cause not found' };

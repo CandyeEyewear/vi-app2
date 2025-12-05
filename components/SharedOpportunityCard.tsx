@@ -11,12 +11,14 @@ import {
   Image,
   StyleSheet,
   useColorScheme,
+  Alert,
 } from 'react-native';
 import { MapPin, Clock, Users, CheckCircle, ExternalLink } from 'lucide-react-native';
 import { Opportunity } from '../types';
 import { Colors } from '../constants/colors';
 import { useRouter } from 'expo-router';
 import { AnimatedPressable } from './AnimatedPressable';
+import { useAuth } from '../contexts/AuthContext';
 
 interface SharedOpportunityCardProps {
   opportunity: Opportunity;
@@ -26,6 +28,7 @@ export default function SharedOpportunityCard({ opportunity }: SharedOpportunity
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const router = useRouter();
+  const { isAdmin } = useAuth();
 
   const getCategoryColor = (category: Opportunity['category']) => {
     const categoryColors = {
@@ -45,7 +48,33 @@ export default function SharedOpportunityCard({ opportunity }: SharedOpportunity
   const spotsLeft = opportunity.spotsAvailable;
   const isLimited = spotsLeft <= 5;
 
+  // Check if opportunity has passed its end date
+  const isExpired = (): boolean => {
+    const endDate = opportunity.dateEnd || opportunity.date;
+    if (!endDate) return false;
+    const end = new Date(endDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+    return end < today;
+  };
+
   const handlePress = () => {
+    if (!opportunity.slug) {
+      console.error('Opportunity slug is missing, cannot navigate');
+      return;
+    }
+
+    // Check if opportunity is expired and user is not admin
+    if (isExpired() && !isAdmin) {
+      Alert.alert(
+        'Opportunity No Longer Available',
+        'This opportunity has passed its end date and is no longer available for viewing.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     router.push(`/opportunity/${opportunity.slug}` as any);
   };
 

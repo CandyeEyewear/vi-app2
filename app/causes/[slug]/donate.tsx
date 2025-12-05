@@ -772,7 +772,7 @@ export default function DonateScreen() {
       if (!id) return;
 
       try {
-        const response = await getCauseById(id);
+        const response = await getCauseById(id, user?.id);
         if (response.success && response.data) {
           setCause(response.data);
           if (user) {

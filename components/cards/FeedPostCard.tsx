@@ -20,6 +20,7 @@ import {
   Share,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { Heart, MessageCircle, Share2, Trash2, Megaphone, Pin, Flag, MoreVertical, Copy, Edit } from 'lucide-react-native';
@@ -49,7 +50,7 @@ interface FeedPostCardProps {
 
 export default function FeedPostCard({ post }: FeedPostCardProps) {
   const { user, isAdmin } = useAuth();
-  const { likePost, unlikePost, addComment, sharePost, shareToFeed, deletePost } = useFeed();
+  const { likePost, unlikePost, addComment, sharePost, shareToFeed, deletePost, updatePost } = useFeed();
   const insets = useSafeAreaInsets();
   
   const [showCommentModal, setShowCommentModal] = useState(false);
@@ -71,6 +72,9 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
   const [postToShare, setPostToShare] = useState<Post | null>(null);
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editText, setEditText] = useState('');
+  const [editing, setEditing] = useState(false);
 
   const isLiked = user ? post.likes.includes(user.id) : false;
   const canDelete = user && (isAdmin || post.userId === user.id);
@@ -131,6 +135,25 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
   };
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const handleEdit = async () => {
+    if (!editText.trim()) {
+      showAlert('Error', 'Post text cannot be empty', 'error');
+      return;
+    }
+
+    setEditing(true);
+    const response = await updatePost(post.id, editText);
+    setEditing(false);
+
+    if (response.success) {
+      setShowEditModal(false);
+      setEditText('');
+      showAlert('Success', 'Post updated successfully', 'success');
+    } else {
+      showAlert('Error', response.error || 'Failed to update post', 'error');
+    }
+  };
 
   const handleShare = () => {
     setShowShareModal(true);
@@ -236,7 +259,7 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
       isAnnouncement && styles.announcementCard
     ]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isAnnouncement && styles.announcementHeader]}>
         <TouchableOpacity 
           style={styles.avatarContainer}
           onPress={() => handleUserTap(post.user.id, post.user.fullName)}
@@ -287,7 +310,7 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
       )}
 
       {/* Content - Text Only (username already in header) */}
-      <LinkText text={post.text} style={styles.text} />
+      <LinkText text={post.text} style={[styles.text, isAnnouncement && styles.announcementText]} />
 
       {/* NEW: Render Shared Post if this is a share */}
       {post.sharedPost && (
@@ -706,7 +729,8 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
                 style={styles.moreMenuItem}
                 onPress={() => {
                   setShowMoreMenu(false);
-                  // TODO: Implement edit functionality
+                  setEditText(post.text);
+                  setShowEditModal(true);
                 }}
               >
                 <Edit size={20} color={Colors.light.text} />
@@ -774,6 +798,64 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
           userName={selectedUser.name}
         />
       )}
+
+      {/* Edit Post Modal */}
+      <Modal
+        visible={showEditModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.editModalContainer}
+        >
+          <TouchableOpacity
+            style={styles.editModalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowEditModal(false)}
+          />
+          <View style={[styles.editModalContent, { backgroundColor: Colors.light.background }]}>
+            <View style={styles.editModalHeader}>
+              <Text style={[styles.editModalTitle, { color: Colors.light.text }]}>Edit Post</Text>
+              <TouchableOpacity
+                onPress={() => setShowEditModal(false)}
+                style={styles.editModalCloseButton}
+              >
+                <Text style={[styles.editModalCloseText, { color: Colors.light.textSecondary }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={[styles.editModalInput, { color: Colors.light.text, borderColor: Colors.light.border }]}
+              value={editText}
+              onChangeText={setEditText}
+              placeholder="What's on your mind?"
+              placeholderTextColor={Colors.light.textSecondary}
+              multiline
+              numberOfLines={6}
+              textAlignVertical="top"
+              autoFocus
+            />
+            <TouchableOpacity
+              style={[
+                styles.editModalSaveButton,
+                { backgroundColor: Colors.light.primary },
+                editing && styles.editModalSaveButtonDisabled,
+              ]}
+              onPress={handleEdit}
+              disabled={editing || !editText.trim()}
+            >
+              {editing ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.editModalSaveText}>Save</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -792,12 +874,21 @@ const styles = StyleSheet.create({
   },
   announcementCard: {
     backgroundColor: Colors.light.primary + '08',
+    borderWidth: 0.5,
+    borderColor: Colors.light.border + '40',
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
     paddingBottom: 8,
+  },
+  announcementHeader: {
+    padding: 16,
+    paddingBottom: 12,
   },
   avatarContainer: {
     marginRight: 12,
@@ -869,9 +960,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     marginHorizontal: 16,
-    marginBottom: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    marginBottom: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     backgroundColor: Colors.light.primary + '15',
     borderRadius: 8,
     alignSelf: 'flex-start',
@@ -888,6 +979,10 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
     paddingHorizontal: 12,
     marginBottom: 8,
+  },
+  announcementText: {
+    paddingHorizontal: 16,
+    marginBottom: 12,
   },
   media: {
     width: width - 2,
@@ -1102,6 +1197,62 @@ const styles = StyleSheet.create({
   },
   sendButtonText: {
     fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  editModalContainer: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  editModalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  editModalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 40,
+    maxHeight: '80%',
+  },
+  editModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  editModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  editModalCloseButton: {
+    padding: 4,
+  },
+  editModalCloseText: {
+    fontSize: 16,
+  },
+  editModalInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 16,
+    minHeight: 120,
+    maxHeight: 300,
+    marginBottom: 16,
+  },
+  editModalSaveButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editModalSaveButtonDisabled: {
+    opacity: 0.5,
+  },
+  editModalSaveText: {
+    color: '#FFFFFF',
+    fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
   },

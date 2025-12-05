@@ -627,8 +627,7 @@ export default function ConversationScreen() {
                 
                 const result = await ImagePicker.launchCameraAsync({
                   mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                  allowsEditing: true,
-                  aspect: [4, 3],
+                  allowsEditing: false,
                   quality: 0.8,
                 });
                 if (!result.canceled && result.assets[0]) {
@@ -648,8 +647,7 @@ export default function ConversationScreen() {
                 
                 const result = await ImagePicker.launchImageLibraryAsync({
                   mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                  allowsEditing: true,
-                  aspect: [4, 3],
+                  allowsEditing: false,
                   quality: 0.8,
                 });
                 if (!result.canceled && result.assets[0]) {
@@ -670,11 +668,12 @@ export default function ConversationScreen() {
     try {
       setUploadingImage(true);
 
-      // Compress and resize image
+      // Compress image with maximum compression while maintaining good quality
+      // Resize only if image is larger than 2560px to maintain quality, then compress aggressively
       const manipulatedImage = await manipulateAsync(
         uri,
-        [{ resize: { width: 1920 } }],
-        { compress: 0.8, format: SaveFormat.JPEG }
+        [{ resize: { width: 2560 } }], // Higher max width for better quality, but still limits size
+        { compress: 0.65, format: SaveFormat.JPEG } // Lower compress value = more compression, but 0.65 maintains good visual quality
       );
 
       // Create filename
@@ -956,14 +955,8 @@ export default function ConversationScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
-        enabled={Platform.OS === 'ios'}
-      >
-        {/* Header */}
-        <View style={[styles.header, { paddingTop: 12 }]}>
+      {/* Header - Fixed at top, never moves */}
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ChevronLeft size={28} color={Colors.light.primary} />
         </TouchableOpacity>
@@ -1002,89 +995,99 @@ export default function ConversationScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Messages */}
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.light.primary} />
-        </View>
-      ) : (
-        <>
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            keyExtractor={(item) => String(item.id)}
-            renderItem={renderMessage}
-            contentContainerStyle={[
-              styles.messagesList,
-              { paddingBottom: 16 } // Fixed padding, keyboard handled by input container
-            ]}
-            inverted={true}
-            onEndReached={handleLoadMore}
-            onEndReachedThreshold={0.5}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
-            ListFooterComponent={
-              loadingMore ? (
-                <View style={styles.loadingMoreContainer}>
-                  <ActivityIndicator size="small" color={Colors.light.primary} />
-                  <Text style={styles.loadingMoreText}>Loading older messages...</Text>
-                </View>
-              ) : !hasMore && messages.length > 0 ? (
-                <View style={styles.endOfMessagesContainer}>
-                  <Text style={styles.endOfMessagesText}>• Beginning of conversation •</Text>
-                </View>
-              ) : null
-            }
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No messages yet</Text>
-                <Text style={styles.emptySubtext}>Start the conversation!</Text>
-              </View>
-            }
-          />
-          {otherUserTyping && otherUser && (
-            <TypingIndicator userName={otherUser.fullName} />
-          )}
-        </>
-      )}
-
-      {/* Reply Preview Bar - shows ABOVE input */}
-      {replyingTo && (
-        <View style={styles.replyBar}>
-          <View style={styles.replyBarContent}>
-            <View style={styles.replyIndicator} />
-            <View style={styles.replyTextContainer}>
-              <Text style={styles.replyName}>
-                Replying to {replyingTo.senderId === user?.id ? 'yourself' : otherUser?.fullName || 'User'}
-              </Text>
-              <Text style={styles.replyText} numberOfLines={1}>
-                {replyingTo.text}
-              </Text>
-            </View>
-          </View>
-          <TouchableOpacity 
-            onPress={() => setReplyingTo(null)}
-            style={styles.replyCancelButton}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <X size={20} color={Colors.light.textSecondary} />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Input Container - WhatsApp Style with ultra smooth keyboard transition */}
-      <Animated.View
-        style={[
-          styles.inputContainer,
-          {
-            paddingBottom: keyboardAnim.interpolate({
-              inputRange: [0, 1000],
-              outputRange: [insets.bottom, 0],
-              extrapolate: 'clamp',
-            }),
-          },
-        ]}
+      {/* Messages and Input - Only this section moves with keyboard */}
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={0}
+        enabled={Platform.OS === 'ios'}
       >
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.light.primary} />
+          </View>
+        ) : (
+          <>
+            <FlatList
+              ref={flatListRef}
+              data={messages}
+              keyExtractor={(item) => String(item.id)}
+              renderItem={renderMessage}
+              contentContainerStyle={[
+                styles.messagesList,
+                {
+                  paddingTop: headerHeight, // Space for fixed header
+                  paddingBottom: 16, // Fixed padding, keyboard handled by input container
+                },
+              ]}
+              inverted={true}
+              onEndReached={handleLoadMore}
+              onEndReachedThreshold={0.5}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              ListFooterComponent={
+                loadingMore ? (
+                  <View style={styles.loadingMoreContainer}>
+                    <ActivityIndicator size="small" color={Colors.light.primary} />
+                    <Text style={styles.loadingMoreText}>Loading older messages...</Text>
+                  </View>
+                ) : !hasMore && messages.length > 0 ? (
+                  <View style={styles.endOfMessagesContainer}>
+                    <Text style={styles.endOfMessagesText}>• Beginning of conversation •</Text>
+                  </View>
+                ) : null
+              }
+              ListEmptyComponent={
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>No messages yet</Text>
+                  <Text style={styles.emptySubtext}>Start the conversation!</Text>
+                </View>
+              }
+            />
+            {otherUserTyping && otherUser && (
+              <TypingIndicator userName={otherUser.fullName} />
+            )}
+          </>
+        )}
+
+        {/* Reply Preview Bar - shows ABOVE input */}
+        {replyingTo && (
+          <View style={styles.replyBar}>
+            <View style={styles.replyBarContent}>
+              <View style={styles.replyIndicator} />
+              <View style={styles.replyTextContainer}>
+                <Text style={styles.replyName}>
+                  Replying to {replyingTo.senderId === user?.id ? 'yourself' : otherUser?.fullName || 'User'}
+                </Text>
+                <Text style={styles.replyText} numberOfLines={1}>
+                  {replyingTo.text}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity 
+              onPress={() => setReplyingTo(null)}
+              style={styles.replyCancelButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <X size={20} color={Colors.light.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Input Container - WhatsApp Style with ultra smooth keyboard transition */}
+        <Animated.View
+          style={[
+            styles.inputContainer,
+            {
+              paddingBottom: keyboardAnim.interpolate({
+                inputRange: [0, 1000],
+                outputRange: [Math.max(insets.bottom, 8), 8],
+                extrapolate: 'clamp',
+              }),
+              marginBottom: Platform.OS === 'android' ? keyboardHeight : 0,
+            },
+          ]}
+        >
         <View style={styles.inputWrapper}>
           {/* Emoji Button - Always visible */}
           <TouchableOpacity
@@ -1309,6 +1312,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: WHATSAPP_COLORS.background,
   },
+  keyboardAvoidingContainer: {
+    flex: 1,
+    backgroundColor: WHATSAPP_COLORS.background,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1317,6 +1324,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.background,
     borderBottomWidth: 1,
     borderBottomColor: Colors.light.border,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1000,
   },
   backButton: {
     marginRight: 8,

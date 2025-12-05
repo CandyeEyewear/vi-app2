@@ -518,6 +518,9 @@ function EventInfoCard({
       friction: 6,
     }).start();
 
+  // Make title blue if it's clickable (has onPress) to indicate it's a link
+  const titleColor = onPress ? colors.primary : colors.text;
+
   const cardContent = (
     <Animated.View
       style={[
@@ -534,7 +537,7 @@ function EventInfoCard({
       <View style={[styles.infoIcon, { backgroundColor: colors.primarySoft }]}>{icon}</View>
       <View style={styles.infoContent}>
         <View style={styles.infoTitleRow}>
-          <Text style={[styles.infoTitle, { color: colors.text }]}>{title}</Text>
+          <Text style={[styles.infoTitle, { color: titleColor }]}>{title}</Text>
           {badge}
         </View>
         {subtitle && (
@@ -543,7 +546,7 @@ function EventInfoCard({
           </Text>
         )}
       </View>
-      {onPress && <ExternalLink size={20} color={colors.textSecondary} />}
+      {onPress && <ExternalLink size={20} color={colors.primary} />}
     </Animated.View>
   );
 

@@ -844,7 +844,9 @@ export default function DiscoverScreen() {
       if (queryError) throw queryError;
 
       const opportunitiesData: Opportunity[] = (data || []).map((opp) => ({
-        id: opp.id, title: opp.title, description: opp.description, organizationName: opp.organization_name,
+        id: opp.id,
+        slug: opp.slug,
+        title: opp.title, description: opp.description, organizationName: opp.organization_name,
         organizationVerified: opp.organization_verified, category: opp.category, location: opp.location,
         latitude: opp.latitude, longitude: opp.longitude, mapLink: opp.map_link, date: opp.date,
         dateStart: opp.date_start, dateEnd: opp.date_end, timeStart: opp.time_start, timeEnd: opp.time_end,
@@ -911,7 +913,12 @@ export default function DiscoverScreen() {
   const suggestions = useMemo(() => opportunities.length === 0 || !debouncedSearchQuery || debouncedSearchQuery.trim().length < 2 ? [] : generateSearchSuggestions(opportunities, debouncedSearchQuery, 5), [debouncedSearchQuery, opportunities]);
 
   // Handlers
-  const handleOpportunityPress = useCallback((opportunity: Opportunity) => { trackSearchAnalytics(searchQuery, filteredOpportunities.length, opportunity.id); router.push(`/opportunity/${opportunity.slug}`); }, [router, searchQuery, filteredOpportunities.length]);
+  const handleOpportunityPress = useCallback((opportunity: Opportunity) => {
+    trackSearchAnalytics(searchQuery, filteredOpportunities.length, opportunity.id);
+    // Use slug if available, otherwise fallback to ID
+    const identifier = opportunity.slug || opportunity.id;
+    router.push(`/opportunity/${identifier}` as any);
+  }, [router, searchQuery, filteredOpportunities.length]);
   const handleToggleSave = useCallback(async (opportunity: Opportunity) => {
     if (!user) return;
     const isSaved = savedOpportunityIds.includes(opportunity.id);
@@ -1017,7 +1024,11 @@ export default function DiscoverScreen() {
                 <OpportunityCard opportunity={item} onPress={handleOpportunityPress} />
               </Swipeable>
             )}
-            contentContainerStyle={[styles.listContent, width >= 600 && styles.listContentGrid]}
+            contentContainerStyle={[
+              styles.listContent,
+              width >= 600 && styles.listContentGrid,
+              { paddingBottom: 12 + insets.bottom },
+            ]}
             columnWrapperStyle={width >= 600 ? styles.columnWrapper : undefined}
             refreshControl={<RefreshControl refreshing={loading && !loadingMore} onRefresh={() => loadOpportunities()} tintColor={colors.primary} colors={[colors.primary]} />}
             ListEmptyComponent={renderEmptyComponent}
