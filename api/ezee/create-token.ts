@@ -3,6 +3,8 @@
 * Creates a payment token for one-time payments
 * WITH CORS SUPPORT
  * Uses official eZeePayments API format with form data
+ * 
+ * DEBUGGING VERSION - Added detailed logging
 */
 
 import { createClient } from '@supabase/supabase-js';
@@ -63,8 +65,21 @@ export default async function handler(req: any, res: any) {
      platform,  // 'web' or 'app'
     } = req.body;
 
+   // ========== DEBUG LOGGING START ==========
+   console.log('='.repeat(60));
+   console.log('CREATE TOKEN REQUEST STARTED');
+   console.log('='.repeat(60));
+   console.log('Environment Variables:');
+   console.log('  EZEE_API_URL:', EZEE_API_URL);
+   console.log('  EZEE_SITE:', EZEE_SITE);
+   console.log('  EZEE_LICENCE_KEY:', EZEE_LICENCE_KEY ? `${EZEE_LICENCE_KEY.substring(0, 8)}...` : 'NOT SET');
+   console.log('  APP_URL:', APP_URL);
+   console.log('Request Body:', JSON.stringify(req.body, null, 2));
+   // ========== DEBUG LOGGING END ==========
+
    // Validate required fields
    if (!amount || !orderId || !orderType || !customerEmail) {
+      console.log('VALIDATION FAILED: Missing required fields');
       return res.status(400).json({ 
         error: 'Missing required fields: amount, orderId, orderType, customerEmail' 
       });
@@ -95,6 +110,22 @@ export default async function handler(req: any, res: any) {
     formData.append('return_url', returnUrl);
     formData.append('cancel_url', cancelUrl);
 
+   // ========== DEBUG LOGGING START ==========
+   console.log('-'.repeat(60));
+   console.log('CALLING EZEEPAYMENTS API');
+   console.log('-'.repeat(60));
+   console.log('URL:', `${EZEE_API_URL}/v1/custom_token/`);
+   console.log('Headers:');
+   console.log('  Content-Type: application/x-www-form-urlencoded');
+   console.log('  licence_key:', EZEE_LICENCE_KEY ? `${EZEE_LICENCE_KEY.substring(0, 8)}...` : 'NOT SET');
+   console.log('  site:', EZEE_SITE);
+   console.log('Form Data:', formData.toString());
+   console.log('Form Data (decoded):');
+   for (const [key, value] of formData.entries()) {
+     console.log(`  ${key}: ${value}`);
+   }
+   // ========== DEBUG LOGGING END ==========
+
    // Create token with eZeePayments
     // licence_key and site MUST be in headers, not body
    const tokenResponse = await fetch(`${EZEE_API_URL}/v1/custom_token/`, {
@@ -107,19 +138,45 @@ export default async function handler(req: any, res: any) {
       body: formData.toString(),
     });
 
+    // ========== DEBUG LOGGING START ==========
+    console.log('-'.repeat(60));
+    console.log('EZEEPAYMENTS RESPONSE');
+    console.log('-'.repeat(60));
+    console.log('HTTP Status:', tokenResponse.status);
+    console.log('HTTP Status Text:', tokenResponse.statusText);
+    // ========== DEBUG LOGGING END ==========
+
+    // Get raw response text first
+    const responseText = await tokenResponse.text();
+    console.log('Raw Response Body:', responseText);
+
     let tokenData;
     try {
-      tokenData = await tokenResponse.json();
+      tokenData = JSON.parse(responseText);
+      console.log('Parsed Response:', JSON.stringify(tokenData, null, 2));
     } catch (jsonError) {
-      console.error('Failed to parse eZeePayments response:', jsonError);
-      const textResponse = await tokenResponse.text();
-      console.error('Response text:', textResponse);
-      return res.status(500).json({ error: 'Invalid response from payment provider' });
+      console.error('FAILED TO PARSE JSON:', jsonError);
+      console.error('Raw text was:', responseText);
+      return res.status(500).json({ 
+        error: 'Invalid response from payment provider',
+        rawResponse: responseText 
+      });
     }
+
+    // ========== DEBUG LOGGING START ==========
+    console.log('-'.repeat(60));
+    console.log('RESPONSE ANALYSIS');
+    console.log('-'.repeat(60));
+    console.log('Has result?', !!tokenData.result);
+    console.log('result.status:', tokenData.result?.status);
+    console.log('result.token:', tokenData.result?.token);
+    console.log('result.message:', tokenData.result?.message);
+    // ========== DEBUG LOGGING END ==========
 
     // Check response - note the "result" wrapper
     if (!tokenData.result || tokenData.result.status !== 1) {
-     console.error('eZeePayments token error:', tokenData);
+     console.error('TOKEN CREATION FAILED!');
+     console.error('Full response:', JSON.stringify(tokenData, null, 2));
       return res.status(500).json({ 
         error: tokenData.result?.message || 'Failed to create payment token',
         details: tokenData 
@@ -128,6 +185,7 @@ export default async function handler(req: any, res: any) {
 
     // Token is inside result object
     const token = tokenData.result.token;
+    console.log('TOKEN CREATED SUCCESSFULLY:', token);
 
    // Store transaction in database
     // Use uniqueOrderId as order_id (this is what eZeePayments will send back as CustomOrderId)
@@ -156,6 +214,8 @@ export default async function handler(req: any, res: any) {
    if (dbError) {
      console.error('Database error:', dbError);
       // Continue even if DB insert fails - we still return the token
+   } else {
+     console.log('Transaction saved to DB:', transaction?.id);
    }
 
     // Build the redirect URL to our payment form page
@@ -169,6 +229,11 @@ export default async function handler(req: any, res: any) {
       name: customerName || '',
       description: description || `Payment for ${orderType}`,
     }).toString();
+
+    console.log('='.repeat(60));
+    console.log('CREATE TOKEN COMPLETED SUCCESSFULLY');
+    console.log('Payment URL:', paymentRedirectUrl);
+    console.log('='.repeat(60));
 
     return res.status(200).json({
        success: true,
@@ -186,7 +251,11 @@ export default async function handler(req: any, res: any) {
       },
     });
   } catch (error: any) {
-   console.error('Create token error:', error);
+   console.error('='.repeat(60));
+   console.error('CREATE TOKEN FATAL ERROR');
+   console.error('='.repeat(60));
+   console.error('Error:', error);
+   console.error('Stack:', error.stack);
     return res.status(500).json({ error: 'Internal server error' });
  }
 }

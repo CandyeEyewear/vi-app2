@@ -954,6 +954,11 @@ export default function DonateScreen() {
       const donation = donationResponse.data;
       const orderId = `DON_${donation.id}_${Date.now()}`;
 
+      console.log('🔵 [DONATE] Starting payment process...');
+      console.log('🔵 [DONATE] Amount:', finalAmount);
+      console.log('🔵 [DONATE] Order ID:', orderId);
+      console.log('🔵 [DONATE] Reference ID (donation.id):', donation.id);
+
       const paymentResult = await processPayment({
         amount: finalAmount,
         orderId,
@@ -963,7 +968,10 @@ export default function DonateScreen() {
         customerEmail: donorEmailValue || user?.email || '',
         customerName: donorNameValue || user?.fullName,
         description: `Donation to ${cause.title}`,
+        platform: Platform.OS === 'web' ? 'web' : 'app',
       });
+
+      console.log('🔵 [DONATE] Payment result:', paymentResult);
 
       if (!paymentResult.success) {
         showAlert(
@@ -974,10 +982,15 @@ export default function DonateScreen() {
         return;
       }
 
+      // ✅ FIXED: Show "processing" message, not "complete"
+      // The actual success is confirmed via webhook
       showAlert(
-        'Thank You! 💝',
-        `Your donation of ${formatCurrency(finalAmount)} to "${cause.title}" is being processed.`,
-        () => router.back()
+        'Payment Initiated',
+        'You\'re being redirected to our secure payment gateway. Complete your payment there to finish your donation.',
+        () => {
+          // Don't navigate back immediately - let user complete payment
+          // They'll return to the app after payment
+        }
       );
     } catch (error) {
       console.error('Donation error:', error);

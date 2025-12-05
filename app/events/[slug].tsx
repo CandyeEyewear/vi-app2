@@ -183,7 +183,7 @@ function useEventDetails(eventSlug: string | undefined) {
       ]);
 
       if (registrationResponse.success) {
-        setRegistration(registrationResponse.data);
+        setRegistration(registrationResponse.data || null);
       }
 
       if (registrationsResponse.success && registrationsResponse.data) {
@@ -425,7 +425,7 @@ function GradientButton({
   colors: typeof Colors.light;
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const gradientColors =
+  const gradientColors: [string, string] =
     variant === 'danger' ? [colors.error, colors.errorDark] : [colors.primary, colors.primaryDark];
 
   const handlePressIn = () => {
@@ -698,7 +698,7 @@ export default function EventDetailScreen() {
     // If already registered, handle cancellation
     if (registration) {
       const confirmed =
-        Platform.OS === 'web'
+        Platform.OS === 'web' && typeof window !== 'undefined'
           ? window.confirm('Cancel your registration for this event?')
           : true; // Implement proper modal for mobile
 
@@ -900,12 +900,12 @@ export default function EventDetailScreen() {
           },
         ]
       : []),
-    ...(!event.isFree
+    ...(!event.isFree && event.ticketPrice
       ? [
           {
             key: 'price',
             icon: DollarSign,
-            value: formatCurrency(event.ticketPrice),
+            value: formatCurrency(event.ticketPrice ?? 0),
             label: 'Price',
           },
         ]
@@ -1108,7 +1108,7 @@ export default function EventDetailScreen() {
                   ? 'Sold Out'
                   : event.isFree
                   ? 'Register for Free'
-                  : `Buy Tickets - ${formatCurrency(event.ticketPrice)}`
+                  : `Buy Tickets - ${event.ticketPrice ? formatCurrency(event.ticketPrice) : 'N/A'}`
               }
               colors={colors}
             />

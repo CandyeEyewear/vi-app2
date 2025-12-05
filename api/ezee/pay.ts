@@ -2,6 +2,8 @@
  * Vercel API Route: /api/ezee/pay.ts
  * Generates an auto-submitting HTML form to redirect to eZeePayments payment page
  * eZeePayments requires a POST request with form data, not a GET request
+ * 
+ * FIXED: Correct payment URL (no /pay path per API docs)
  */
 
 const EZEE_API_URL = process.env.EZEE_API_URL || 'https://api-test.ezeepayments.com';
@@ -14,6 +16,11 @@ export default async function handler(req: any, res: any) {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     return res.status(200).end();
   }
+
+  // Prevent caching of this page
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
 
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -46,11 +53,18 @@ export default async function handler(req: any, res: any) {
     `);
   }
 
-  // Determine payment URL based on environment
-  // eZeePayments payment endpoint format: https://secure.ezeepayments.com/pay
+  // FIXED: Correct payment URL per eZeePayments documentation
+  // Documentation says: POST to https://secure-test.ezeepayments.com (NO /pay path!)
   const paymentUrl = EZEE_API_URL.includes('test')
-    ? 'https://secure-test.ezeepayments.com/pay'
-    : 'https://secure.ezeepayments.com/pay';
+    ? 'https://secure-test.ezeepayments.com'
+    : 'https://secure.ezeepayments.com';
+
+  console.log('=== PAY.TS DEBUG ===');
+  console.log('Payment URL:', paymentUrl);
+  console.log('Token:', token);
+  console.log('Amount:', amount);
+  console.log('Order ID:', order_id);
+  console.log('Email:', email);
 
   // Escape HTML to prevent XSS
   const escapeHtml = (str: string) => {
@@ -152,4 +166,3 @@ export default async function handler(req: any, res: any) {
   res.setHeader('Content-Type', 'text/html');
   res.status(200).send(html);
 }
-
