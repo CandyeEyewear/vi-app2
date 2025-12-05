@@ -28,8 +28,9 @@ const isValidUUID = (str: string): boolean => {
 
 /**
  * Calculate real-time amount_raised from completed donations for a cause
+ * This is the single source of truth for cause donation amounts
  */
-async function calculateAmountRaised(causeId: string): Promise<number> {
+export async function calculateAmountRaised(causeId: string): Promise<number> {
   try {
     const { data: donationsData, error: donationsError } = await supabase
       .from('donations')
@@ -46,6 +47,53 @@ async function calculateAmountRaised(causeId: string): Promise<number> {
     }, 0);
   } catch (error) {
     console.error('Error calculating amount raised:', error);
+    return 0;
+  }
+}
+
+/**
+ * Calculate total raised across all causes
+ */
+export async function calculateTotalRaisedAllCauses(): Promise<number> {
+  try {
+    const { data: donationsData, error: donationsError } = await supabase
+      .from('donations')
+      .select('amount')
+      .eq('payment_status', 'completed');
+
+    if (donationsError || !donationsData) {
+      return 0;
+    }
+
+    return donationsData.reduce((sum, donation) => {
+      return sum + (parseFloat(donation.amount) || 0);
+    }, 0);
+  } catch (error) {
+    console.error('Error calculating total raised:', error);
+    return 0;
+  }
+}
+
+/**
+ * Calculate total amount raised across all causes from completed donations
+ * This is the single source of truth for total donations across the platform
+ */
+export async function calculateTotalRaisedAllCauses(): Promise<number> {
+  try {
+    const { data: donationsData, error: donationsError } = await supabase
+      .from('donations')
+      .select('amount')
+      .eq('payment_status', 'completed');
+
+    if (donationsError || !donationsData) {
+      return 0;
+    }
+
+    return donationsData.reduce((sum, donation) => {
+      return sum + (parseFloat(donation.amount) || 0);
+    }, 0);
+  } catch (error) {
+    console.error('Error calculating total raised across all causes:', error);
     return 0;
   }
 }
@@ -197,18 +245,21 @@ export async function getCauses(options?: {
 
     // Apply status filters
     // For non-admin users: Always filter to only show active causes
-    // Admins can see all statuses if explicitly requested
+    // Admins can see all statuses if explicitly requested, or all causes if status is not specified
     if (options?.status) {
       if (isAdmin) {
         // Admins can see any status they request
-      query = query.eq('status', options.status);
-    } else {
+        query = query.eq('status', options.status);
+      } else {
         // Non-admin users can only see active causes, regardless of requested status
         query = query.eq('status', 'active');
       }
     } else {
-      // Default to active causes for everyone
-      query = query.eq('status', 'active');
+      // Default behavior: active causes for non-admins, all causes for admins
+      if (!isAdmin) {
+        query = query.eq('status', 'active');
+      }
+      // Admins see all statuses when no filter is specified
     }
 
     // For non-admin users: Hide causes that have passed their end date
@@ -307,7 +358,13 @@ export async function getCauseById(
 
     const { data, error } = await finalQuery.single();
 
-    if (error) throw error;
+    // Handle PGRST116 (no rows found) gracefully
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return { success: false, error: 'Cause not found' };
+      }
+      throw error;
+    }
 
     if (!data) {
       return { success: false, error: 'Cause not found' };

@@ -34,6 +34,7 @@ import {
   Users,
   Calendar,
   AlertCircle,
+  BarChart3,
 } from 'lucide-react-native';
 import { Colors } from '../../../constants/colors';
 import { Cause, CauseStatus } from '../../../types';
@@ -70,9 +71,10 @@ interface CauseItemProps {
   onDelete: () => void;
   onChangeStatus: (status: CauseStatus) => void;
   onView: () => void;
+  onSummary: () => void;
 }
 
-function CauseItem({ cause, colors, onEdit, onDelete, onChangeStatus, onView }: CauseItemProps) {
+function CauseItem({ cause, colors, onEdit, onDelete, onChangeStatus, onView, onSummary }: CauseItemProps) {
   const [showActions, setShowActions] = useState(false);
   const progress = getCauseProgress(cause);
   const statusColor = STATUS_COLORS[cause.status];
@@ -149,6 +151,11 @@ function CauseItem({ cause, colors, onEdit, onDelete, onChangeStatus, onView }: 
             <Text style={[styles.actionText, { color: colors.text }]}>View</Text>
           </TouchableOpacity>
           
+          <TouchableOpacity style={styles.actionItem} onPress={onSummary}>
+            <BarChart3 size={18} color="#9C27B0" />
+            <Text style={[styles.actionText, { color: '#9C27B0' }]}>Summary</Text>
+          </TouchableOpacity>
+          
           <TouchableOpacity style={styles.actionItem} onPress={onEdit}>
             <Edit3 size={18} color="#38B6FF" />
             <Text style={[styles.actionText, { color: '#38B6FF' }]}>Edit</Text>
@@ -197,7 +204,7 @@ export default function ManageCausesScreen() {
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
 
   // State
   const [causes, setCauses] = useState<Cause[]>([]);
@@ -247,9 +254,10 @@ export default function ManageCausesScreen() {
       setLoading(true);
       
       // Use getCauses service which automatically recalculates amount_raised from donations
+      // Pass user ID so the service can check if user is admin and show all causes
       const response = await getCauses({
         status: statusFilter !== 'all' ? statusFilter : undefined,
-        userId: undefined, // Admin sees all causes
+        userId: user?.id, // Pass user ID so admin check works properly
       });
 
       if (response.success && response.data) {
@@ -264,7 +272,7 @@ export default function ManageCausesScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [statusFilter, showAlert]);
+  }, [statusFilter, showAlert, user?.id]);
 
   // Initial load
   useEffect(() => {
@@ -333,9 +341,14 @@ export default function ManageCausesScreen() {
     router.push(`/causes/edit/${causeId}`);
   }, [router]);
 
-  // Navigate to view
+  // Navigate to view (public detail page)
   const handleView = useCallback((causeId: string) => {
     router.push(`/causes/${causeId}`);
+  }, [router]);
+
+  // Navigate to summary page
+  const handleSummary = useCallback((causeId: string) => {
+    router.push(`/(admin)/causes/${causeId}/summary`);
   }, [router]);
 
   // Access check
@@ -385,6 +398,7 @@ export default function ManageCausesScreen() {
       onDelete={() => handleDelete(item)}
       onChangeStatus={(status) => handleChangeStatus(item.id, status)}
       onView={() => handleView(item.id)}
+      onSummary={() => handleSummary(item.id)}
     />
   );
 

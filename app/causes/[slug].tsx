@@ -697,24 +697,34 @@ export default function CauseDetailScreen() {
 
   // Fetch cause data
   const fetchCause = useCallback(async () => {
-    if (!id) return;
+    if (!id) {
+      console.error('[CAUSE DETAIL] No slug/id provided in route params:', params);
+      setLoading(false);
+      return;
+    }
+
+    console.log('[CAUSE DETAIL] Fetching cause with identifier:', id);
 
     try {
       const response = await getCauseById(id, user?.id);
       if (response.success && response.data) {
         setCause(response.data);
       } else {
-        Alert.alert('Error', 'Failed to load cause details');
-        router.back();
+        console.error('[CAUSE DETAIL] Failed to load cause:', response.error);
+        Alert.alert('Error', response.error || 'Failed to load cause details');
+        // Don't use router.back() - it might redirect incorrectly
+        // Instead, navigate to discover tab
+        router.replace('/(tabs)/discover');
       }
     } catch (error) {
-      console.error('Error fetching cause:', error);
+      console.error('[CAUSE DETAIL] Error fetching cause:', error);
       Alert.alert('Error', 'Something went wrong');
-      router.back();
+      // Don't use router.back() - navigate to discover instead
+      router.replace('/(tabs)/discover');
     } finally {
       setLoading(false);
     }
-  }, [id, router]);
+  }, [id, router, user?.id, params]);
 
   // Fetch recent donations
   const fetchDonations = useCallback(async () => {
@@ -735,9 +745,19 @@ export default function CauseDetailScreen() {
 
   // Initial load
   useEffect(() => {
+    // Log route params for debugging
+    console.log('[CAUSE DETAIL] Route params:', params);
+    console.log('[CAUSE DETAIL] Extracted id/slug:', id);
+    
+    if (!id) {
+      console.error('[CAUSE DETAIL] No identifier found in route, redirecting to discover');
+      router.replace('/(tabs)/discover');
+      return;
+    }
+    
     fetchCause();
     fetchDonations();
-  }, [fetchCause, fetchDonations]);
+  }, [fetchCause, fetchDonations, id, params, router]);
 
   // Pull to refresh
   const handleRefresh = useCallback(async () => {

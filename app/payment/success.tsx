@@ -6,7 +6,12 @@ import { useColorScheme } from 'react-native';
 import { Colors } from '../../constants/colors';
 
 export default function PaymentSuccessScreen() {
-  const { orderId, returnPath } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const orderId = Array.isArray(params.orderId) ? params.orderId[0] : params.orderId;
+  const returnPathRaw = params.returnPath || params.return_path;
+  // Handle both string and array formats from useLocalSearchParams
+  const returnPath = Array.isArray(returnPathRaw) ? returnPathRaw[0] : returnPathRaw;
+  
   const [countdown, setCountdown] = useState(5);
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
@@ -20,6 +25,7 @@ export default function PaymentSuccessScreen() {
           const redirectPath = returnPath && typeof returnPath === 'string' 
             ? returnPath 
             : '/feed';
+          console.log('[PAYMENT SUCCESS] Redirecting to:', redirectPath, 'from returnPath:', returnPath);
           router.replace(redirectPath);
           return 0;
         }

@@ -60,7 +60,7 @@ export default function ProfileScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 992;
   const { user, signOut, isAdmin } = useAuth();
-  const isPremium = user?.membershipTier === 'premium';
+  const isPremium = user?.membershipTier === 'premium' && user?.membershipStatus === 'active';
   const isOfficialMember = isPremium || isAdmin;
   const hasProposeAccess = isOfficialMember;
 
@@ -387,7 +387,13 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.menuContent}>
               <Text style={[styles.menuTitle, { color: colors.text }]}>
-                {user?.account_type === 'organization' ? 'Partner Membership' : 'Membership'}
+                {user?.account_type === 'organization' 
+                  ? (user?.is_partner_organization && user?.membershipStatus === 'active'
+                      ? 'Partner Membership'
+                      : 'Partner Membership')
+                  : (user?.membershipTier === 'premium' && user?.membershipStatus === 'active'
+                      ? 'View Membership'
+                      : 'Upgrade Membership')}
               </Text>
               <Text style={[styles.menuSubtitle, { color: colors.textSecondary }]}>
                 {user?.account_type === 'organization' 

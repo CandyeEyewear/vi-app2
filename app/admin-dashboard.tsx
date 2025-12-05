@@ -32,6 +32,7 @@ import {
   Heart
 } from 'lucide-react-native';
 import { supabase } from '../services/supabase';
+import { calculateTotalRaisedAllCauses } from '../services/causesService';
 
 interface DashboardStats {
   totalVolunteers: number;
@@ -98,12 +99,8 @@ export default function AdminDashboardScreen() {
         .select('*', { count: 'exact', head: true })
         .eq('status', 'active');
 
-      // Get total amount raised across all causes
-      const { data: causesData } = await supabase
-        .from('causes')
-        .select('amount_raised');
-
-      const totalRaised = causesData?.reduce((sum, cause) => sum + (parseFloat(cause.amount_raised) || 0), 0) || 0;
+      // Get total amount raised across all causes from actual donations (single source of truth)
+      const totalRaised = await calculateTotalRaisedAllCauses();
 
       // Get pending organization applications
       const { count: pendingOrgsCount } = await supabase

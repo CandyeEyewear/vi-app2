@@ -34,6 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     console.log('[AUTH] 🚀 Initializing AuthProvider...');
     let subscription: any;
+    let userChannel: any = null;
 
     const initializeAuth = async () => {
       console.log('[AUTH] 🔐 Starting auth initialization...');
@@ -67,6 +68,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
         setLoading(false);
       }
+      
+      // Return promise so we can chain operations after initialization
+      return Promise.resolve();
     };
 
     // Set up auth state listener
@@ -75,23 +79,77 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(async (event, session) => {
         console.log('[AUTH] 🔔 Auth state changed:', event);
 
-        // ✅ ADD THIS LINE:
-        if (event === 'TOKEN_REFRESHED') return; // Ignore token refresh!
+        // Ignore token refresh and initial session events (handled separately)
+        if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
+          console.log('[AUTH] ⏭️ Ignoring', event, 'event (handled separately)');
+          return;
+        }
 
         if (session) {
           console.log('[AUTH] Session active - User ID:', session.user.id);
           await loadUserProfile(session.user.id);
+          // Set up real-time subscription after session is confirmed
+          setupRealtimeSubscription().catch((error) => {
+            console.error('[AUTH] ❌ Error setting up real-time subscription:', error);
+          });
         } else {
           console.log('[AUTH] Session ended - User logged out');
           setUser(null);
           setLoading(false);
+          // Clean up real-time subscription on logout
+          if (userChannel) {
+            console.log('[AUTH] 🧹 Unsubscribing from user profile changes on logout...');
+            supabase.removeChannel(userChannel);
+            userChannel = null;
+          }
         }
       });
       subscription = sub;
       console.log('[AUTH] ✅ Auth listener registered');
     };
 
-    initializeAuth();
+    // Set up real-time subscription for user profile changes
+    const setupRealtimeSubscription = async () => {
+      console.log('[AUTH] 👂 Setting up real-time user profile subscription...');
+      
+      // Get current user ID
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) {
+        console.log('[AUTH] ⚠️ No session found for real-time subscription');
+        return;
+      }
+      
+      const userId = session.user.id;
+      console.log('[AUTH] 📡 Subscribing to user profile changes for:', userId);
+      
+      userChannel = supabase
+        .channel(`user-profile-${userId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'users',
+            filter: `id=eq.${userId}`,
+          },
+          async (payload) => {
+            console.log('[AUTH] 🔔 User profile updated in database:', payload.new);
+            // Refresh user profile when database changes
+            await loadUserProfile(userId, true);
+          }
+        )
+        .subscribe((status) => {
+          console.log('[AUTH] 📡 Real-time subscription status:', status);
+        });
+    };
+
+    // Initialize auth first
+    initializeAuth().then(() => {
+      // After initialization completes, set up real-time subscription if we have a session
+      setupRealtimeSubscription().catch((error) => {
+        console.error('[AUTH] ❌ Error setting up real-time subscription:', error);
+      });
+    });
     setupAuthListener();
     setupFCMHandlers();
 
@@ -101,21 +159,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (subscription) {
         subscription.unsubscribe();
       }
+      if (userChannel) {
+        console.log('[AUTH] 🧹 Unsubscribing from user profile changes...');
+        supabase.removeChannel(userChannel);
+      }
     };
   }, []);
 
-  const loadUserProfile = async (userId: string) => {
+  const loadUserProfile = async (userId: string, forceRefresh: boolean = false) => {
     console.log('[AUTH] 👤 Loading user profile...');
     console.log('[AUTH] User ID:', userId);
+    console.log('[AUTH] Force refresh:', forceRefresh);
     
-    // Check cache first
+    // Check cache first (unless forcing refresh)
     const cacheKey = CacheKeys.userProfile(userId);
-    const cachedUser = cache.get<User>(cacheKey);
-    if (cachedUser) {
-      console.log('[AUTH] ✅ Using cached user profile');
-      setUser(cachedUser);
-      setLoading(false);
-      return;
+    if (!forceRefresh) {
+      const cachedUser = cache.get<User>(cacheKey);
+      if (cachedUser) {
+        console.log('[AUTH] ✅ Using cached user profile');
+        setUser(cachedUser);
+        setLoading(false);
+        return;
+      }
+    } else {
+      // Clear cache if forcing refresh
+      cache.delete(cacheKey);
+      console.log('[AUTH] 🗑️ Cache cleared for forced refresh');
     }
     
     try {
@@ -167,9 +236,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         organization_data: profileData.organization_data,
       };
 
-      // Cache the user data (5 minutes TTL)
-      cache.set(cacheKey, userData, 5 * 60 * 1000);
-      console.log('[AUTH] 💾 User profile cached');
+      // Cache the user data with shorter TTL for membership data (1 minute instead of 5)
+      // This ensures membership changes are reflected faster
+      const cacheTTL = 1 * 60 * 1000; // 1 minute for faster updates
+      cache.set(cacheKey, userData, cacheTTL);
+      console.log('[AUTH] 💾 User profile cached (TTL: 1 minute)');
       console.log('[AUTH] 📊 Membership status:', {
         tier: userData.membershipTier,
         status: userData.membershipStatus,
@@ -259,11 +330,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         fullName: profileData.full_name,
         phone: profileData.phone,
         location: profileData.location,
+        country: profileData.country,
         bio: profileData.bio,
         areasOfExpertise: profileData.areas_of_expertise,
         education: profileData.education,
         avatarUrl: profileData.avatar_url,
+        dateOfBirth: profileData.date_of_birth,
         role: profileData.role,
+        membershipTier: profileData.membership_tier || 'free',
+        membershipStatus: profileData.membership_status || 'inactive',
         isPrivate: profileData.is_private,
         totalHours: profileData.total_hours,
         activitiesCompleted: profileData.activities_completed,
@@ -769,13 +844,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log('[AUTH] 🔄 Refreshing user profile...');
     console.log('[AUTH] User ID:', user.id);
     
-    // Clear cache to force fresh load
-    const cacheKey = CacheKeys.userProfile(user.id);
-    cache.delete(cacheKey);
-    console.log('[AUTH] ✅ Cache cleared');
-    
-    // Reload profile - this will fetch fresh data from database
-    await loadUserProfile(user.id);
+    // Reload profile with force refresh flag
+    await loadUserProfile(user.id, true);
     console.log('[AUTH] ✅ User profile refreshed');
   };
 

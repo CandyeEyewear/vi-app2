@@ -33,6 +33,12 @@ import {
   MoreVertical,
   Star,
   List,
+  BarChart3,
+  ChevronDown,
+  ChevronUp,
+  DollarSign,
+  Ticket,
+  RefreshCw,
 } from 'lucide-react-native';
 import { Colors } from '../../../constants/colors';
 import { Event, EventStatus } from '../../../types';
@@ -41,7 +47,10 @@ import {
   deleteEvent,
   formatEventDate,
   formatEventTime,
+  getEventRegistrations,
 } from '../../../services/eventsService';
+import { supabase } from '../../../services/supabase';
+import { formatCurrency } from '../../../services/causesService';
 import { useAuth } from '../../../contexts/AuthContext';
 import CustomAlert from '../../../components/CustomAlert';
 import { ShimmerSkeleton } from '../../../components/ShimmerSkeleton';
@@ -126,6 +135,262 @@ const STATUS_FILTERS: { value: EventStatus | 'all'; label: string }[] = [
   { value: 'completed', label: 'Completed' },
 ];
 
+interface EventSummaryCardProps {
+  event: Event;
+  colors: any;
+}
+
+function EventSummaryCard({ event, colors }: EventSummaryCardProps) {
+  const [expanded, setExpanded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [summaryData, setSummaryData] = useState<{
+    totalPersons: number;
+    totalTickets: number;
+    totalAmount: number;
+    totalRefunds: number;
+    registrations: Array<{
+      id: string;
+      userName: string;
+      ticketCount: number;
+      amountPaid: number;
+      refundAmount: number;
+      transactionNumber?: string;
+    }>;
+  } | null>(null);
+
+  const fetchSummary = useCallback(async () => {
+    if (!expanded || summaryData) return; // Don't refetch if already loaded
+    
+    setLoading(true);
+    try {
+      const regResponse = await getEventRegistrations(event.id);
+      
+      if (regResponse.success && regResponse.data) {
+        const activeRegistrations = regResponse.data.filter(
+          (reg) => reg.status !== 'cancelled'
+        );
+
+        // Fetch payment and refund data for each registration
+        const registrationsWithPayments = await Promise.all(
+          activeRegistrations.map(async (reg) => {
+            // Get payment transactions
+            const { data: payments } = await supabase
+              .from('payment_transactions')
+              .select('amount, status, transaction_number, transaction_type')
+              .eq('reference_id', reg.id)
+              .eq('order_type', 'event_registration')
+              .order('created_at', { ascending: false });
+
+            const paidTransactions = payments?.filter(p => 
+              p.status === 'completed' && p.transaction_type === 'payment'
+            ) || [];
+            const refundTransactions = payments?.filter(p => 
+              p.status === 'completed' && p.transaction_type === 'refund'
+            ) || [];
+
+            const amountPaid = paidTransactions.reduce((sum, p) => sum + (p.amount || 0), 0);
+            const refundAmount = refundTransactions.reduce((sum, r) => sum + (r.amount || 0), 0);
+
+            return {
+              id: reg.id,
+              userName: reg.user?.fullName || reg.user?.email || 'Unknown User',
+              ticketCount: reg.ticketCount || 1,
+              amountPaid,
+              refundAmount,
+              transactionNumber: paidTransactions[0]?.transaction_number,
+            };
+          })
+        );
+
+        const totalPersons = registrationsWithPayments.length;
+        const totalTickets = registrationsWithPayments.reduce((sum, r) => sum + r.ticketCount, 0);
+        const totalAmount = registrationsWithPayments.reduce((sum, r) => sum + r.amountPaid, 0);
+        const totalRefunds = registrationsWithPayments.reduce((sum, r) => sum + r.refundAmount, 0);
+
+        setSummaryData({
+          totalPersons,
+          totalTickets,
+          totalAmount,
+          totalRefunds,
+          registrations: registrationsWithPayments,
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching summary:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [event.id, expanded, summaryData]);
+
+  useEffect(() => {
+    if (expanded) {
+      fetchSummary();
+    }
+  }, [expanded, fetchSummary]);
+
+  return (
+    <Pressable
+      style={[styles.summaryCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}
+      onPress={(e) => e.stopPropagation()}
+    >
+      <Pressable
+        style={({ pressed }) => [
+          styles.summaryHeader,
+          { opacity: pressed ? 0.7 : 1 }
+        ]}
+        onPress={(e) => {
+          e.stopPropagation();
+          setExpanded(!expanded);
+        }}
+      >
+        <View style={styles.summaryHeaderLeft}>
+          <BarChart3 size={18} color={colors.primary} />
+          <Text style={[styles.summaryTitle, { color: colors.text }]}>
+            Registration Summary
+          </Text>
+        </View>
+        {expanded ? (
+          <ChevronUp size={20} color={colors.textSecondary} />
+        ) : (
+          <ChevronDown size={20} color={colors.textSecondary} />
+        )}
+      </Pressable>
+
+      {expanded && (
+        <View style={styles.summaryContent}>
+          {loading ? (
+            <View style={styles.summaryLoading}>
+              <Text style={[styles.summaryText, { color: colors.textSecondary }]}>
+                Loading summary...
+              </Text>
+            </View>
+          ) : summaryData ? (
+            <>
+              {/* Summary Stats */}
+              <View style={styles.summaryStats}>
+                <View style={[styles.summaryStatItem, { backgroundColor: colors.card }]}>
+                  <Users size={20} color={colors.primary} />
+                  <Text style={[styles.summaryStatValue, { color: colors.text }]}>
+                    {summaryData.totalPersons}
+                  </Text>
+                  <Text style={[styles.summaryStatLabel, { color: colors.textSecondary }]}>
+                    Persons
+                  </Text>
+                </View>
+                <View style={[styles.summaryStatItem, { backgroundColor: colors.card }]}>
+                  <Ticket size={20} color={colors.primary} />
+                  <Text style={[styles.summaryStatValue, { color: colors.text }]}>
+                    {summaryData.totalTickets}
+                  </Text>
+                  <Text style={[styles.summaryStatLabel, { color: colors.textSecondary }]}>
+                    Tickets
+                  </Text>
+                </View>
+                <View style={[styles.summaryStatItem, { backgroundColor: colors.card }]}>
+                  <DollarSign size={20} color={colors.success} />
+                  <Text style={[styles.summaryStatValue, { color: colors.success }]}>
+                    {formatCurrency(summaryData.totalAmount)}
+                  </Text>
+                  <Text style={[styles.summaryStatLabel, { color: colors.textSecondary }]}>
+                    Total Paid
+                  </Text>
+                </View>
+                {summaryData.totalRefunds > 0 && (
+                  <View style={[styles.summaryStatItem, { backgroundColor: colors.card }]}>
+                    <RefreshCw size={20} color={colors.error} />
+                    <Text style={[styles.summaryStatValue, { color: colors.error }]}>
+                      {formatCurrency(summaryData.totalRefunds)}
+                    </Text>
+                    <Text style={[styles.summaryStatLabel, { color: colors.textSecondary }]}>
+                      Refunded
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Net Amount */}
+              <View style={[styles.netAmountCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.netAmountLabel, { color: colors.textSecondary }]}>
+                  Net Amount
+                </Text>
+                <Text style={[styles.netAmountValue, { color: colors.text }]}>
+                  {formatCurrency(summaryData.totalAmount - summaryData.totalRefunds)}
+                </Text>
+              </View>
+
+              {/* Registrations List */}
+              {summaryData.registrations.length > 0 ? (
+                <View style={styles.registrationsList}>
+                  <Text style={[styles.registrationsListTitle, { color: colors.text }]}>
+                    Registrations
+                  </Text>
+                  {summaryData.registrations.map((reg, index) => (
+                    <View
+                      key={reg.id}
+                      style={[
+                        styles.registrationItem,
+                        { 
+                          backgroundColor: colors.card,
+                          borderBottomColor: index < summaryData.registrations.length - 1 ? colors.border : 'transparent'
+                        }
+                      ]}
+                    >
+                      <View style={styles.registrationItemLeft}>
+                        <Text style={[styles.registrationName, { color: colors.text }]}>
+                          {reg.userName}
+                        </Text>
+                        <View style={styles.registrationDetails}>
+                          <Text style={[styles.registrationDetail, { color: colors.textSecondary }]}>
+                            {reg.ticketCount} {reg.ticketCount === 1 ? 'ticket' : 'tickets'}
+                          </Text>
+                          {reg.transactionNumber && (
+                            <Text style={[styles.registrationDetail, { color: colors.textTertiary }]}>
+                              #{reg.transactionNumber}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                      <View style={styles.registrationItemRight}>
+                        {reg.amountPaid > 0 && (
+                          <Text style={[styles.registrationAmount, { color: colors.success }]}>
+                            {formatCurrency(reg.amountPaid)}
+                          </Text>
+                        )}
+                        {reg.refundAmount > 0 && (
+                          <Text style={[styles.registrationRefund, { color: colors.error }]}>
+                            -{formatCurrency(reg.refundAmount)}
+                          </Text>
+                        )}
+                        {reg.amountPaid === 0 && reg.refundAmount === 0 && (
+                          <Text style={[styles.registrationAmount, { color: colors.textTertiary }]}>
+                            Free
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.noRegistrations}>
+                  <Text style={[styles.noRegistrationsText, { color: colors.textSecondary }]}>
+                    No registrations yet
+                  </Text>
+                </View>
+              )}
+            </>
+          ) : (
+            <View style={styles.summaryLoading}>
+              <Text style={[styles.summaryText, { color: colors.textSecondary }]}>
+                No data available
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
 interface EventItemProps {
   event: Event;
   colors: any;
@@ -133,9 +398,10 @@ interface EventItemProps {
   onEdit: () => void;
   onDelete: () => void;
   onRegistrations: () => void;
+  onSummary: () => void;
 }
 
-function EventItem({ event, colors, onView, onEdit, onDelete, onRegistrations }: EventItemProps) {
+function EventItem({ event, colors, onView, onEdit, onDelete, onRegistrations, onSummary }: EventItemProps) {
   const [showActions, setShowActions] = useState(false);
   const colorScheme = useColorScheme();
   const STATUS_CONFIG = getStatusConfig(colorScheme === 'dark' ? 'dark' : 'light');
@@ -215,6 +481,9 @@ function EventItem({ event, colors, onView, onEdit, onDelete, onRegistrations }:
         )}
       </View>
 
+      {/* Summary Card */}
+      <EventSummaryCard event={event} colors={colors} />
+
       {/* Actions Dropdown */}
       {showActions && (
         <View style={[styles.actionsDropdown, { backgroundColor: colors.background, borderColor: colors.border }]}>
@@ -238,6 +507,17 @@ function EventItem({ event, colors, onView, onEdit, onDelete, onRegistrations }:
           >
             <List size={18} color={colors.community} />
             <Text style={[styles.actionText, { color: colors.community }]}>Registrations</Text>
+          </Pressable>
+          
+          <Pressable 
+            style={({ pressed }) => [
+              styles.actionItem,
+              { backgroundColor: pressed ? colors.surfacePressed : 'transparent' }
+            ]}
+            onPress={onSummary}
+          >
+            <BarChart3 size={18} color="#9C27B0" />
+            <Text style={[styles.actionText, { color: '#9C27B0' }]}>Summary</Text>
           </Pressable>
           
           <Pressable 
@@ -358,7 +638,7 @@ export default function AdminEventsScreen() {
     fetchEvents();
   }, [fetchEvents]);
 
-  // Handle view
+  // Handle view (public detail page)
   const handleView = useCallback((event: Event) => {
     router.push(`/events/${event.slug}`);
   }, [router]);
@@ -371,6 +651,11 @@ export default function AdminEventsScreen() {
   // Handle registrations
   const handleRegistrations = useCallback((event: Event) => {
     router.push(`/(admin)/events/${event.id}/registrations`);
+  }, [router]);
+
+  // Handle summary
+  const handleSummary = useCallback((event: Event) => {
+    router.push(`/(admin)/events/${event.id}/summary`);
   }, [router]);
 
   // Handle delete
@@ -404,8 +689,9 @@ export default function AdminEventsScreen() {
       onEdit={() => handleEdit(item)}
       onDelete={() => handleDelete(item)}
       onRegistrations={() => handleRegistrations(item)}
+      onSummary={() => handleSummary(item)}
     />
-  ), [colors, handleView, handleEdit, handleDelete, handleRegistrations]);
+  ), [colors, handleView, handleEdit, handleDelete, handleRegistrations, handleSummary]);
 
   // Render empty state
   const renderEmptyComponent = useCallback(() => {
@@ -741,5 +1027,128 @@ const styles = StyleSheet.create({
   createButtonEmptyText: {
     fontSize: 15,
     fontWeight: '700',
+  },
+  // Summary Card Styles
+  summaryCard: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+  },
+  summaryHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  summaryTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  summaryContent: {
+    padding: 12,
+    paddingTop: 0,
+  },
+  summaryLoading: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  summaryText: {
+    fontSize: 13,
+  },
+  summaryStats: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  summaryStatItem: {
+    flex: 1,
+    minWidth: '45%',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    gap: 4,
+  },
+  summaryStatValue: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  summaryStatLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  netAmountCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  netAmountLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  netAmountValue: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  registrationsList: {
+    marginTop: 8,
+  },
+  registrationsListTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  registrationItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 8,
+    borderBottomWidth: 1,
+    marginBottom: 4,
+  },
+  registrationItemLeft: {
+    flex: 1,
+  },
+  registrationName: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  registrationDetails: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  registrationDetail: {
+    fontSize: 11,
+  },
+  registrationItemRight: {
+    alignItems: 'flex-end',
+  },
+  registrationAmount: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  registrationRefund: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  noRegistrations: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  noRegistrationsText: {
+    fontSize: 13,
   },
 });

@@ -192,6 +192,17 @@ export function CausesList({
 
   // Handle cause press
   const handleCausePress = useCallback((cause: Cause) => {
+    // Validate slug exists and is not empty
+    if (!cause.slug || cause.slug.trim() === '') {
+      console.error('Cause slug is missing or empty, cannot navigate:', cause);
+      // Fallback to using ID if slug is missing
+      if (cause.id) {
+        router.push(`/causes/${cause.id}`);
+      } else {
+        console.error('Cause ID is also missing, cannot navigate');
+      }
+      return;
+    }
     if (onCausePress) {
       onCausePress(cause);
     } else {

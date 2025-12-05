@@ -1,5 +1,53 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupportedStorage } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabaseConfig } from '../config/supabase.config';
+import { Platform } from 'react-native';
+
+// Create AsyncStorage adapter for React Native
+// Supabase expects a storage interface with getItem, setItem, removeItem methods
+const createAsyncStorageAdapter = (): SupportedStorage => {
+  return {
+    getItem: async (key: string): Promise<string | null> => {
+      try {
+        return await AsyncStorage.getItem(key);
+      } catch (error) {
+        console.error('[SUPABASE] Error getting item from AsyncStorage:', error);
+        return null;
+      }
+    },
+    setItem: async (key: string, value: string): Promise<void> => {
+      try {
+        await AsyncStorage.setItem(key, value);
+      } catch (error) {
+        console.error('[SUPABASE] Error setting item in AsyncStorage:', error);
+      }
+    },
+    removeItem: async (key: string): Promise<void> => {
+      try {
+        await AsyncStorage.removeItem(key);
+      } catch (error) {
+        console.error('[SUPABASE] Error removing item from AsyncStorage:', error);
+      }
+    },
+  };
+};
+
+// Determine storage based on platform
+// - Web: undefined (Supabase uses localStorage automatically)
+// - React Native: AsyncStorage adapter
+// - Server: undefined (no storage needed, but undefined is acceptable)
+const getStorage = (): SupportedStorage | undefined => {
+  if (typeof window !== 'undefined') {
+    // Web environment - Supabase will use localStorage automatically
+    return undefined;
+  }
+  if (Platform.OS !== 'web') {
+    // React Native - use AsyncStorage
+    return createAsyncStorageAdapter();
+  }
+  // Server environment - return undefined (Supabase handles this gracefully)
+  return undefined;
+};
 
 // Client-side Supabase (for app usage)
 export const supabase = createClient(
@@ -7,7 +55,7 @@ export const supabase = createClient(
   supabaseConfig.anonKey,
   {
     auth: {
-      storage: typeof window !== 'undefined' ? undefined : null,
+      storage: getStorage(),
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
@@ -17,9 +65,9 @@ export const supabase = createClient(
 
 // Server-side Supabase (only created if service role key is available)
 // This prevents errors when SUPABASE_SERVICE_ROLE_KEY is not set in client environments
-let supabaseServerInstance: ReturnType<typeof createClient> | null = null;
+let supabaseServerInstance: any = null;
 
-const createSupabaseServer = (): ReturnType<typeof createClient> => {
+const createSupabaseServer = (): any => {
   if (!supabaseServerInstance) {
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!serviceRoleKey) {

@@ -1044,7 +1044,24 @@ export default function DiscoverScreen() {
         </View>
 
         <View style={[styles.tabContent, activeTab !== 'causes' && styles.tabContentHidden]}>
-          <CausesList showSearch={false} showFilters={true} onCausePress={(cause) => router.push(`/causes/${cause.slug}`)} />
+          <CausesList 
+            showSearch={false} 
+            showFilters={true} 
+            onCausePress={(cause) => {
+              // Validate slug exists and is not empty
+              if (!cause.slug || cause.slug.trim() === '') {
+                console.error('Cause slug is missing or empty:', cause);
+                // Fallback to using ID if slug is missing
+                if (cause.id) {
+                  router.push(`/causes/${cause.id}`);
+                } else {
+                  console.error('Cause ID is also missing, cannot navigate');
+                }
+                return;
+              }
+              router.push(`/causes/${cause.slug}`);
+            }} 
+          />
         </View>
 
         <View style={[styles.tabContent, activeTab !== 'events' && styles.tabContentHidden]}>

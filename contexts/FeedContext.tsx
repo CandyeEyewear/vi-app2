@@ -883,10 +883,22 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
         postsWithOpportunities.map(async (post) => {
           if (post.causeId) {
             console.log('[FEED] 💙 Loading cause data for post:', post.id);
-            const causeResponse = await getCauseById(post.causeId);
-            
-            if (causeResponse.success && causeResponse.data) {
-              return { ...post, cause: causeResponse.data };
+            try {
+              const causeResponse = await getCauseById(post.causeId);
+              
+              if (causeResponse.success && causeResponse.data) {
+                return { ...post, cause: causeResponse.data };
+              } else {
+                // Cause not found or filtered out (inactive, past end date, etc.)
+                console.warn('[FEED] ⚠️ Cause not found or not accessible:', post.causeId);
+              }
+            } catch (error: any) {
+              // Handle PGRST116 and other errors gracefully
+              if (error?.code === 'PGRST116') {
+                console.warn('[FEED] ⚠️ Cause not found (may have been deleted):', post.causeId);
+              } else {
+                console.error('[FEED] ❌ Error loading cause:', error);
+              }
             }
           }
           return post;
@@ -898,11 +910,20 @@ const postsWithEvents = await Promise.all(
   postsWithCauses.map(async (post) => {
     if (post.eventId) {
       console.log('[FEED] 🎉 Loading event data for post:', post.id);
-      const { data: eventData } = await supabase
+      const { data: eventData, error: eventError } = await supabase
         .from('events')
         .select('*')
         .eq('id', post.eventId)
         .single();
+      
+      // Handle case where event doesn't exist (deleted)
+      if (eventError) {
+        if (eventError.code === 'PGRST116') {
+          console.warn('[FEED] ⚠️ Event not found (may have been deleted):', post.eventId);
+          return post; // Return post without event data
+        }
+        throw eventError;
+      }
 
       if (eventData) {
         const event: any = {
@@ -948,7 +969,7 @@ const postsWithEvents = await Promise.all(
           if (post.sharedPostId) {
             console.log('[FEED] 📎 Loading shared post data for:', post.id);
             // Fetch the original post
-            const { data: originalPostData } = await supabase
+            const { data: originalPostData, error: originalPostError } = await supabase
               .from('posts')
               .select(`
                 *,
@@ -956,6 +977,15 @@ const postsWithEvents = await Promise.all(
               `)
               .eq('id', post.sharedPostId)
               .single();
+            
+            // Handle case where shared post doesn't exist (deleted)
+            if (originalPostError) {
+              if (originalPostError.code === 'PGRST116') {
+                console.warn('[FEED] ⚠️ Shared post not found (may have been deleted):', post.sharedPostId);
+                return post; // Return post without shared data
+              }
+              throw originalPostError;
+            }
 
             if (originalPostData) {
               // Fetch comments for original post

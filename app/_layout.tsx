@@ -33,6 +33,7 @@ function AppContent() {
   const router = useRouter();
   const segments = useSegments();
   const pathname = usePathname();
+  const { refreshUser } = useAuth();
   const { loading: authLoading, user } = useAuth();
   const responseListener = useRef<any>(null);
   const { width } = useWindowDimensions();
@@ -47,15 +48,18 @@ function AppContent() {
   // Get current route to check if it's public
   const currentRoute = segments[0] || pathname?.split('/')[1] || '';
   const normalizedPath = pathname?.toLowerCase() || '';
+  // Check if path is exactly a public route (not just containing the word)
+  const isExactPublicRoute = 
+    pathname === '/login' || 
+    pathname === '/register' || 
+    pathname === '/forgot-password' || 
+    pathname === '/reset-password' ||
+    pathname === '/' || 
+    pathname === '';
+  
   const isPublicRoute = 
     publicRoutes.includes(currentRoute) || 
-    normalizedPath.includes('/login') || 
-    normalizedPath.includes('/register') || 
-    normalizedPath.includes('/forgot-password') || 
-    normalizedPath.includes('/reset-password') ||
-    currentRoute === '' || // Root path
-    pathname === '/' || // Root path
-    pathname === '';
+    isExactPublicRoute;
 
   // Redirect unauthenticated users to login (except for public routes)
   useEffect(() => {
@@ -72,7 +76,11 @@ function AppContent() {
       }
       
       // If user is logged in but on login/register page, redirect to feed
-      if (user && isPublicRoute && (currentRoute === 'login' || currentRoute === 'register' || normalizedPath.includes('/login') || normalizedPath.includes('/register'))) {
+      // Only match exact routes, not paths that contain these words (e.g., /events/[slug]/register)
+      const isLoginPage = pathname === '/login';
+      const isRegisterPage = pathname === '/register';
+      
+      if (user && (isLoginPage || isRegisterPage)) {
         console.log('[AUTH REDIRECT] User authenticated, redirecting from login/register to feed');
         router.replace('/feed');
         return;
@@ -153,26 +161,40 @@ function AppContent() {
       if (parsed.scheme === 'vibe' && parsed.path) {
         if (parsed.path.includes('payment/success')) {
           // Extract returnPath from query params if provided
-          const returnPath = parsed.queryParams?.returnPath || parsed.queryParams?.return_path;
+          // Handle both returnPath and return_path, and handle array format
+          const returnPathRaw = parsed.queryParams?.returnPath || parsed.queryParams?.return_path;
+          const returnPath = Array.isArray(returnPathRaw) ? returnPathRaw[0] : returnPathRaw;
           const redirectPath = returnPath && typeof returnPath === 'string' 
             ? returnPath 
             : '/feed';
           logger.info('[DEEP LINK] Payment success redirect detected', { 
             path: parsed.path, 
+            returnPathRaw,
             returnPath,
             redirectPath 
           });
+          
+          // Refresh user data to get updated membership status
+          if (refreshUser) {
+            logger.info('[DEEP LINK] Refreshing user data after payment success...');
+            refreshUser().catch((error) => {
+              logger.error('[DEEP LINK] Error refreshing user after payment:', error);
+            });
+          }
+          
           router.replace(redirectPath);
           return;
         }
         if (parsed.path.includes('payment/cancel')) {
           // For cancel, also check for returnPath but default to feed
-          const returnPath = parsed.queryParams?.returnPath || parsed.queryParams?.return_path;
+          const returnPathRaw = parsed.queryParams?.returnPath || parsed.queryParams?.return_path;
+          const returnPath = Array.isArray(returnPathRaw) ? returnPathRaw[0] : returnPathRaw;
           const redirectPath = returnPath && typeof returnPath === 'string' 
             ? returnPath 
             : '/feed';
           logger.info('[DEEP LINK] Payment cancel redirect detected', { 
             path: parsed.path,
+            returnPathRaw,
             returnPath,
             redirectPath 
           });

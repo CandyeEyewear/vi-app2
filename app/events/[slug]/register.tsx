@@ -209,12 +209,14 @@ function TicketSelector({
   ticketCount,
   setTicketCount,
   spotsLeft,
+  availableSpots,
   colors,
 }: {
   event: Event;
   ticketCount: number;
   setTicketCount: (count: number) => void;
-  spotsLeft: number;
+  spotsLeft: number; // Original spots remaining (for max calculation)
+  availableSpots: number; // Spots remaining after user's selection (for display)
   colors: any;
 }) {
   const maxTickets = Math.min(spotsLeft, 10);
@@ -298,7 +300,7 @@ function TicketSelector({
       
       <View style={styles.spotsInfo}>
         <Text style={[styles.spotsInfoText, { color: colors.textSecondary }]}>
-          {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} remaining
+          {availableSpots} spot{availableSpots !== 1 ? 's' : ''} remaining
         </Text>
       </View>
 
@@ -316,11 +318,11 @@ function TicketSelector({
       )}
 
       {/* Spots Warning */}
-      {spotsLeft <= 5 && spotsLeft > 0 && (
+      {availableSpots <= 5 && availableSpots > 0 && (
         <View style={styles.spotsWarning}>
           <AlertTriangle size={16} color="#FF9800" />
           <Text style={styles.spotsWarningText}>
-            Only {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} left!
+            Only {availableSpots} spot{availableSpots !== 1 ? 's' : ''} left!
           </Text>
         </View>
       )}
@@ -485,11 +487,13 @@ export default function EventRegisterScreen() {
   const [showSuccess, setShowSuccess] = useState(false);
 
   // Memoized calculations
-  const { ticketPrice, totalAmount, spotsLeft, maxTickets } = useMemo(() => {
-    if (!event) return { ticketPrice: 0, totalAmount: 0, spotsLeft: 0, maxTickets: 0 };
+  const { ticketPrice, totalAmount, spotsLeft, availableSpots, maxTickets } = useMemo(() => {
+    if (!event) return { ticketPrice: 0, totalAmount: 0, spotsLeft: 0, availableSpots: 0, maxTickets: 0 };
     
     const price = event.ticketPrice || 0;
     const spots = event.spotsRemaining ?? event.capacity ?? 999;
+    // Available spots after subtracting selected tickets
+    const available = Math.max(0, spots - ticketCount);
     const max = Math.min(spots, 10);
     
     // Calculate total with processing fee for paid events
@@ -502,7 +506,8 @@ export default function EventRegisterScreen() {
     return {
       ticketPrice: price,
       totalAmount: total,
-      spotsLeft: spots,
+      spotsLeft: spots, // Original spots remaining (for validation)
+      availableSpots: available, // Spots remaining after user's selection (for display)
       maxTickets: max,
     };
   }, [event, ticketCount]);
@@ -583,6 +588,9 @@ export default function EventRegisterScreen() {
       const orderId = `EVT_${registration.id}_${Date.now()}`;
 
       // Process payment through eZeePayments
+      const returnPath = `/events/${slug}`;
+      console.log('[EVENT REGISTER] Processing payment with returnPath:', returnPath, 'slug:', slug);
+      
       const paymentResult = await processPayment({
         amount: totalAmount,
         orderId,
@@ -593,7 +601,7 @@ export default function EventRegisterScreen() {
         customerName: user.fullName,
         description: `${event.title} - ${ticketCount} ticket${ticketCount !== 1 ? 's' : ''}`,
         platform: Platform.OS === 'web' ? 'web' : 'app',
-        returnPath: `/events/${slug}`, // Return to event page after payment
+        returnPath, // Return to event page after payment
       });
 
       if (!paymentResult.success) {
@@ -684,6 +692,7 @@ export default function EventRegisterScreen() {
               ticketCount={ticketCount}
               setTicketCount={setTicketCount}
               spotsLeft={spotsLeft}
+              availableSpots={availableSpots}
               colors={colors}
             />
 

@@ -8,6 +8,65 @@ import * as Linking from 'expo-linking';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 
+// Pre-load expo-web-browser module to avoid dynamic import delay
+// This is cached after first load, making subsequent calls much faster
+// Use a type-safe approach that works with Metro bundler
+type WebBrowserType = typeof import('expo-web-browser');
+let WebBrowserModule: WebBrowserType | null = null;
+let webBrowserLoadAttempted = false;
+let webBrowserLoadPromise: Promise<WebBrowserType | null> | null = null;
+
+async function loadWebBrowserModule(): Promise<WebBrowserType | null> {
+  // If already loaded, return cached module
+  if (WebBrowserModule) {
+    return WebBrowserModule;
+  }
+  
+  // If we're already loading, return the existing promise
+  if (webBrowserLoadPromise) {
+    return webBrowserLoadPromise;
+  }
+  
+  // If we've already tried and failed, don't try again
+  if (webBrowserLoadAttempted && !WebBrowserModule) {
+    return null;
+  }
+  
+  // Only try to load on mobile platforms (not web)
+  if (Platform.OS === 'web') {
+    webBrowserLoadAttempted = true;
+    return null;
+  }
+  
+  // Create a single promise for the load operation
+  webBrowserLoadPromise = (async () => {
+    try {
+      webBrowserLoadAttempted = true;
+      const module = await import('expo-web-browser');
+      WebBrowserModule = module;
+      return module;
+    } catch (error) {
+      console.warn('Failed to pre-load expo-web-browser:', error);
+      return null;
+    } finally {
+      webBrowserLoadPromise = null; // Clear promise after completion
+    }
+  })();
+  
+  return webBrowserLoadPromise;
+}
+
+// Pre-load the module when this file is first imported (non-blocking)
+// Only on mobile platforms
+if (Platform.OS !== 'web') {
+  // Use setTimeout to defer loading slightly, avoiding blocking initial render
+  setTimeout(() => {
+    loadWebBrowserModule().catch(() => {
+      // Silently fail - we'll fallback to Linking if needed
+    });
+  }, 0);
+}
+
 // API Base URL - Update this to your Vercel deployment URL
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://vibe.volunteersinc.org';
 
@@ -257,12 +316,11 @@ export async function openPaymentPage(
     }
     
     // On mobile, try to use expo-web-browser first, fallback to Linking if it fails
-    try {
-      // Dynamically import expo-web-browser
-      const WebBrowser = await import('expo-web-browser');
-      
-      // Check if openBrowserAsync exists and is a function
-      if (WebBrowser && typeof WebBrowser.openBrowserAsync === 'function') {
+    // Use pre-loaded module (much faster than dynamic import)
+    const WebBrowser = await loadWebBrowserModule();
+    
+    if (WebBrowser && typeof WebBrowser.openBrowserAsync === 'function') {
+      try {
         console.log('Opening browser with expo-web-browser...');
         const result = await WebBrowser.openBrowserAsync(paymentUrl, {
           showTitle: true,
@@ -271,12 +329,10 @@ export async function openPaymentPage(
         console.log('Browser opened:', result);
         // On mobile, success means browser was opened (dismiss/cancel means user came back)
         return { success: true };
-      } else {
-        console.warn('expo-web-browser.openBrowserAsync not available');
+      } catch (webBrowserError) {
+        // If openBrowserAsync fails, fallback to Linking
+        console.warn('expo-web-browser.openBrowserAsync failed, falling back to Linking:', webBrowserError);
       }
-    } catch (webBrowserError) {
-      // If expo-web-browser fails (native module not available), fallback to Linking
-      console.warn('expo-web-browser not available, falling back to Linking:', webBrowserError);
     }
     
     // Fallback: Use Linking.openURL if expo-web-browser is not available

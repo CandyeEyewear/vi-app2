@@ -140,7 +140,13 @@ export default function MembershipScreen() {
 
   useEffect(() => {
     fetchMembership();
-  }, [fetchMembership]);
+    // Refresh user data when component mounts to ensure latest membership status
+    if (refreshUser) {
+      refreshUser().catch((error) => {
+        console.error('Error refreshing user on membership screen:', error);
+      });
+    }
+  }, [fetchMembership, refreshUser]);
 
   // Cancel subscription
   const handleCancelSubscription = useCallback(() => {

@@ -61,7 +61,7 @@ export default function ProposeOpportunityScreen() {
   const { user, isAdmin } = useAuth();
 
   // Check if user has premium membership or is admin
-  const isPremium = user?.membershipTier === 'premium';
+  const isPremium = user?.membershipTier === 'premium' && user?.membershipStatus === 'active';
   const hasAccess = isPremium || isAdmin;
 
   // Form state

@@ -32,7 +32,7 @@ export default function TabsLayout() {
   useFocusEffect(
     React.useCallback(() => {
       refreshConversations();
-    }, [])
+    }, [refreshConversations])
   );
 
   // Show bottom tabs only on mobile/tablet (< 992px)
