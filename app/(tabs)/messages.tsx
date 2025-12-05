@@ -23,7 +23,6 @@ import { Search, Plus, X, Inbox } from 'lucide-react-native';
 import { Colors } from '../../constants/colors';
 import { useMessaging } from '../../contexts/MessagingContext';
 import { useAuth } from '../../contexts/AuthContext';
-import WebContainer from '../../components/WebContainer';
 import { EmptyState } from '../../components/EmptyState';
 import { UserAvatar, UserNameWithBadge, OnlineStatusDot, MessageStatus } from '../../components';
 import type { Conversation } from '../../types';
@@ -280,139 +279,137 @@ export default function MessagesScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={[styles.screen, { backgroundColor: colors.background }]}> 
-        <WebContainer>
-          <View style={[styles.header, { paddingTop: insets.top + 8 }]}> 
-            <View style={styles.headerTextGroup}>
-              <Text style={[styles.title, { color: colors.text }]}>Messages</Text>
-              <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-                Stay in sync with causes, volunteers, and partners.
-              </Text>
-            </View>
-            <Pressable
-              onPress={() => router.push('/search')}
-              style={({ pressed }) => [
-                styles.newButton,
-                { backgroundColor: colors.primary },
-                pressed && { opacity: 0.85 },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Start a new chat"
-            >
-              <Plus size={18} color="#FFFFFF" />
-              <Text style={styles.newButtonText}>New chat</Text>
-            </Pressable>
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}> 
+          <View style={styles.headerTextGroup}>
+            <Text style={[styles.title, { color: colors.text }]}>Messages</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+              Stay in sync with causes, volunteers, and partners.
+            </Text>
           </View>
+          <Pressable
+            onPress={() => router.push('/search')}
+            style={({ pressed }) => [
+              styles.newButton,
+              { backgroundColor: colors.primary },
+              pressed && { opacity: 0.85 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Start a new chat"
+          >
+            <Plus size={18} color="#FFFFFF" />
+            <Text style={styles.newButtonText}>New chat</Text>
+          </Pressable>
+        </View>
 
-          <View style={styles.searchWrapper}>
-            <View
-              style={[
-                styles.searchContainer,
-                {
-                  backgroundColor: colors.inputBackground,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <Search size={18} color={colors.textSecondary} style={styles.searchIcon} />
-              <TextInput
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Search people or messages"
-                placeholderTextColor={colors.textTertiary}
-                style={[styles.searchInput, { color: colors.text }]}
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="search"
-              />
-              {searchQuery.length > 0 && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Clear search"
-                  onPress={() => setSearchQuery('')}
-                  style={styles.clearButton}
-                >
-                  <X size={16} color={colors.textSecondary} />
-                </Pressable>
-              )}
-            </View>
+        <View style={styles.searchWrapper}>
+          <View
+            style={[
+              styles.searchContainer,
+              {
+                backgroundColor: colors.inputBackground,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <Search size={18} color={colors.textSecondary} style={styles.searchIcon} />
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search people or messages"
+              placeholderTextColor={colors.textTertiary}
+              style={[styles.searchInput, { color: colors.text }]}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+                onPress={() => setSearchQuery('')}
+                style={styles.clearButton}
+              >
+                <X size={16} color={colors.textSecondary} />
+              </Pressable>
+            )}
           </View>
+        </View>
 
-          <View style={styles.filterRow}>
-            {FILTERS.map((filter) => {
-              const isActive = activeFilter === filter.id;
-              return (
-                <Pressable
-                  key={filter.id}
-                  onPress={() => setActiveFilter(filter.id)}
+        <View style={styles.filterRow}>
+          {FILTERS.map((filter) => {
+            const isActive = activeFilter === filter.id;
+            return (
+              <Pressable
+                key={filter.id}
+                onPress={() => setActiveFilter(filter.id)}
+                style={[
+                  styles.filterChip,
+                  {
+                    backgroundColor: isActive ? colors.primarySoft : colors.surfaceElevated,
+                    borderColor: isActive ? colors.primary : colors.border,
+                  },
+                ]}
+              >
+                <Text
                   style={[
-                    styles.filterChip,
-                    {
-                      backgroundColor: isActive ? colors.primarySoft : colors.surfaceElevated,
-                      borderColor: isActive ? colors.primary : colors.border,
-                    },
+                    styles.filterLabel,
+                    { color: isActive ? colors.primaryDark : colors.textSecondary },
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.filterLabel,
-                      { color: isActive ? colors.primaryDark : colors.textSecondary },
-                    ]}
-                  >
-                    {filter.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+                  {filter.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
 
-          {showSkeleton ? (
-            <View style={styles.skeletonList}>
-              {PLACEHOLDER_ITEMS.map((item) => (
-                <ConversationSkeleton colors={colors} key={`skeleton-${item}`} />
-              ))}
-            </View>
-          ) : (
-            <FlatList
-              data={filteredConversations}
-              keyExtractor={(item) => item.id}
-              renderItem={renderConversation}
-              contentContainerStyle={[
-                styles.listContent,
-                filteredConversations.length === 0 && styles.emptyListContent,
-              ]}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={handleRefresh}
-                  tintColor={colors.primary}
-                  colors={[colors.primary]}
-                />
-              }
-              keyboardShouldPersistTaps="handled"
-              ListEmptyComponent={
-                <EmptyState
-                  icon={Inbox}
-                  title={searchQuery ? 'No results found' : 'No conversations yet'}
-                  subtitle={
-                    searchQuery
-                      ? 'Try a different name or keyword.'
-                      : 'Start a conversation with a volunteer or organization.'
-                  }
-                  action={{
-                    label: 'Find people to message',
-                    onPress: () => router.push('/search'),
-                  }}
-                  suggestions={
-                    searchQuery
-                      ? ['Search by cause, organization, or name']
-                      : ['Explore the feed and tap message', 'Invite teammates to chat']
-                  }
-                  colors={colors}
-                />
-              }
-            />
-          )}
-        </WebContainer>
+        {showSkeleton ? (
+          <View style={styles.skeletonList}>
+            {PLACEHOLDER_ITEMS.map((item) => (
+              <ConversationSkeleton colors={colors} key={`skeleton-${item}`} />
+            ))}
+          </View>
+        ) : (
+          <FlatList
+            data={filteredConversations}
+            keyExtractor={(item) => item.id}
+            renderItem={renderConversation}
+            contentContainerStyle={[
+              styles.listContent,
+              filteredConversations.length === 0 && styles.emptyListContent,
+            ]}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                tintColor={colors.primary}
+                colors={[colors.primary]}
+              />
+            }
+            keyboardShouldPersistTaps="handled"
+            ListEmptyComponent={
+              <EmptyState
+                icon={Inbox}
+                title={searchQuery ? 'No results found' : 'No conversations yet'}
+                subtitle={
+                  searchQuery
+                    ? 'Try a different name or keyword.'
+                    : 'Start a conversation with a volunteer or organization.'
+                }
+                action={{
+                  label: 'Find people to message',
+                  onPress: () => router.push('/search'),
+                }}
+                suggestions={
+                  searchQuery
+                    ? ['Search by cause, organization, or name']
+                    : ['Explore the feed and tap message', 'Invite teammates to chat']
+                }
+                colors={colors}
+              />
+            }
+          />
+        )}
       </View>
     </>
   );

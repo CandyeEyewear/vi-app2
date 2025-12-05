@@ -53,7 +53,6 @@ import { EmptyState } from '../../components/EmptyState';
 import { useDebounce } from '../../hooks/useDebounce';
 import { CausesList } from '../../components/CausesList';
 import { EventsList } from '../../components/EventsList';
-import WebContainer from '../../components/WebContainer';
 import Head from 'expo-router/head';
 import {
   searchOpportunities,
@@ -1000,48 +999,46 @@ export default function DiscoverScreen() {
       <Pressable style={[styles.container, { backgroundColor: colors.background }]} onPress={() => { if (showSuggestions) { setShowSuggestions(false); Keyboard.dismiss(); } }}>
         <Head><title>Discover | VIbe</title></Head>
         {!isDesktop && <ScreenHeader colors={colors} insets={insets} onSearchPress={() => setIsSearchExpanded(true)} />}
-        <WebContainer>
-          <AnimatedTabBar activeTab={activeTab} onTabChange={(tab) => { setActiveTab(tab); setTabCache(prev => ({ ...prev, [tab]: true })); }} colors={colors} />
+        <AnimatedTabBar activeTab={activeTab} onTabChange={(tab) => { setActiveTab(tab); setTabCache(prev => ({ ...prev, [tab]: true })); }} colors={colors} />
 
-          <View style={[styles.tabContent, activeTab !== 'opportunities' && styles.tabContentHidden]}>
-            {selectedCategory === 'nearMe' && !locationPermission && !requestingLocation && <LocationBanner type="permission" colors={colors} onEnable={getUserLocation} />}
-            {selectedCategory === 'nearMe' && requestingLocation && <LocationBanner type="loading" colors={colors} />}
-            <View style={styles.searchHeaderContainer}>{renderHeaderContent()}</View>
-            <SuggestionsDropdown visible={showSuggestions} suggestions={suggestions} colors={colors} onSelectSuggestion={handleSelectSuggestion} topPosition={searchBarLayout.y + searchBarLayout.height + 4} />
-            <FlatList
-              ref={listRef}
-              data={filteredOpportunities}
-              keyExtractor={(item) => item.id}
-              numColumns={width >= 600 ? 2 : 1}
-              key={width >= 600 ? '2-col' : '1-col'}
-              renderItem={({ item }) => (
-                <Swipeable ref={(ref) => { if (ref) swipeableRefs.current.set(item.id, ref); else swipeableRefs.current.delete(item.id); }} renderLeftActions={() => renderLeftActions(item)} overshootLeft={false} friction={2}>
-                  <OpportunityCard opportunity={item} onPress={handleOpportunityPress} />
-                </Swipeable>
-              )}
-              contentContainerStyle={[styles.listContent, width >= 600 && styles.listContentGrid]}
-              columnWrapperStyle={width >= 600 ? styles.columnWrapper : undefined}
-              refreshControl={<RefreshControl refreshing={loading && !loadingMore} onRefresh={() => loadOpportunities()} tintColor={colors.primary} colors={[colors.primary]} />}
-              ListEmptyComponent={renderEmptyComponent}
-              ListFooterComponent={loadingMore ? <LoadingFooter colors={colors} /> : null}
-              onEndReached={handleLoadMore}
-              onEndReachedThreshold={0.5}
-              removeClippedSubviews={true}
-              maxToRenderPerBatch={10}
-              windowSize={5}
-              keyboardShouldPersistTaps="handled"
-              scrollEnabled={activeTab === 'opportunities'}
-            />
-          </View>
+        <View style={[styles.tabContent, activeTab !== 'opportunities' && styles.tabContentHidden]}>
+          {selectedCategory === 'nearMe' && !locationPermission && !requestingLocation && <LocationBanner type="permission" colors={colors} onEnable={getUserLocation} />}
+          {selectedCategory === 'nearMe' && requestingLocation && <LocationBanner type="loading" colors={colors} />}
+          <View style={styles.searchHeaderContainer}>{renderHeaderContent()}</View>
+          <SuggestionsDropdown visible={showSuggestions} suggestions={suggestions} colors={colors} onSelectSuggestion={handleSelectSuggestion} topPosition={searchBarLayout.y + searchBarLayout.height + 4} />
+          <FlatList
+            ref={listRef}
+            data={filteredOpportunities}
+            keyExtractor={(item) => item.id}
+            numColumns={width >= 600 ? 2 : 1}
+            key={width >= 600 ? '2-col' : '1-col'}
+            renderItem={({ item }) => (
+              <Swipeable ref={(ref) => { if (ref) swipeableRefs.current.set(item.id, ref); else swipeableRefs.current.delete(item.id); }} renderLeftActions={() => renderLeftActions(item)} overshootLeft={false} friction={2}>
+                <OpportunityCard opportunity={item} onPress={handleOpportunityPress} />
+              </Swipeable>
+            )}
+            contentContainerStyle={[styles.listContent, width >= 600 && styles.listContentGrid]}
+            columnWrapperStyle={width >= 600 ? styles.columnWrapper : undefined}
+            refreshControl={<RefreshControl refreshing={loading && !loadingMore} onRefresh={() => loadOpportunities()} tintColor={colors.primary} colors={[colors.primary]} />}
+            ListEmptyComponent={renderEmptyComponent}
+            ListFooterComponent={loadingMore ? <LoadingFooter colors={colors} /> : null}
+            onEndReached={handleLoadMore}
+            onEndReachedThreshold={0.5}
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            keyboardShouldPersistTaps="handled"
+            scrollEnabled={activeTab === 'opportunities'}
+          />
+        </View>
 
-          <View style={[styles.tabContent, activeTab !== 'causes' && styles.tabContentHidden]}>
-            <CausesList showSearch={false} showFilters={true} onCausePress={(cause) => router.push(`/causes/${cause.slug}`)} />
-          </View>
+        <View style={[styles.tabContent, activeTab !== 'causes' && styles.tabContentHidden]}>
+          <CausesList showSearch={false} showFilters={true} onCausePress={(cause) => router.push(`/causes/${cause.slug}`)} />
+        </View>
 
-          <View style={[styles.tabContent, activeTab !== 'events' && styles.tabContentHidden]}>
-            <EventsList showSearch={false} showFilters={true} />
-          </View>
-        </WebContainer>
+        <View style={[styles.tabContent, activeTab !== 'events' && styles.tabContentHidden]}>
+          <EventsList showSearch={false} showFilters={true} />
+        </View>
       </Pressable>
     </>
   );

@@ -23,7 +23,6 @@ import { Colors } from '../../constants/colors';
 import { Shield, ShoppingBag, Plus, Edit, Settings, Calendar, Crown, Heart, ChevronRight } from 'lucide-react-native';
 import StreakBadge from '../../components/StreakBadge';
 import { UserAvatar, UserNameWithBadge } from '../../components/index';
-import WebContainer from '../../components/WebContainer';
 import Head from 'expo-router/head';
 
 // ============================================
@@ -178,7 +177,6 @@ export default function ProfileScreen() {
       </View>
       )}
 
-      <WebContainer>
       {/* 🔥 STREAK BADGE - Shows if user has a streak */}
       {user.currentStreak && user.currentStreak > 0 && (
         <View style={styles.streakSection}>
@@ -416,7 +414,6 @@ export default function ProfileScreen() {
           Member since {new Date(user.createdAt).toLocaleDateString()}
         </Text>
       </View>
-      </WebContainer>
     </ScrollView>
   );
 }
