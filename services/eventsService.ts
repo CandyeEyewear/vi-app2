@@ -704,15 +704,23 @@ export async function deregisterUser(
     let refundResult: { refundProcessed?: boolean; refundError?: string } = {};
     if (processRefund && !registration.event?.is_free && registration.event?.ticket_price) {
       // Find the payment transaction for this registration
+      // Get the most recent completed transaction (not refunded)
       const { data: transaction } = await supabase
         .from('payment_transactions')
         .select('*')
         .eq('reference_id', registrationId)
         .eq('order_type', 'event_registration')
         .eq('status', 'completed')
-        .single();
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       if (transaction) {
+        // Double-check transaction hasn't been refunded
+        if (transaction.status === 'refunded') {
+          refundResult.refundError = 'Transaction has already been refunded';
+          return { success: true, data: refundResult };
+        }
         // Process refund through API
         try {
           const refundResponse = await fetch(

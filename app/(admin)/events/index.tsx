@@ -154,6 +154,7 @@ function EventSummaryCard({ event, colors }: EventSummaryCardProps) {
       ticketCount: number;
       amountPaid: number;
       refundAmount: number;
+      paymentStatus?: string;
       transactionNumber?: string;
     }>;
   } | null>(null);
@@ -171,41 +172,64 @@ function EventSummaryCard({ event, colors }: EventSummaryCardProps) {
         );
 
         // Fetch payment and refund data for each registration
+        // Use EXACT same logic as event summary screen
         const registrationsWithPayments = await Promise.all(
-          activeRegistrations.map(async (reg) => {
-            // Get payment transactions
-            const { data: payments } = await supabase
+          activeRegistrations.map(async (reg: any) => {
+            // Get the latest completed transaction for this registration (EXACT same query as summary screen)
+            const { data: transaction } = await supabase
+              .from('payment_transactions')
+              .select('amount, status, transaction_number')
+              .eq('reference_id', reg.id)
+              .eq('order_type', 'event_registration')
+              .eq('status', 'completed')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            // Get all transactions for refund calculation
+            const { data: allPayments } = await supabase
               .from('payment_transactions')
               .select('amount, status, transaction_number, transaction_type')
               .eq('reference_id', reg.id)
               .eq('order_type', 'event_registration')
               .order('created_at', { ascending: false });
 
-            const paidTransactions = payments?.filter(p => 
-              p.status === 'completed' && p.transaction_type === 'payment'
-            ) || [];
-            const refundTransactions = payments?.filter(p => 
+            // Set payment status (EXACT same logic as summary screen)
+            // reg comes from transformRegistration which uses camelCase
+            const paymentStatus = transaction?.status === 'completed' ? 'Completed' : reg.paymentStatus;
+            
+            // Get amount paid (EXACT same logic as summary screen)
+            // reg comes from transformRegistration which uses camelCase
+            const amountPaid = transaction?.amount ? parseFloat(transaction.amount) : (reg.amountPaid ? parseFloat(reg.amountPaid) : undefined);
+            
+            // Calculate refunds from refund transactions
+            const refundTransactions = allPayments?.filter(p => 
               p.status === 'completed' && p.transaction_type === 'refund'
             ) || [];
-
-            const amountPaid = paidTransactions.reduce((sum, p) => sum + (p.amount || 0), 0);
-            const refundAmount = refundTransactions.reduce((sum, r) => sum + (r.amount || 0), 0);
+            const refundAmount = refundTransactions.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
 
             return {
               id: reg.id,
               userName: reg.user?.fullName || reg.user?.email || 'Unknown User',
               ticketCount: reg.ticketCount || 1,
-              amountPaid,
+              amountPaid: amountPaid || 0,
               refundAmount,
-              transactionNumber: paidTransactions[0]?.transaction_number,
+              paymentStatus,
+              transactionNumber: transaction?.transaction_number || reg.transactionNumber,
             };
           })
         );
 
+        // Filter for paid registrations (EXACT same logic as summary screen)
+        const paidRegistrations = registrationsWithPayments.filter(
+          (r) => r.paymentStatus === 'Completed' && r.amountPaid && r.amountPaid > 0
+        );
+
         const totalPersons = registrationsWithPayments.length;
         const totalTickets = registrationsWithPayments.reduce((sum, r) => sum + r.ticketCount, 0);
-        const totalAmount = registrationsWithPayments.reduce((sum, r) => sum + r.amountPaid, 0);
-        const totalRefunds = registrationsWithPayments.reduce((sum, r) => sum + r.refundAmount, 0);
+        // Only count amounts from paid registrations (EXACT same logic as summary screen)
+        const totalAmount = paidRegistrations.reduce((sum, r) => sum + (r.amountPaid || 0), 0);
+        const totalRefunds = registrationsWithPayments.reduce((sum, r) => sum + (r.refundAmount || 0), 0);
 
         setSummaryData({
           totalPersons,

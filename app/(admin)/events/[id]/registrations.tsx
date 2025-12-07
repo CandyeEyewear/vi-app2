@@ -179,7 +179,7 @@ function RegistrationItem({
         )}
         {registration.paymentStatus && (
           <View style={styles.detailRow}>
-            <CheckCircle size={14} color={registration.paymentStatus === 'completed' ? '#4CAF50' : colors.textSecondary} />
+            <CheckCircle size={14} color={(registration.paymentStatus === 'Completed' || registration.paymentStatus === 'completed') ? '#4CAF50' : colors.textSecondary} />
             <Text style={[styles.detailText, { color: colors.textSecondary }]}>
               Payment: {registration.paymentStatus}
             </Text>
@@ -203,7 +203,10 @@ function RegistrationItem({
               </>
             )}
           </TouchableOpacity>
-          {!eventIsFree && registration.paymentStatus === 'completed' && (
+          {!eventIsFree && 
+           (registration.paymentStatus === 'Completed' || registration.paymentStatus === 'completed') && 
+           registration.amountPaid && 
+           registration.amountPaid > 0 && (
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: '#FF9800' }]}
               onPress={() => handleDeregister(true)}
@@ -231,7 +234,7 @@ export default function EventRegistrationsScreen() {
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
 
   // State
   const [event, setEvent] = useState<any>(null);
@@ -285,7 +288,8 @@ export default function EventRegistrationsScreen() {
             return {
               ...reg,
               amountPaid: transaction?.amount || 0,
-              paymentStatus: transaction?.status || undefined,
+              // Prefer event_registrations.payment_status, fallback to transaction status
+              paymentStatus: reg.payment_status || (transaction?.status === 'completed' ? 'Completed' : transaction?.status) || undefined,
               transactionNumber: transaction?.transaction_number || undefined,
             };
           })
@@ -509,7 +513,10 @@ export default function EventRegistrationsScreen() {
 
       {/* Floating Scan Button */}
       <TouchableOpacity
-        style={[styles.scanButton, { backgroundColor: colors.primary }]}
+        style={[
+          styles.scanButton,
+          { backgroundColor: colors.primary, bottom: 24 + insets.bottom }
+        ]}
         onPress={() => setQrScannerVisible(true)}
         activeOpacity={0.8}
       >

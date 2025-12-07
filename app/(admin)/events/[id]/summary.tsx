@@ -75,39 +75,59 @@ export default function EventSummaryScreen() {
       if (registrationsError) {
         console.error('Error fetching registrations:', registrationsError);
       } else if (registrationsData) {
-        const transformedRegistrations: EventRegistration[] = registrationsData.map((row: any) => ({
-          id: row.id,
-          eventId: row.event_id,
-          userId: row.user_id,
-          user: row.user ? {
-            id: row.user.id,
-            fullName: row.user.full_name,
-            avatarUrl: row.user.avatar_url,
-            email: row.user.email,
-          } : undefined,
-          status: row.status,
-          ticketCount: row.ticket_count || 1,
-          paymentStatus: row.payment_status,
-          transactionNumber: row.transaction_number,
-          amountPaid: row.amount_paid ? parseFloat(row.amount_paid) : undefined,
-          registeredAt: row.registered_at,
-          cancelledAt: row.cancelled_at,
-          attendedAt: row.attended_at,
-        }));
+        // Fetch payment information from payment_transactions for each registration
+        const registrationsWithPayments = await Promise.all(
+          registrationsData.map(async (row: any) => {
+            // Get the latest completed transaction for this registration
+            const { data: transaction } = await supabase
+              .from('payment_transactions')
+              .select('amount, status, transaction_number')
+              .eq('reference_id', row.id)
+              .eq('order_type', 'event_registration')
+              .eq('status', 'completed')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            return {
+              id: row.id,
+              eventId: row.event_id,
+              userId: row.user_id,
+              user: row.user ? {
+                id: row.user.id,
+                fullName: row.user.full_name,
+                avatarUrl: row.user.avatar_url,
+                email: row.user.email,
+              } : undefined,
+              status: row.status,
+              ticketCount: row.ticket_count || 1,
+              paymentStatus: transaction?.status === 'completed' ? 'Completed' : row.payment_status,
+              transactionNumber: transaction?.transaction_number || row.transaction_number,
+              amountPaid: transaction?.amount ? parseFloat(transaction.amount) : (row.amount_paid ? parseFloat(row.amount_paid) : undefined),
+              registeredAt: row.registered_at,
+              cancelledAt: row.cancelled_at,
+              attendedAt: row.attended_at,
+            };
+          })
+        );
+
+        const transformedRegistrations: EventRegistration[] = registrationsWithPayments;
 
         setRegistrations(transformedRegistrations);
 
         // Calculate stats
         const totalParticipants = transformedRegistrations.filter(
-          (r) => r.status === 'registered' || r.status === 'attended'
+          (r) => r.status === 'Registered' || r.status === 'registered' || r.status === 'attended'
         ).length;
 
-        const totalFundsPaid = transformedRegistrations
-          .filter((r) => r.paymentStatus === 'paid' && r.amountPaid)
-          .reduce((sum, r) => sum + (r.amountPaid || 0), 0);
+        const paidRegistrations = transformedRegistrations.filter(
+          (r) => r.paymentStatus === 'Completed' && r.amountPaid && r.amountPaid > 0
+        );
+
+        const totalFundsPaid = paidRegistrations.reduce((sum, r) => sum + (r.amountPaid || 0), 0);
 
         const totalRefunds = transformedRegistrations
-          .filter((r) => r.paymentStatus === 'refunded' && r.amountPaid)
+          .filter((r) => r.paymentStatus === 'refunded' && r.amountPaid && r.amountPaid > 0)
           .reduce((sum, r) => sum + (r.amountPaid || 0), 0);
 
         setStats({

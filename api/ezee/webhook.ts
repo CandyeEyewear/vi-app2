@@ -109,15 +109,15 @@ export default async function handler(req: any, res: any) {
               .eq('id', existingTransaction.reference_id)
               .single();
             
-            if (verifyEvent && verifyEvent.payment_status !== 'paid') {
+            if (verifyEvent && verifyEvent.payment_status !== 'Completed') {
               console.log('⚠️ Duplicate webhook: Event registration not paid, updating...', {
                 registrationId: existingTransaction.reference_id,
               });
               await supabase
                 .from('event_registrations')
                 .update({
-                  payment_status: 'paid',
-                  status: 'confirmed',
+                  payment_status: 'Completed',
+                  status: 'Registered',
                   transaction_number: TransactionNumber || existingTransaction.transaction_number,
                   amount_paid: existingTransaction.amount || null,
                 })
@@ -210,7 +210,7 @@ export default async function handler(req: any, res: any) {
                 .eq('id', transaction.reference_id)
                 .single();
               
-              if (verifyEvent && verifyEvent.payment_status !== 'paid') {
+              if (verifyEvent && verifyEvent.payment_status !== 'Completed') {
                 console.error('⚠️ Event registration update verification failed!', {
                   registrationId: transaction.reference_id,
                   paymentStatus: verifyEvent.payment_status,
@@ -219,8 +219,8 @@ export default async function handler(req: any, res: any) {
                 await supabase
                   .from('event_registrations')
                   .update({
-                    payment_status: 'paid',
-                    status: 'confirmed',
+                    payment_status: 'Completed',
+                    status: 'Registered',
                     transaction_number: transaction.transaction_number || null,
                     amount_paid: transaction.amount || null,
                   })
@@ -257,13 +257,13 @@ export default async function handler(req: any, res: any) {
                 .eq('id', transactionByNumber.reference_id)
                 .single();
               
-              if (verifyEvent && verifyEvent.payment_status !== 'paid') {
+              if (verifyEvent && verifyEvent.payment_status !== 'Completed') {
                 console.log('⚠️ Duplicate webhook (fallback): Event registration not paid, updating...');
                 await supabase
                   .from('event_registrations')
                   .update({
-                    payment_status: 'paid',
-                    status: 'confirmed',
+                    payment_status: 'Completed',
+                    status: 'Registered',
                     transaction_number: TransactionNumber,
                   })
                   .eq('id', transactionByNumber.reference_id);
@@ -348,7 +348,7 @@ export default async function handler(req: any, res: any) {
                   .eq('id', updatedTransaction.reference_id)
                   .single();
                 
-                if (verifyEvent && verifyEvent.payment_status !== 'paid') {
+                if (verifyEvent && verifyEvent.payment_status !== 'completed') {
                   console.error('⚠️ Event registration update verification failed (fallback)!', {
                     registrationId: updatedTransaction.reference_id,
                     paymentStatus: verifyEvent.payment_status,
@@ -357,8 +357,8 @@ export default async function handler(req: any, res: any) {
                   await supabase
                     .from('event_registrations')
                     .update({
-                      payment_status: 'paid',
-                      status: 'confirmed',
+                      payment_status: 'completed',
+                      status: 'registered',
                       transaction_number: updatedTransaction.transaction_number || null,
                       amount_paid: updatedTransaction.amount || null,
                     })
@@ -538,8 +538,8 @@ async function handleSuccessfulPayment(transaction: any) {
       const { error: eventUpdateError } = await supabase
         .from('event_registrations')
         .update({ 
-          payment_status: 'paid', 
-          status: 'confirmed',
+          payment_status: 'completed', 
+          status: 'registered',
           transaction_number: transaction.transaction_number || null,
           amount_paid: transaction.amount || null,
         })
@@ -558,7 +558,7 @@ async function handleSuccessfulPayment(transaction: any) {
         .eq('id', reference_id)
         .single();
 
-      if (verifyEvent && verifyEvent.payment_status !== 'paid') {
+      if (verifyEvent && verifyEvent.payment_status !== 'completed') {
         console.error('⚠️ Event registration update verification failed!', {
           registrationId: reference_id,
           paymentStatus: verifyEvent.payment_status,
@@ -567,8 +567,8 @@ async function handleSuccessfulPayment(transaction: any) {
       await supabase
         .from('event_registrations')
           .update({ 
-            payment_status: 'paid', 
-            status: 'confirmed',
+            payment_status: 'completed', 
+            status: 'registered',
             transaction_number: transaction.transaction_number || null,
             amount_paid: transaction.amount || null,
           })
@@ -576,7 +576,7 @@ async function handleSuccessfulPayment(transaction: any) {
       }
 
       // Generate tickets after successful payment
-      if (verifyEvent && verifyEvent.payment_status === 'paid' && verifyEvent.event_id && verifyEvent.ticket_count) {
+      if (verifyEvent && (verifyEvent.payment_status === 'Completed' || verifyEvent.payment_status === 'completed') && verifyEvent.event_id && verifyEvent.ticket_count) {
         try {
           // Check if tickets already exist
           const { data: existingTickets } = await supabase

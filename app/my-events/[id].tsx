@@ -14,6 +14,7 @@ import {
   useColorScheme,
   ActivityIndicator,
   Image,
+  Platform,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -67,7 +68,16 @@ export default function MyEventDetailScreen() {
       // Load tickets
       const ticketsResponse = await getTicketsByRegistration(id);
       if (ticketsResponse.success && ticketsResponse.data) {
+        console.log('[My Events] Tickets loaded:', ticketsResponse.data.length);
+        console.log('[My Events] Ticket data:', ticketsResponse.data.map(t => ({
+          id: t.id,
+          ticketNumber: t.ticketNumber,
+          qrCode: t.qrCode,
+          hasQrCode: !!t.qrCode
+        })));
         setTickets(ticketsResponse.data);
+      } else {
+        console.error('[My Events] Failed to load tickets:', ticketsResponse.error);
       }
     } catch (error) {
       console.error('Error loading event details:', error);
@@ -227,18 +237,37 @@ export default function MyEventDetailScreen() {
 
                 <View style={styles.qrContainer}>
                   <View style={[styles.qrWrapper, { backgroundColor: '#FFFFFF' }]}>
-                    <QRCode
-                      value={ticket.qrCode}
-                      size={250}
-                      backgroundColor="#FFFFFF"
-                      color="#000000"
-                    />
+                    {ticket.qrCode ? (
+                      Platform.OS === 'web' ? (
+                        // Web-compatible QR code using URL
+                        <Image
+                          source={{
+                            uri: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(ticket.qrCode)}`,
+                          }}
+                          style={{ width: 250, height: 250 }}
+                          resizeMode="contain"
+                        />
+                      ) : (
+                        <QRCode
+                          value={ticket.qrCode}
+                          size={250}
+                          backgroundColor="#FFFFFF"
+                          color="#000000"
+                        />
+                      )
+                    ) : (
+                      <View style={{ width: 250, height: 250, justifyContent: 'center', alignItems: 'center' }}>
+                        <Text style={{ color: colors.textSecondary }}>No QR Code</Text>
+                      </View>
+                    )}
                   </View>
                 </View>
 
-                <Text style={[styles.qrCodeText, { color: colors.textSecondary }]}>
-                  {ticket.qrCode}
-                </Text>
+                {ticket.qrCode && (
+                  <Text style={[styles.qrCodeText, { color: colors.textSecondary }]}>
+                    {ticket.qrCode}
+                  </Text>
+                )}
               </View>
             ))}
           </View>
