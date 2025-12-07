@@ -555,7 +555,8 @@ export async function getUserRegistrations(
         event:events(
           id, title, image_url, event_date, start_time, end_time,
           location, is_virtual, status
-        )
+        ),
+        event_tickets(id, checked_in)
       `)
       .eq('user_id', userId)
       .order('registered_at', { ascending: false });
@@ -568,7 +569,20 @@ export async function getUserRegistrations(
 
     if (error) throw error;
 
-    let registrations = data?.map(transformRegistration) || [];
+    let registrations = (data || []).map((row: any) => {
+      const transformedReg = transformRegistration(row);
+      // Calculate check-in stats
+      const totalTickets = row.event_tickets?.length || 0;
+      const checkedInCount = row.event_tickets?.filter((t: any) => t.checked_in).length || 0;
+      return {
+        ...transformedReg,
+        checkInStats: {
+          totalTickets,
+          checkedInCount,
+          pendingCount: totalTickets - checkedInCount,
+        },
+      };
+    });
 
     // Filter for upcoming events if requested
     if (options?.upcoming) {

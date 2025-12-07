@@ -376,6 +376,24 @@ export default function ProfileScreen() {
             <ChevronRight size={20} color={colors.textSecondary} />
           </TouchableOpacity>
 
+          {/* My Events */}
+          <TouchableOpacity
+            style={[styles.menuItem, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/my-events')}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.menuIconContainer, { backgroundColor: colors.primary + '15' }]}>
+              <Calendar size={22} color={colors.primary} />
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={[styles.menuTitle, { color: colors.text }]}>My Events</Text>
+              <Text style={[styles.menuSubtitle, { color: colors.textSecondary }]}>
+                View your registered events and tickets
+              </Text>
+            </View>
+            <ChevronRight size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+
           {/* Membership / Partner Membership */}
           <TouchableOpacity
             style={[styles.menuItem, { backgroundColor: colors.card, borderColor: colors.border }]}

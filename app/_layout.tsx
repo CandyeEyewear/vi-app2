@@ -160,18 +160,16 @@ function AppContent() {
       // Handle payment redirects (vibe://payment/success or vibe://payment/cancel)
       if (parsed.scheme === 'vibe' && parsed.path) {
         if (parsed.path.includes('payment/success')) {
-          // Extract returnPath from query params if provided
-          // Handle both returnPath and return_path, and handle array format
+          // Extract query params to pass to success page
+          const orderId = parsed.queryParams?.orderId;
           const returnPathRaw = parsed.queryParams?.returnPath || parsed.queryParams?.return_path;
           const returnPath = Array.isArray(returnPathRaw) ? returnPathRaw[0] : returnPathRaw;
-          const redirectPath = returnPath && typeof returnPath === 'string' 
-            ? returnPath 
-            : '/feed';
-          logger.info('[DEEP LINK] Payment success redirect detected', { 
+          
+          logger.info('[DEEP LINK] Payment success redirect detected - navigating to success page first', { 
             path: parsed.path, 
+            orderId,
             returnPathRaw,
-            returnPath,
-            redirectPath 
+            returnPath
           });
           
           // Refresh user data to get updated membership status
@@ -182,7 +180,20 @@ function AppContent() {
             });
           }
           
-          router.replace(redirectPath);
+          // Navigate to success page first, which will then redirect to returnPath after countdown
+          const successParams: any = {};
+          if (orderId) {
+            const orderIdValue = Array.isArray(orderId) ? orderId[0] : orderId;
+            successParams.orderId = orderIdValue;
+          }
+          if (returnPath) {
+            successParams.returnPath = returnPath;
+          }
+          
+          router.replace({
+            pathname: '/payment/success',
+            params: successParams
+          } as any);
           return;
         }
         if (parsed.path.includes('payment/cancel')) {

@@ -48,6 +48,7 @@ import {
 } from '../../../services/eventsService';
 import { useAuth } from '../../../contexts/AuthContext';
 import { processPayment } from '../../../services/paymentService';
+import { generateTicketsForRegistration } from '../../../services/eventTicketsService';
 import { showToast } from '../../../utils/toast';
 import ErrorBoundary from '../../../components/ErrorBoundary';
 import Card from '../../../components/Card';
@@ -550,7 +551,7 @@ export default function EventRegisterScreen() {
     setSubmitting(true);
 
     try {
-      // For free events, register directly
+      // For free events, register directly and generate tickets
       if (event.isFree) {
         const response = await registerForEvent({
           eventId: event.id,
@@ -558,7 +559,32 @@ export default function EventRegisterScreen() {
           ticketCount,
         });
 
-        if (response.success) {
+        if (response.success && response.data) {
+          // Generate tickets for free events immediately after registration
+          const registrationId = response.data.id;
+          const eventId = event.id;
+          
+          if (registrationId && eventId) {
+            try {
+              const ticketsResponse = await generateTicketsForRegistration(
+                registrationId,
+                ticketCount,
+                eventId
+              );
+              
+              if (ticketsResponse.success) {
+                console.log(`✅ Generated ${ticketCount} ticket(s) for registration ${registrationId}`);
+              } else {
+                console.error('⚠️ Failed to generate tickets for free event:', ticketsResponse.error);
+                // Note: Registration succeeded but ticket generation failed
+                // Don't block the user, but log the error
+              }
+            } catch (ticketError) {
+              console.error('❌ Error generating tickets for free event:', ticketError);
+              // Don't fail registration if ticket generation fails
+            }
+          }
+
           // Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setShowSuccess(true);
           showToast('Successfully registered! 🎉', 'success');
@@ -586,6 +612,9 @@ export default function EventRegisterScreen() {
 
       const registration = registrationResponse.data;
       const orderId = `EVT_${registration.id}_${Date.now()}`;
+      
+      // Note: For paid events, tickets will be generated in the webhook AFTER payment is confirmed
+      // Do NOT generate tickets here - wait for payment confirmation
 
       // Process payment through eZeePayments
       const returnPath = `/events/${slug}`;

@@ -103,7 +103,7 @@ export default function EventSummaryScreen() {
         ).length;
 
         const totalFundsPaid = transformedRegistrations
-          .filter((r) => r.paymentStatus === 'completed' && r.amountPaid)
+          .filter((r) => r.paymentStatus === 'paid' && r.amountPaid)
           .reduce((sum, r) => sum + (r.amountPaid || 0), 0);
 
         const totalRefunds = transformedRegistrations

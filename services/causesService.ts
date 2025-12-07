@@ -52,29 +52,6 @@ export async function calculateAmountRaised(causeId: string): Promise<number> {
 }
 
 /**
- * Calculate total raised across all causes
- */
-export async function calculateTotalRaisedAllCauses(): Promise<number> {
-  try {
-    const { data: donationsData, error: donationsError } = await supabase
-      .from('donations')
-      .select('amount')
-      .eq('payment_status', 'completed');
-
-    if (donationsError || !donationsData) {
-      return 0;
-    }
-
-    return donationsData.reduce((sum, donation) => {
-      return sum + (parseFloat(donation.amount) || 0);
-    }, 0);
-  } catch (error) {
-    console.error('Error calculating total raised:', error);
-    return 0;
-  }
-}
-
-/**
  * Calculate total amount raised across all causes from completed donations
  * This is the single source of truth for total donations across the platform
  */

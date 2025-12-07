@@ -30,6 +30,7 @@ import {
   CheckCircle,
   XCircle,
   RefreshCw,
+  QrCode,
 } from 'lucide-react-native';
 import { Colors } from '../../../../constants/colors';
 import { EventRegistration, EventRegistrationStatus } from '../../../../types';
@@ -42,6 +43,9 @@ import {
 } from '../../../../services/eventsService';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { supabase } from '../../../../services/supabase';
+import QRScanner from '../../../../components/QRScanner';
+import { checkInTicket, getCheckInStats } from '../../../../services/eventTicketsService';
+import { showToast } from '../../../../utils/toast';
 
 // Web-compatible alert
 const showAlert = (title: string, message: string, onOk?: () => void) => {
@@ -78,6 +82,7 @@ interface RegistrationItemProps {
   colors: any;
   onDeregister: (id: string, processRefund: boolean) => void;
   eventIsFree: boolean;
+  checkInStats?: { totalTickets: number; checkedInCount: number };
 }
 
 function RegistrationItem({
@@ -85,6 +90,7 @@ function RegistrationItem({
   colors,
   onDeregister,
   eventIsFree,
+  checkInStats,
 }: RegistrationItemProps) {
   const [loading, setLoading] = useState(false);
   
@@ -147,6 +153,14 @@ function RegistrationItem({
             {registration.ticketCount} ticket{registration.ticketCount !== 1 ? 's' : ''}
           </Text>
         </View>
+        {checkInStats && checkInStats.totalTickets > 0 && (
+          <View style={styles.detailRow}>
+            <CheckCircle size={14} color={checkInStats.checkedInCount === checkInStats.totalTickets ? colors.success : colors.warning} />
+            <Text style={[styles.detailText, { color: checkInStats.checkedInCount === checkInStats.totalTickets ? colors.success : colors.warning }]}>
+              {checkInStats.checkedInCount}/{checkInStats.totalTickets} checked in
+            </Text>
+          </View>
+        )}
         {registration.user?.phone && (
           <View style={styles.detailRow}>
             <Phone size={14} color={colors.textSecondary} />
@@ -225,6 +239,8 @@ export default function EventRegistrationsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [statusFilter, setStatusFilter] = useState<EventRegistrationStatus | 'all'>('all');
+  const [qrScannerVisible, setQrScannerVisible] = useState(false);
+  const [checkInStats, setCheckInStats] = useState<Record<string, { totalTickets: number; checkedInCount: number }>>({});
 
   // Check admin access
   useEffect(() => {
@@ -251,7 +267,7 @@ export default function EventRegistrationsScreen() {
       });
 
       if (regResponse.success && regResponse.data) {
-        // Fetch payment information for each registration
+        // Fetch payment information and check-in stats for each registration
         const registrationsWithPayments = await Promise.all(
           regResponse.data.map(async (reg) => {
             const { data: transaction } = await supabase
@@ -263,6 +279,9 @@ export default function EventRegistrationsScreen() {
               .limit(1)
               .maybeSingle();
 
+            // Get check-in stats
+            const stats = await getCheckInStats(reg.id);
+
             return {
               ...reg,
               amountPaid: transaction?.amount || 0,
@@ -273,6 +292,14 @@ export default function EventRegistrationsScreen() {
         );
 
         setRegistrations(registrationsWithPayments);
+
+        // Update check-in stats state
+        const statsMap: Record<string, { totalTickets: number; checkedInCount: number }> = {};
+        for (const reg of regResponse.data) {
+          const stats = await getCheckInStats(reg.id);
+          statsMap[reg.id] = stats;
+        }
+        setCheckInStats(statsMap);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -321,6 +348,44 @@ export default function EventRegistrationsScreen() {
     }
   }, [fetchData]);
 
+  // Handle QR scan for check-in
+  const handleQRScan = useCallback(async (qrCode: string) => {
+    if (!user?.id) {
+      showAlert('Error', 'User not authenticated');
+      return;
+    }
+
+    setQrScannerVisible(false);
+
+    try {
+      const result = await checkInTicket(qrCode, user.id);
+
+      if (result.success && result.data) {
+        showAlert(
+          'Check-In Successful',
+          `${result.data.attendeeName} - Ticket #${result.data.ticketNumber} checked in`,
+          () => {
+            fetchData(); // Refresh to update stats
+          }
+        );
+        if (Platform.OS !== 'web') {
+          showToast('Ticket checked in successfully', 'success');
+        }
+      } else {
+        showAlert('Error', result.error || 'Failed to check in ticket');
+        if (Platform.OS !== 'web') {
+          showToast(result.error || 'Failed to check in ticket', 'error');
+        }
+      }
+    } catch (error) {
+      console.error('Error checking in ticket:', error);
+      showAlert('Error', 'Failed to check in ticket');
+      if (Platform.OS !== 'web') {
+        showToast('Failed to check in ticket', 'error');
+      }
+    }
+  }, [user?.id, fetchData]);
+
   // Render registration item
   const renderRegistrationItem = useCallback(
     ({ item }: { item: EventRegistration }) => (
@@ -329,9 +394,10 @@ export default function EventRegistrationsScreen() {
         colors={colors}
         onDeregister={handleDeregister}
         eventIsFree={event?.isFree || false}
+        checkInStats={checkInStats[item.id]}
       />
     ),
-    [colors, handleDeregister, event]
+    [colors, handleDeregister, event, checkInStats]
   );
 
   // Filter options
@@ -440,6 +506,22 @@ export default function EventRegistrationsScreen() {
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      {/* Floating Scan Button */}
+      <TouchableOpacity
+        style={[styles.scanButton, { backgroundColor: colors.primary }]}
+        onPress={() => setQrScannerVisible(true)}
+        activeOpacity={0.8}
+      >
+        <QrCode size={24} color="#FFFFFF" />
+      </TouchableOpacity>
+
+      {/* QR Scanner Modal */}
+      <QRScanner
+        visible={qrScannerVisible}
+        onClose={() => setQrScannerVisible(false)}
+        onScan={handleQRScan}
+      />
     </View>
   );
 }
@@ -599,6 +681,21 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  scanButton: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
 });
 

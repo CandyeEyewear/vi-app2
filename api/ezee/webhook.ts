@@ -119,6 +119,7 @@ export default async function handler(req: any, res: any) {
                   payment_status: 'paid',
                   status: 'confirmed',
                   transaction_number: TransactionNumber || existingTransaction.transaction_number,
+                  amount_paid: existingTransaction.amount || null,
                 })
                 .eq('id', existingTransaction.reference_id);
             }
@@ -221,6 +222,7 @@ export default async function handler(req: any, res: any) {
                     payment_status: 'paid',
                     status: 'confirmed',
                     transaction_number: transaction.transaction_number || null,
+                    amount_paid: transaction.amount || null,
                   })
                   .eq('id', transaction.reference_id);
               }
@@ -358,6 +360,7 @@ export default async function handler(req: any, res: any) {
                       payment_status: 'paid',
                       status: 'confirmed',
                       transaction_number: updatedTransaction.transaction_number || null,
+                      amount_paid: updatedTransaction.amount || null,
                     })
                     .eq('id', updatedTransaction.reference_id);
                 }
@@ -538,6 +541,7 @@ async function handleSuccessfulPayment(transaction: any) {
           payment_status: 'paid', 
           status: 'confirmed',
           transaction_number: transaction.transaction_number || null,
+          amount_paid: transaction.amount || null,
         })
         .eq('id', reference_id);
 
@@ -550,7 +554,7 @@ async function handleSuccessfulPayment(transaction: any) {
       // Verify event registration was updated
       const { data: verifyEvent } = await supabase
         .from('event_registrations')
-        .select('payment_status, status, transaction_number')
+        .select('payment_status, status, transaction_number, ticket_count, event_id')
         .eq('id', reference_id)
         .single();
 
@@ -566,8 +570,41 @@ async function handleSuccessfulPayment(transaction: any) {
             payment_status: 'paid', 
             status: 'confirmed',
             transaction_number: transaction.transaction_number || null,
+            amount_paid: transaction.amount || null,
           })
         .eq('id', reference_id);
+      }
+
+      // Generate tickets after successful payment
+      if (verifyEvent && verifyEvent.payment_status === 'paid' && verifyEvent.event_id && verifyEvent.ticket_count) {
+        try {
+          // Check if tickets already exist
+          const { data: existingTickets } = await supabase
+            .from('event_tickets')
+            .select('id')
+            .eq('registration_id', reference_id)
+            .limit(1);
+
+          // Only generate if tickets don't exist
+          if (!existingTickets || existingTickets.length === 0) {
+            const { generateTicketsForRegistration } = await import('../../services/eventTicketsService');
+            const ticketResult = await generateTicketsForRegistration(
+              reference_id,
+              verifyEvent.ticket_count,
+              verifyEvent.event_id
+            );
+            
+            if (ticketResult.success) {
+              console.log(`✅ Generated ${verifyEvent.ticket_count} ticket(s) for registration ${reference_id}`);
+            } else {
+              console.error('⚠️ Failed to generate tickets:', ticketResult.error);
+              // Don't throw - registration is already confirmed
+            }
+          }
+        } catch (ticketError) {
+          console.error('Error generating tickets:', ticketError);
+          // Don't throw - registration is already confirmed
+        }
       }
       break;
 
