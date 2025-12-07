@@ -64,6 +64,8 @@ import { logImageDebugInfo } from '../../utils/webImageDebug';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import Button from '../../components/Button';
 import { ShimmerSkeleton } from '../../components/ShimmerSkeleton';
+import { addEventToCalendar, createEventDateTime, calculateEndDate } from '../../utils/calendar';
+import { CalendarPlus } from 'lucide-react-native';
 
 // ============================================================================
 // UTILITIES & CONSTANTS
@@ -786,6 +788,35 @@ export default function EventDetailScreen() {
     });
   }, [event]);
 
+  const handleAddToCalendar = useCallback(async () => {
+    if (!event) return;
+
+    try {
+      const startDate = createEventDateTime(event.eventDate, event.startTime, event.timezone);
+      const endDate = event.endTime
+        ? createEventDateTime(event.eventDate, event.endTime, event.timezone)
+        : calculateEndDate(startDate, undefined, 2);
+
+      const result = await addEventToCalendar({
+        title: event.title,
+        startDate,
+        endDate,
+        location: event.isVirtual ? event.virtualLink || event.location : event.location,
+        notes: event.description || undefined,
+        timeZone: event.timezone,
+      });
+
+      if (result.success) {
+        showToast('Added to calendar', 'success');
+      } else {
+        showToast(result.error || 'Failed to add to calendar', 'error');
+      }
+    } catch (error) {
+      console.error('Error adding to calendar:', error);
+      showToast('Failed to add to calendar', 'error');
+    }
+  }, [event]);
+
   // Contact handlers
   const handleCall = useCallback(() => {
     if (!event?.contactPhone) return;
@@ -1084,7 +1115,7 @@ export default function EventDetailScreen() {
           </View>
         </ScrollView>
 
-        {/* Bottom Action Button with Gradient */}
+        {/* Bottom Action Buttons */}
         {!isPastEvent && (
           <View
             style={[
@@ -1096,6 +1127,28 @@ export default function EventDetailScreen() {
               },
             ]}
           >
+            {/* Add to Calendar Button */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  opacity: pressed ? 0.7 : 1,
+                },
+                getPremiumShadow(colors),
+              ]}
+              onPress={handleAddToCalendar}
+              accessibilityRole="button"
+              accessibilityLabel="Add event to calendar"
+            >
+              <CalendarPlus size={20} color={colors.primary} />
+              <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>
+                Add to Calendar
+              </Text>
+            </Pressable>
+
+            {/* Register Button */}
             <GradientButton
               variant={registration ? 'danger' : 'primary'}
               loading={registering}
@@ -1439,6 +1492,20 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     opacity: 0.3,
     zIndex: -1,
+  },
+  secondaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+    marginBottom: Spacing.md,
+  },
+  secondaryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   errorContainer: {
     flex: 1,

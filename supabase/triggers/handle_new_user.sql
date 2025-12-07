@@ -148,6 +148,27 @@ BEGIN
   )
   ON CONFLICT (user_id) DO NOTHING;  -- Prevent duplicate inserts
 
+  -- Create default reminder settings
+  INSERT INTO public.reminder_settings (
+    user_id,
+    reminders_enabled,
+    remind_day_before,
+    remind_day_of,
+    remind_hours_before,
+    created_at,
+    updated_at
+  )
+  VALUES (
+    NEW.id,
+    true,  -- Default: enabled
+    true,  -- Default: day before enabled
+    true,  -- Default: day of enabled
+    NULL,  -- Default: hours before disabled
+    NOW(),
+    NOW()
+  )
+  ON CONFLICT (user_id) DO NOTHING;  -- Prevent duplicate inserts
+
   -- Log for debugging (optional - remove in production)
   RAISE NOTICE 'User profile created: % (email: %, full_name: %, phone: %)', 
     NEW.id, 

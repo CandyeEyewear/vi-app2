@@ -52,6 +52,8 @@ import { supabase } from '../services/supabase';
 import CustomAlert from '../components/CustomAlert';
 import { showToast } from '../utils/toast';
 import { Colors } from '../constants/colors';
+import { addEventToCalendar, createEventDateTime, calculateEndDate } from '../utils/calendar';
+import { CalendarPlus } from 'lucide-react-native';
 
 export default function OpportunityDetailsScreen() {
   const { colors, responsive, cardShadow } = useThemeStyles();
@@ -298,6 +300,47 @@ export default function OpportunityDetailsScreen() {
       showAlert('Error', error.message || 'Failed to sign up', 'error');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleAddToCalendar = async () => {
+    if (!opportunity) return;
+
+    try {
+      // Parse opportunity date/time
+      const dateStart = opportunity.dateStart || opportunity.date;
+      if (!dateStart) {
+        showAlert('Error', 'Opportunity date not available', 'error');
+        return;
+      }
+
+      const startDate = createEventDateTime(
+        dateStart,
+        opportunity.timeStart,
+        'America/Jamaica' // Default timezone, adjust if needed
+      );
+      
+      const endDate = opportunity.timeEnd
+        ? createEventDateTime(dateStart, opportunity.timeEnd, 'America/Jamaica')
+        : calculateEndDate(startDate, undefined, 2);
+
+      const result = await addEventToCalendar({
+        title: opportunity.title,
+        startDate,
+        endDate,
+        location: opportunity.location || undefined,
+        notes: opportunity.description || undefined,
+        timeZone: 'America/Jamaica',
+      });
+
+      if (result.success) {
+        showAlert('Success', 'Added to calendar', 'success');
+      } else {
+        showAlert('Error', result.error || 'Failed to add to calendar', 'error');
+      }
+    } catch (error) {
+      console.error('Error adding to calendar:', error);
+      showAlert('Error', 'Failed to add to calendar', 'error');
     }
   };
 
@@ -757,7 +800,7 @@ export default function OpportunityDetailsScreen() {
         </View>
       </Animated.ScrollView>
 
-      {/* Bottom Action Button (Only for non-admins) */}
+      {/* Bottom Action Buttons (Only for non-admins) */}
       {!isAdmin && (
         <View
           style={[
@@ -769,6 +812,27 @@ export default function OpportunityDetailsScreen() {
             },
           ]}
         >
+          {/* Add to Calendar Button */}
+          <AnimatedPressable
+            onPress={handleAddToCalendar}
+            style={({ pressed }) => [
+              styles.secondaryButton,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                opacity: pressed ? 0.7 : 1,
+                marginBottom: responsive.spacing.sm,
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Add opportunity to calendar"
+          >
+            <CalendarPlus size={20} color={colors.primary} />
+            <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>
+              Add to Calendar
+            </Text>
+          </AnimatedPressable>
+
           {isSignedUp ? (
             <AnimatedPressable
               onPress={handleCancelSignup}
@@ -1055,5 +1119,18 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  secondaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+  },
+  secondaryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

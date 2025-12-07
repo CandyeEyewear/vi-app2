@@ -22,10 +22,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
 import { supabase } from '../services/supabase';
 import { useEffect } from 'react';
+import { useReminderSettings } from '../hooks/useReminderSettings';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { user, updateProfile, isAdmin } = useAuth();
+  const { settings: reminderSettings, loading: reminderLoading, updateSettings: updateReminderSettings, updating: reminderUpdating } = useReminderSettings();
 
 const insets = useSafeAreaInsets();
   
@@ -408,6 +410,135 @@ const handleDeleteAccount = async () => {
        </View>
      )}
    </View>
+
+        {/* Reminder Preferences */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Reminder Preferences</Text>
+          
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingLabel}>Event & Opportunity Reminders</Text>
+              <Text style={styles.settingDescription}>
+                Receive automatic reminders before events and opportunities you've signed up for
+              </Text>
+            </View>
+            <Switch
+              value={reminderSettings?.remindersEnabled ?? true}
+              onValueChange={async (value) => {
+                const result = await updateReminderSettings({ remindersEnabled: value });
+                if (result.success) {
+                  showAlert('Success', 'Reminder preferences saved', 'success');
+                } else {
+                  showAlert('Error', result.error || 'Failed to update preferences', 'error');
+                }
+              }}
+              trackColor={{ false: Colors.light.border, true: Colors.light.primary }}
+              thumbColor="#FFFFFF"
+              disabled={reminderLoading || reminderUpdating}
+            />
+          </View>
+
+          {reminderSettings?.remindersEnabled !== false && (
+            <>
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Text style={[styles.settingLabel, !reminderSettings?.remindersEnabled && { opacity: 0.5 }]}>
+                    1 day before
+                  </Text>
+                  <Text style={[styles.settingDescription, !reminderSettings?.remindersEnabled && { opacity: 0.5 }]}>
+                    Get a reminder the day before at 9:00 AM
+                  </Text>
+                </View>
+                <Switch
+                  value={reminderSettings?.remindDayBefore ?? true}
+                  onValueChange={async (value) => {
+                    const result = await updateReminderSettings({ remindDayBefore: value });
+                    if (result.success) {
+                      showAlert('Success', 'Reminder preferences saved', 'success');
+                    } else {
+                      showAlert('Error', result.error || 'Failed to update preferences', 'error');
+                    }
+                  }}
+                  trackColor={{ false: Colors.light.border, true: Colors.light.primary }}
+                  thumbColor="#FFFFFF"
+                  disabled={reminderLoading || reminderUpdating || !reminderSettings?.remindersEnabled}
+                />
+              </View>
+
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Text style={[styles.settingLabel, !reminderSettings?.remindersEnabled && { opacity: 0.5 }]}>
+                    Day of event
+                  </Text>
+                  <Text style={[styles.settingDescription, !reminderSettings?.remindersEnabled && { opacity: 0.5 }]}>
+                    Get a reminder on the day of at 8:00 AM
+                  </Text>
+                </View>
+                <Switch
+                  value={reminderSettings?.remindDayOf ?? true}
+                  onValueChange={async (value) => {
+                    const result = await updateReminderSettings({ remindDayOf: value });
+                    if (result.success) {
+                      showAlert('Success', 'Reminder preferences saved', 'success');
+                    } else {
+                      showAlert('Error', result.error || 'Failed to update preferences', 'error');
+                    }
+                  }}
+                  trackColor={{ false: Colors.light.border, true: Colors.light.primary }}
+                  thumbColor="#FFFFFF"
+                  disabled={reminderLoading || reminderUpdating || !reminderSettings?.remindersEnabled}
+                />
+              </View>
+
+              <View style={[styles.settingRow, { paddingVertical: 16 }]}>
+                <View style={styles.settingInfo}>
+                  <Text style={[styles.settingLabel, !reminderSettings?.remindersEnabled && { opacity: 0.5 }]}>
+                    Hours before
+                  </Text>
+                  <Text style={[styles.settingDescription, !reminderSettings?.remindersEnabled && { opacity: 0.5 }]}>
+                    Get an additional reminder X hours before the start time
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <TouchableOpacity
+                    onPress={async () => {
+                      const hoursOptions = [null, 1, 2, 3, 6, 12];
+                      const currentIndex = hoursOptions.findIndex(h => h === reminderSettings?.remindHoursBefore);
+                      const nextIndex = (currentIndex + 1) % hoursOptions.length;
+                      const result = await updateReminderSettings({ remindHoursBefore: hoursOptions[nextIndex] });
+                      if (result.success) {
+                        showAlert('Success', 'Reminder preferences saved', 'success');
+                      } else {
+                        showAlert('Error', result.error || 'Failed to update preferences', 'error');
+                      }
+                    }}
+                    disabled={reminderLoading || reminderUpdating || !reminderSettings?.remindersEnabled}
+                    style={[
+                      {
+                        paddingHorizontal: 16,
+                        paddingVertical: 8,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: Colors.light.border,
+                        backgroundColor: Colors.light.card,
+                        minWidth: 100,
+                        alignItems: 'center',
+                      },
+                      (!reminderSettings?.remindersEnabled || reminderLoading || reminderUpdating) && { opacity: 0.5 }
+                    ]}
+                  >
+                    <Text style={{ color: Colors.light.text, fontSize: 14, fontWeight: '600' }}>
+                      {reminderSettings?.remindHoursBefore 
+                        ? `${reminderSettings.remindHoursBefore} hour${reminderSettings.remindHoursBefore !== 1 ? 's' : ''}`
+                        : 'None'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </>
+          )}
+        </View>
+
         {/* Account */}
    <View style={styles.section}>
      <Text style={styles.sectionTitle}>Account</Text>
