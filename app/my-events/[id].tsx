@@ -30,7 +30,7 @@ import {
 } from 'lucide-react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { Colors } from '../../constants/colors';
-import { getEventRegistrations, formatEventDate, formatEventTime } from '../../services/eventsService';
+import { getUserRegistrations, formatEventDate, formatEventTime } from '../../services/eventsService';
 import { useAuth } from '../../contexts/AuthContext';
 import { getTicketsByRegistration, EventTicket } from '../../services/eventTicketsService';
 
@@ -56,13 +56,25 @@ export default function MyEventDetailScreen() {
     try {
       setLoading(true);
 
-      // Load registration
-      const regResponse = await getEventRegistrations(user.id);
+      // Load registration - use getUserRegistrations to get user's registrations
+      const regResponse = await getUserRegistrations(user.id);
       if (regResponse.success && regResponse.data) {
         const reg = regResponse.data.find((r: any) => r.id === id);
+        console.log('[My Events] Registration ID from URL:', id);
+        console.log('[My Events] Found registration:', reg ? 'Yes' : 'No');
         if (reg) {
+          console.log('[My Events] Registration details:', {
+            id: reg.id,
+            eventId: reg.eventId,
+            status: reg.status,
+            paymentStatus: reg.paymentStatus
+          });
           setRegistration(reg);
+        } else {
+          console.error('[My Events] Registration not found. Available registrations:', regResponse.data.map((r: any) => r.id));
         }
+      } else {
+        console.error('[My Events] Failed to load registrations:', regResponse.error);
       }
 
       // Load tickets
