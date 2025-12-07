@@ -67,7 +67,9 @@ export default function MyEventDetailScreen() {
             id: reg.id,
             eventId: reg.eventId,
             status: reg.status,
-            paymentStatus: reg.paymentStatus
+            paymentStatus: reg.paymentStatus,
+            ticketCount: reg.ticketCount,
+            amountPaid: reg.amountPaid
           });
           setRegistration(reg);
         } else {
@@ -78,18 +80,25 @@ export default function MyEventDetailScreen() {
       }
 
       // Load tickets
+      console.log('[My Events] Querying tickets for registration:', id);
       const ticketsResponse = await getTicketsByRegistration(id);
-      if (ticketsResponse.success && ticketsResponse.data) {
-        console.log('[My Events] Tickets loaded:', ticketsResponse.data.length);
-        console.log('[My Events] Ticket data:', ticketsResponse.data.map(t => ({
-          id: t.id,
-          ticketNumber: t.ticketNumber,
-          qrCode: t.qrCode,
-          hasQrCode: !!t.qrCode
-        })));
-        setTickets(ticketsResponse.data);
+      if (ticketsResponse.success) {
+        console.log('[My Events] Tickets query successful. Count:', ticketsResponse.data?.length || 0);
+        if (ticketsResponse.data && ticketsResponse.data.length > 0) {
+          console.log('[My Events] Ticket data:', ticketsResponse.data.map(t => ({
+            id: t.id,
+            ticketNumber: t.ticketNumber,
+            qrCode: t.qrCode,
+            hasQrCode: !!t.qrCode
+          })));
+        } else {
+          console.warn('[My Events] No tickets found for registration:', id);
+          console.warn('[My Events] This may indicate tickets have not been generated yet. Check payment status and webhook processing.');
+        }
+        setTickets(ticketsResponse.data || []);
       } else {
         console.error('[My Events] Failed to load tickets:', ticketsResponse.error);
+        setTickets([]);
       }
     } catch (error) {
       console.error('Error loading event details:', error);
