@@ -125,7 +125,7 @@ serve(async (req) => {
         if (!statusData.success || statusData.status !== 'completed') {
           console.log(`${logPrefix} Transaction ${transaction.id} is still pending or failed`);
           // Log to payment_webhooks for audit trail (silent logging)
-          await supabase.from('payment_webhooks').insert({
+          const { error: logErr } = await supabase.from('payment_webhooks').insert({
             event_type: 'auto_check',
             transaction_number: statusData.transactionNumber || null,
             payload: {
@@ -136,9 +136,10 @@ serve(async (req) => {
             },
             processed: false,
             error_message: statusData.status === 'pending' ? 'Payment still pending' : 'Payment failed',
-          }).catch((err) => {
-            console.error(`${logPrefix} Failed to log webhook:`, err);
           });
+          if (logErr) {
+            console.error(`${logPrefix} Failed to log webhook:`, logErr);
+          }
           continue;
         }
 
@@ -177,7 +178,7 @@ serve(async (req) => {
           failedCount++;
           
           // Log to payment_webhooks
-          await supabase.from('payment_webhooks').insert({
+          const { error: logErr2 } = await supabase.from('payment_webhooks').insert({
             event_type: 'auto_check',
             transaction_number: transactionNumber,
             payload: {
@@ -187,9 +188,10 @@ serve(async (req) => {
             },
             processed: false,
             error_message: errorMsg,
-          }).catch((err) => {
-            console.error(`${logPrefix} Failed to log webhook:`, err);
           });
+          if (logErr2) {
+            console.error(`${logPrefix} Failed to log webhook:`, logErr2);
+          }
           continue;
         }
 
@@ -200,7 +202,7 @@ serve(async (req) => {
           processedCount++;
           
           // Log to payment_webhooks (silent logging)
-          await supabase.from('payment_webhooks').insert({
+          const { error: logErr3 } = await supabase.from('payment_webhooks').insert({
             event_type: 'auto_check',
             transaction_number: transactionNumber,
             payload: {
@@ -211,9 +213,10 @@ serve(async (req) => {
             },
             processed: true,
             processed_at: new Date().toISOString(),
-          }).catch((err) => {
-            console.error(`${logPrefix} Failed to log webhook:`, err);
           });
+          if (logErr3) {
+            console.error(`${logPrefix} Failed to log webhook:`, logErr3);
+          }
         } else {
           const errorMsg = `Payment processing returned failure for transaction ${transaction.id}`;
           console.error(`${logPrefix} ${errorMsg}`);
