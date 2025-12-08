@@ -3,8 +3,52 @@
  * Uses expo-calendar for cross-platform calendar integration
  */
 
-import * as Calendar from 'expo-calendar';
 import { Platform, Linking, Alert } from 'react-native';
+
+// Lazy load expo-calendar to prevent route registration errors
+// This prevents the native module from being loaded during route registration
+let CalendarModule: any = null;
+const getCalendar = async (): Promise<any> => {
+  if (CalendarModule !== null) {
+    return CalendarModule === false ? null : CalendarModule;
+  }
+  
+  if (Platform.OS === 'web') {
+    CalendarModule = false; // Mark as checked, not available
+    return null;
+  }
+  
+  try {
+    // Dynamic import - only loads when function is called, not at module load time
+    // expo-calendar uses named exports at the root level
+    const calendarModule = await import('expo-calendar');
+    
+    // expo-calendar exports are at root level, try both default and direct access
+    let module = calendarModule;
+    
+    // If there's a default export, use it; otherwise use the module itself
+    if (calendarModule.default && typeof calendarModule.default.getCalendarPermissionsAsync === 'function') {
+      module = calendarModule.default;
+    } else if (typeof calendarModule.getCalendarPermissionsAsync !== 'function') {
+      // Neither structure works, log for debugging
+      console.warn('[Calendar] expo-calendar module structure unexpected. Available keys:', Object.keys(calendarModule));
+      CalendarModule = false;
+      return null;
+    }
+    
+    CalendarModule = module;
+    return module;
+  } catch (error: any) {
+    // If it's a native module error on web, that's expected
+    if (error?.message?.includes('native module') || error?.message?.includes('ExpoCalendar')) {
+      console.log('[Calendar] expo-calendar native module not available (expected on web)');
+    } else {
+      console.warn('[Calendar] expo-calendar import failed:', error);
+    }
+    CalendarModule = false; // Mark as checked, not available
+    return null;
+  }
+};
 
 export interface CalendarEvent {
   title: string;
@@ -25,7 +69,12 @@ export async function requestCalendarPermissions(): Promise<boolean> {
       return false;
     }
 
-    const { status } = await Calendar.requestCalendarPermissionsAsync();
+    const CalendarModule = await getCalendar();
+    if (!CalendarModule || !CalendarModule.requestCalendarPermissionsAsync) {
+      return false;
+    }
+
+    const { status } = await CalendarModule.requestCalendarPermissionsAsync();
     return status === 'granted';
   } catch (error) {
     console.error('Error requesting calendar permissions:', error);
@@ -42,7 +91,10 @@ export async function hasCalendarPermissions(): Promise<boolean> {
       return false;
     }
 
-    const { status } = await Calendar.getCalendarPermissionsAsync();
+    const CalendarModule = await getCalendar();
+    if (!CalendarModule) return false;
+
+    const { status } = await CalendarModule.getCalendarPermissionsAsync();
     return status === 'granted';
   } catch (error) {
     console.error('Error checking calendar permissions:', error);
@@ -59,7 +111,12 @@ async function getDefaultCalendar(): Promise<string | null> {
       return null;
     }
 
-    const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+    const CalendarModule = await getCalendar();
+    if (!CalendarModule || !CalendarModule.getCalendarsAsync || !CalendarModule.EntityTypes) {
+      return null;
+    }
+
+    const calendars = await CalendarModule.getCalendarsAsync(CalendarModule.EntityTypes.EVENT);
     if (calendars.length === 0) {
       return null;
     }
@@ -98,8 +155,14 @@ export async function addEventToCalendar(event: CalendarEvent): Promise<{ succes
       return { success: false, error: 'No calendar available on this device' };
     }
 
+    // Get calendar module
+    const CalendarModule = await getCalendar();
+    if (!CalendarModule || !CalendarModule.createEventAsync || !CalendarModule.AlarmMethod) {
+      return { success: false, error: 'Calendar module not available' };
+    }
+
     // Create calendar event
-    const eventId = await Calendar.createEventAsync(calendarId, {
+    const eventId = await CalendarModule.createEventAsync(calendarId, {
       title: event.title,
       startDate: event.startDate,
       endDate: event.endDate,
@@ -107,8 +170,8 @@ export async function addEventToCalendar(event: CalendarEvent): Promise<{ succes
       notes: event.notes,
       timeZone: event.timeZone,
       alarms: [
-        { relativeOffset: -1440, method: Calendar.AlarmMethod.ALERT }, // 1 day before
-        { relativeOffset: -60, method: Calendar.AlarmMethod.ALERT }, // 1 hour before
+        { relativeOffset: -1440, method: CalendarModule.AlarmMethod.ALERT }, // 1 day before
+        { relativeOffset: -60, method: CalendarModule.AlarmMethod.ALERT }, // 1 hour before
       ],
     });
 

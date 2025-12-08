@@ -167,7 +167,25 @@ export function EventsList({
     if (onEventPress) {
       onEventPress(event);
     } else {
-      router.push(`/events/${event.slug}`);
+      // Validate slug exists and is not empty
+      if (!event.slug || event.slug.trim() === '') {
+        console.error('Event slug is missing or empty:', event);
+        // Fallback to using ID if slug is missing
+        if (event.id) {
+          router.push({
+            pathname: '/events/[slug]',
+            params: { slug: event.id }
+          } as any);
+        } else {
+          console.error('Event ID is also missing, cannot navigate');
+        }
+        return;
+      }
+      // Use object format with pathname and params for dynamic routes - more reliable than string paths
+      router.push({
+        pathname: '/events/[slug]',
+        params: { slug: event.slug }
+      } as any);
     }
   }, [onEventPress, router]);
 
@@ -176,7 +194,25 @@ export function EventsList({
     if (onRegisterPress) {
       onRegisterPress(event);
     } else {
-      router.push(`/events/${event.slug}/register`);
+      // Validate slug exists and is not empty
+      if (!event.slug || event.slug.trim() === '') {
+        console.error('Event slug is missing or empty:', event);
+        // Fallback to using ID if slug is missing
+        if (event.id) {
+          router.push({
+            pathname: '/events/[slug]/register',
+            params: { slug: event.id }
+          } as any);
+        } else {
+          console.error('Event ID is also missing, cannot navigate');
+        }
+        return;
+      }
+      // Use object format with pathname and params for dynamic routes - more reliable than string paths
+      router.push({
+        pathname: '/events/[slug]/register',
+        params: { slug: event.slug }
+      } as any);
     }
   }, [onRegisterPress, router]);
 

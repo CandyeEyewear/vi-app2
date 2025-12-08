@@ -56,8 +56,18 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
   }, [event.imageUrl]);
 
   const handlePress = () => {
-    if (!event.slug) {
-      console.error('Event slug is missing, cannot navigate');
+    // Validate slug exists and is not empty
+    if (!event.slug || event.slug.trim() === '') {
+      console.error('Event slug is missing or empty:', event);
+      // Fallback to using ID if slug is missing
+      if (event.id) {
+        router.push({
+          pathname: '/events/[slug]',
+          params: { slug: event.id }
+        } as any);
+      } else {
+        console.error('Event ID is also missing, cannot navigate');
+      }
       return;
     }
 
@@ -71,7 +81,11 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
       return;
     }
 
-    router.push(`/events/${event.slug}` as any);
+    // Use object format with pathname and params for dynamic routes - more reliable than string paths
+    router.push({
+      pathname: '/events/[slug]',
+      params: { slug: event.slug }
+    } as any);
   };
 
   // Memoize callbacks to prevent recreation

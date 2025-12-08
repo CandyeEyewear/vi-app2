@@ -1003,7 +1003,13 @@ export default function DiscoverScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <Pressable style={[styles.container, { backgroundColor: colors.background }]} onPress={() => { if (showSuggestions) { setShowSuggestions(false); Keyboard.dismiss(); } }}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        {showSuggestions && (
+          <Pressable 
+            style={StyleSheet.absoluteFill} 
+            onPress={() => { setShowSuggestions(false); Keyboard.dismiss(); }}
+          />
+        )}
         <Head><title>Discover | VIbe</title></Head>
         {!isDesktop && <ScreenHeader colors={colors} insets={insets} onSearchPress={() => setIsSearchExpanded(true)} />}
         <AnimatedTabBar activeTab={activeTab} onTabChange={(tab) => { setActiveTab(tab); setTabCache(prev => ({ ...prev, [tab]: true })); }} colors={colors} />
@@ -1067,7 +1073,7 @@ export default function DiscoverScreen() {
         <View style={[styles.tabContent, activeTab !== 'events' && styles.tabContentHidden]}>
           <EventsList showSearch={false} showFilters={true} />
         </View>
-      </Pressable>
+      </View>
     </>
   );
 }
