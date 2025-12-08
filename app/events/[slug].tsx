@@ -957,7 +957,12 @@ export default function EventDetailScreen() {
           style={styles.scrollView}
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingBottom: 120 + insets.bottom },
+            {
+              paddingBottom: Platform.select({
+                web: Math.max(120 + insets.bottom, 140), // Minimum 140px for mobile web
+                default: 120 + insets.bottom,
+              }),
+            },
           ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -1019,6 +1024,7 @@ export default function EventDetailScreen() {
               style={[
                 styles.statsRow,
                 responsive.isMobile && styles.statsRowStacked,
+                Platform.OS === 'web' && responsive.isMobile && styles.statsRowMobileWeb,
               ]}
             >
               {stats.map(({ key, icon: IconComponent, value, label }) => (
@@ -1029,6 +1035,7 @@ export default function EventDetailScreen() {
                     { backgroundColor: colors.card },
                     getPremiumShadow(colors),
                     responsive.isMobile && styles.statCardStacked,
+                    Platform.OS === 'web' && responsive.isMobile && styles.statCardMobileWeb,
                   ]}
                 >
                   <View style={[styles.statIcon, { backgroundColor: colors.primarySoft }]}>
@@ -1111,7 +1118,17 @@ export default function EventDetailScreen() {
             )}
 
             {/* Bottom spacing for fixed button */}
-            <View style={[styles.bottomSpacing, { height: 120 + insets.bottom }]} />
+            <View
+              style={[
+                styles.bottomSpacing,
+                {
+                  height: Platform.select({
+                    web: Math.max(120 + insets.bottom, 140), // Minimum 140px for mobile web
+                    default: 120 + insets.bottom,
+                  }),
+                },
+              ]}
+            />
           </View>
         </ScrollView>
 
@@ -1123,7 +1140,10 @@ export default function EventDetailScreen() {
               {
                 backgroundColor: colors.background,
                 borderTopColor: colors.border,
-                paddingBottom: Spacing.xl + insets.bottom,
+                paddingBottom: Platform.select({
+                  web: Math.max(Spacing.xl + insets.bottom, 24), // Minimum 24px for mobile web safe area
+                  default: Spacing.xl + insets.bottom,
+                }),
               },
             ]}
           >
@@ -1348,6 +1368,9 @@ const styles = StyleSheet.create({
   statsRowStacked: {
     flexDirection: 'column',
   },
+  statsRowMobileWeb: {
+    gap: Spacing.lg,
+  },
   statCard: {
     flex: 1,
     flexDirection: 'column',
@@ -1361,6 +1384,11 @@ const styles = StyleSheet.create({
   statCardStacked: {
     flex: 0,
     width: '100%',
+  },
+  statCardMobileWeb: {
+    paddingVertical: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.sm,
   },
   statIcon: {
     width: 44,
@@ -1444,6 +1472,12 @@ const styles = StyleSheet.create({
     right: 0,
     padding: Spacing.xl,
     borderTopWidth: 1,
+    ...Platform.select({
+      web: {
+        // Ensure bottom bar is above safe area on mobile web
+        paddingBottom: undefined, // Will be set dynamically above
+      },
+    }),
   },
   actionButton: {
     width: '100%',
