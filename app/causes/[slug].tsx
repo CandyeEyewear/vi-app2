@@ -771,11 +771,13 @@ export default function CauseDetailScreen() {
     if (!cause) return;
 
     try {
+      const shareUrl = `https://vibe.volunteersinc.org/causes/${cause.slug}`;
       const progress = getCauseProgress(cause);
-      const message = `Support "${cause.title}" - ${Math.round(progress)}% funded!\n\n${cause.description.substring(0, 100)}...\n\nDonate now on Volunteers Inc!`;
+      const message = `Support "${cause.title}" - ${Math.round(progress)}% funded!\n\n${cause.description.substring(0, 150)}...\n\nDonate now: ${shareUrl}`;
       
       await Share.share({
         message,
+        url: shareUrl,
         title: `Support: ${cause.title}`,
       });
     } catch (error) {

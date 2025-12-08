@@ -177,9 +177,11 @@ export default function OpportunityDetailsScreen() {
     if (!opportunity) return;
 
     try {
+      const shareUrl = `https://vibe.volunteersinc.org/opportunity/${opportunity.slug || opportunity.id}`;
       await RNShare.share({
         title: opportunity.title,
-        message: `Check out this volunteering opportunity: ${opportunity.title}\n\n${opportunity.description}\n\nOrganization: ${opportunity.organizationName}\nLocation: ${opportunity.location}`,
+        message: `Check out this volunteering opportunity: ${opportunity.title}\n\n${opportunity.description?.substring(0, 150)}${opportunity.description && opportunity.description.length > 150 ? '...' : ''}\n\nOrganization: ${opportunity.organizationName}\nLocation: ${opportunity.location}\n\n${shareUrl}`,
+        url: shareUrl,
       });
     } catch (error: any) {
       // User cancelled or error occurred
