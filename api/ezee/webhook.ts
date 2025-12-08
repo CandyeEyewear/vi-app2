@@ -375,8 +375,8 @@ async function verifyTransactionCompletion(
               console.warn(`[${webhookId}] Event registration payment_status is '${eventReg.payment_status}', should be 'Completed'`);
               allVerificationsPassed = false;
             }
-            if (eventReg.status !== 'Registered') {
-              console.warn(`[${webhookId}] Event registration status is '${eventReg.status}', should be 'Registered'`);
+            if (eventReg.status !== 'registered') {
+              console.warn(`[${webhookId}] Event registration status is '${eventReg.status}', should be 'registered'`);
               allVerificationsPassed = false;
             }
           }

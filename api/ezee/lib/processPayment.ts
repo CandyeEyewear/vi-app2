@@ -154,7 +154,7 @@ async function handleEventRegistration(
       .from('event_registrations')
       .update({
         payment_status: 'Completed',
-        status: 'Registered',
+        status: 'registered',  // Use lowercase to match EventRegistrationStatus type
         transaction_number: transactionNumber,
         amount_paid: transaction.amount,
       })
@@ -235,7 +235,7 @@ async function handleEventRegistration(
       .from('event_registrations')
       .update({
         payment_status: 'Completed',
-        status: 'Registered',
+        status: 'registered',  // Use lowercase to match EventRegistrationStatus type
         transaction_number: transactionNumber,
         amount_paid: transaction.amount,
         ticket_count: ticketCount,
@@ -258,7 +258,7 @@ async function handleEventRegistration(
       event_id: eventId,
       user_id: transaction.user_id,
       ticket_count: ticketCount,
-      status: 'Registered',
+      status: 'registered',  // Use lowercase to match EventRegistrationStatus type
       payment_status: 'Completed',
       transaction_number: transactionNumber,
       amount_paid: transaction.amount,
