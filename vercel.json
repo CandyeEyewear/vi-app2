@@ -1,6 +1,22 @@
 {
   "rewrites": [
     {
+      "source": "/post/:id",
+      "destination": "/api/og/post?id=:id"
+    },
+    {
+      "source": "/causes/:slug",
+      "destination": "/api/og/cause?slug=:slug"
+    },
+    {
+      "source": "/events/:slug",
+      "destination": "/api/og/event?slug=:slug"
+    },
+    {
+      "source": "/opportunity/:slug",
+      "destination": "/api/og/opportunity?slug=:slug"
+    },
+    {
       "source": "/((?!api|_next|favicon.ico|assets|static).*)",
       "destination": "/"
     }
