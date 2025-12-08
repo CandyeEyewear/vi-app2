@@ -197,6 +197,29 @@ export default async function handler(req: any, res: any) {
    // Store transaction in database
     // Use uniqueOrderId as order_id (this is what eZeePayments will send back as CustomOrderId)
     // Only use reference_id if it's a valid UUID (database column is UUID type)
+   
+   // For event_registration, extract event_id and ticket_count from orderId/description
+   // OrderId format: EVT_{eventId}_{timestamp}_{random}
+   // Description format: "{Event Title} - {ticketCount} ticket(s)"
+   let eventMetadata: any = {};
+   if (orderType === 'event_registration' && !referenceId) {
+     // Extract event_id from orderId (format: EVT_{eventId}_{timestamp}_{random})
+     const orderIdMatch = orderId.match(/^EVT_([^_]+)_/);
+     if (orderIdMatch && orderIdMatch[1]) {
+       eventMetadata.event_id = orderIdMatch[1];
+     }
+     
+     // Extract ticket_count from description (format: "... - X ticket(s)")
+     const descMatch = description?.match(/- (\d+) ticket/i);
+     if (descMatch && descMatch[1]) {
+       eventMetadata.ticket_count = parseInt(descMatch[1], 10);
+     } else {
+       eventMetadata.ticket_count = 1; // Default to 1 if not found
+     }
+     
+     console.log('[CREATE-TOKEN] Event registration metadata:', eventMetadata);
+   }
+   
    const { data: transaction, error: dbError } = await supabase
      .from('payment_transactions')
      .insert({
@@ -213,6 +236,7 @@ export default async function handler(req: any, res: any) {
        customer_name: customerName,
         metadata: { 
           original_order_id: orderId,  // Always store original orderId here
+          ...eventMetadata,  // Add event_id and ticket_count for event registrations
         },
      })
      .select()

@@ -599,32 +599,22 @@ export default function EventRegisterScreen() {
         return;
       }
 
-      // For paid events, create registration and process payment
-      const registrationResponse = await registerForEvent({
-        eventId: event.id,
-        userId: user.id,
-        ticketCount,
-      });
-
-      if (!registrationResponse.success || !registrationResponse.data) {
-        throw new Error(registrationResponse.error || 'Failed to create registration');
-      }
-
-      const registration = registrationResponse.data;
-      const orderId = `EVT_${registration.id}_${Date.now()}`;
+      // For paid events, DO NOT create registration yet - wait for payment confirmation
+      // Store event info in transaction metadata, webhook will create registration after payment
+      const orderId = `EVT_${event.id}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
       
-      // Note: For paid events, tickets will be generated in the webhook AFTER payment is confirmed
-      // Do NOT generate tickets here - wait for payment confirmation
-
       // Process payment through eZeePayments
+      // Registration will be created in webhook when payment is confirmed
       const returnPath = `/events/${slug}`;
       console.log('[EVENT REGISTER] Processing payment with returnPath:', returnPath, 'slug:', slug);
+      console.log('[EVENT REGISTER] Registration will be created after payment confirmation');
       
       const paymentResult = await processPayment({
         amount: totalAmount,
         orderId,
         orderType: 'event_registration',
-        referenceId: registration.id,
+        // Don't pass referenceId - registration doesn't exist yet
+        // Store event info in metadata instead (will be handled in create-token.ts)
         userId: user.id,
         customerEmail: user.email || '',
         customerName: user.fullName,

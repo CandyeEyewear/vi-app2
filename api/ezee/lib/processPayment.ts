@@ -139,29 +139,188 @@ async function handleEventRegistration(
   transactionNumber: string,
   logPrefix: string
 ) {
-  if (!transaction.reference_id) {
-    console.warn(`${logPrefix} Event registration has no reference_id, skipping update`);
+  // If reference_id exists, update existing registration
+  if (transaction.reference_id) {
+    console.log(`${logPrefix} Updating existing event registration: ${transaction.reference_id}`);
+
+    // Get registration details to get event_id and ticket_count
+    const { data: registration } = await supabase
+      .from('event_registrations')
+      .select('event_id, ticket_count')
+      .eq('id', transaction.reference_id)
+      .single();
+
+    const { error: eventError } = await supabase
+      .from('event_registrations')
+      .update({
+        payment_status: 'Completed',
+        status: 'Registered',
+        transaction_number: transactionNumber,
+        amount_paid: transaction.amount,
+      })
+      .eq('id', transaction.reference_id);
+
+    if (eventError) {
+      console.error(`${logPrefix} Event registration update FAILED:`, eventError);
+      throw new Error(`Event registration update failed: ${eventError.message}`);
+    }
+
+    console.log(`${logPrefix} Event registration updated successfully`);
+
+    // Generate tickets if they don't exist
+    if (registration) {
+      try {
+        const { data: existingTickets } = await supabase
+          .from('event_tickets')
+          .select('id')
+          .eq('registration_id', transaction.reference_id);
+
+        if (!existingTickets || existingTickets.length === 0) {
+          const ticketCount = registration.ticket_count || 1;
+          console.log(`${logPrefix} Generating ${ticketCount} ticket(s) for registration ${transaction.reference_id}`);
+          
+          const ticketsToInsert = [];
+          for (let i = 1; i <= ticketCount; i++) {
+            const qrCode = `EVT_${registration.event_id}_${transaction.reference_id}_${i}`;
+            ticketsToInsert.push({
+              registration_id: transaction.reference_id,
+              ticket_number: i,
+              qr_code: qrCode,
+              checked_in: false,
+            });
+          }
+
+          const { error: ticketError } = await supabase
+            .from('event_tickets')
+            .insert(ticketsToInsert);
+
+          if (ticketError) {
+            console.error(`${logPrefix} Ticket generation FAILED:`, ticketError);
+          } else {
+            console.log(`${logPrefix} Successfully generated ${ticketCount} ticket(s)`);
+          }
+        }
+      } catch (ticketError) {
+        console.error(`${logPrefix} Error generating tickets:`, ticketError);
+      }
+    }
+
     return;
   }
 
-  console.log(`${logPrefix} Updating event registration: ${transaction.reference_id}`);
-
-  const { error: eventError } = await supabase
-    .from('event_registrations')
-    .update({
-      payment_status: 'Completed',
-      status: 'Registered',
-      transaction_number: transactionNumber,
-      amount_paid: transaction.amount,
-    })
-    .eq('id', transaction.reference_id);
-
-  if (eventError) {
-    console.error(`${logPrefix} Event registration update FAILED:`, eventError);
-    throw new Error(`Event registration update failed: ${eventError.message}`);
+  // If no reference_id, check metadata for event_id (new registration flow)
+  const eventId = transaction.metadata?.event_id;
+  const ticketCount = transaction.metadata?.ticket_count || 1;
+  
+  if (!eventId || !transaction.user_id) {
+    console.warn(`${logPrefix} Event registration has no reference_id and no event_id/user_id in metadata, cannot create registration`);
+    console.warn(`${logPrefix} Transaction metadata:`, JSON.stringify(transaction.metadata, null, 2));
+    return;
   }
 
-  console.log(`${logPrefix} Event registration updated successfully`);
+  console.log(`${logPrefix} Creating new event registration for event_id: ${eventId}, user_id: ${transaction.user_id}, ticket_count: ${ticketCount}`);
+
+  // Check if user is already registered (avoid duplicates)
+  const { data: existingReg } = await supabase
+    .from('event_registrations')
+    .select('id, status')
+    .eq('event_id', eventId)
+    .eq('user_id', transaction.user_id)
+    .maybeSingle();
+
+  if (existingReg && existingReg.status !== 'cancelled') {
+    console.log(`${logPrefix} User already registered, updating existing registration: ${existingReg.id}`);
+    
+    const { error: updateError } = await supabase
+      .from('event_registrations')
+      .update({
+        payment_status: 'Completed',
+        status: 'Registered',
+        transaction_number: transactionNumber,
+        amount_paid: transaction.amount,
+        ticket_count: ticketCount,
+      })
+      .eq('id', existingReg.id);
+
+    if (updateError) {
+      console.error(`${logPrefix} Event registration update FAILED:`, updateError);
+      throw new Error(`Event registration update failed: ${updateError.message}`);
+    }
+
+    console.log(`${logPrefix} Event registration updated successfully`);
+    return;
+  }
+
+  // Create new registration
+  const { data: newRegistration, error: createError } = await supabase
+    .from('event_registrations')
+    .insert({
+      event_id: eventId,
+      user_id: transaction.user_id,
+      ticket_count: ticketCount,
+      status: 'Registered',
+      payment_status: 'Completed',
+      transaction_number: transactionNumber,
+      amount_paid: transaction.amount,
+      registered_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+
+  if (createError) {
+    console.error(`${logPrefix} Event registration creation FAILED:`, createError);
+    throw new Error(`Event registration creation failed: ${createError.message}`);
+  }
+
+  console.log(`${logPrefix} Event registration created successfully: ${newRegistration.id}`);
+
+  // Update transaction with the new registration ID for future reference
+  await supabase
+    .from('payment_transactions')
+    .update({ reference_id: newRegistration.id })
+    .eq('id', transaction.id);
+
+  // Generate tickets for the registration
+  try {
+    console.log(`${logPrefix} Generating ${ticketCount} ticket(s) for registration ${newRegistration.id}`);
+    
+    // Check if tickets already exist
+    const { data: existingTickets } = await supabase
+      .from('event_tickets')
+      .select('id')
+      .eq('registration_id', newRegistration.id);
+
+    if (!existingTickets || existingTickets.length === 0) {
+      // Generate QR codes and create tickets
+      const ticketsToInsert = [];
+      for (let i = 1; i <= ticketCount; i++) {
+        // Generate QR code: format "EVT_{eventId}_{registrationId}_{ticketNumber}"
+        const qrCode = `EVT_${eventId}_${newRegistration.id}_${i}`;
+        ticketsToInsert.push({
+          registration_id: newRegistration.id,
+          ticket_number: i,
+          qr_code: qrCode,
+          checked_in: false,
+        });
+      }
+
+      const { error: ticketError } = await supabase
+        .from('event_tickets')
+        .insert(ticketsToInsert);
+
+      if (ticketError) {
+        console.error(`${logPrefix} Ticket generation FAILED:`, ticketError);
+        // Don't throw - registration is created, tickets can be generated later
+      } else {
+        console.log(`${logPrefix} Successfully generated ${ticketCount} ticket(s)`);
+      }
+    } else {
+      console.log(`${logPrefix} Tickets already exist for this registration`);
+    }
+  } catch (ticketError) {
+    console.error(`${logPrefix} Error generating tickets:`, ticketError);
+    // Don't throw - registration is created, tickets can be generated later
+  }
 }
 
 /**
