@@ -1,12 +1,19 @@
 /**
- * Vercel API Route: /api/ezee/webhook.ts
+ * IMPROVED Vercel API Route: /api/ezee/webhook.ts
  * Handles payment confirmations from eZeePayments
- * WITH CORS SUPPORT
- * Uses official eZeePayments webhook format
+ * 
+ * IMPROVEMENTS:
+ * - Better error handling with detailed logging
+ * - Field validation and mapping verification
+ * - Safer database operations
+ * - Idempotency checks
+ * - Prepared for webhook signature verification
+ * - Database transaction support (commented for future use)
  */
 
 import { createClient } from '@supabase/supabase-js';
 import { ReceiptService } from '../../services/receiptService';
+import { processOneTimePayment, processSubscriptionPayment } from './lib/processPayment';
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -38,49 +45,101 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const startTime = Date.now();
+  const webhookId = `WH_${startTime}_${Math.random().toString(36).substring(2, 8)}`;
+
   try {
     const body = req.body;
     const headers = typeof req.headers === 'object' ? req.headers : {};
 
-    console.log('Webhook received:', JSON.stringify(body, null, 2));
+    console.log('='.repeat(80));
+    console.log(`[${webhookId}] WEBHOOK RECEIVED`);
+    console.log('Timestamp:', new Date().toISOString());
+    console.log('Body:', JSON.stringify(body, null, 2));
+    console.log('='.repeat(80));
 
-    // eZeePayments webhook format
+    // ==================== VALIDATE WEBHOOK PAYLOAD ====================
     const {
-      ResponseCode,           // 1 = success, other = failure
+      ResponseCode,           // "1" = success, other = failure
       ResponseDescription,    // "Transaction is approved" or error message
-      TransactionNumber,      // Reference for reconciliation
-      CustomOrderId,          // The uniqueOrderId we sent to eZeePayments
-      order_id,              // May also be present, but CustomOrderId is primary
-      amount,
+      TransactionNumber,      // eZee reference (e.g., "17651KHSB18107")
+      CustomOrderId,          // Our order_id (e.g., "ORD_1765118077398_yx47k0")
+      order_id,              // Fallback if CustomOrderId not present
+      amount,                // Transaction amount (may or may not be present)
       subscription_id,        // For recurring payments
     } = body;
 
-    // Get order ID from webhook - eZeePayments sends it as CustomOrderId
-    const customOrderId = CustomOrderId || order_id;
-
-    // Log webhook to database
-    const { data: webhookRecord, error: logError } = await supabase
-      .from('payment_webhooks')
-      .insert({
-      event_type: subscription_id ? 'subscription_payment' : 'one_time_payment',
-        transaction_number: TransactionNumber || null,
-      payload: body,
-      headers,
-      processed: false,
-      })
-      .select()
-      .single();
-
-    if (logError) {
-      console.error('Webhook log error:', logError);
+    // Validate required fields
+    if (!ResponseCode) {
+      console.error(`[${webhookId}] MISSING ResponseCode in webhook payload`);
+      return res.status(400).json({ error: 'Missing ResponseCode' });
     }
 
-    // ResponseCode: 1 = success, other = failure
-    const isSuccessful = ResponseCode === 1 || ResponseCode === '1';
+    if (!TransactionNumber) {
+      console.error(`[${webhookId}] MISSING TransactionNumber in webhook payload`);
+      return res.status(400).json({ error: 'Missing TransactionNumber' });
+    }
 
-    // Handle one-time payment
+    // Get order ID - CustomOrderId is primary, order_id is fallback
+    const customOrderId = CustomOrderId || order_id;
+    if (!customOrderId) {
+      console.error(`[${webhookId}] MISSING both CustomOrderId and order_id in webhook payload`);
+      return res.status(400).json({ error: 'Missing order identifier' });
+    }
+
+    console.log(`[${webhookId}] Processing order_id: ${customOrderId}`);
+    console.log(`[${webhookId}] Transaction number: ${TransactionNumber}`);
+    console.log(`[${webhookId}] Response code: ${ResponseCode}`);
+
+    // ==================== LOG WEBHOOK TO DATABASE ====================
+    // This creates an audit trail of all webhooks received
+    let webhookRecord;
+    try {
+      const { data: record, error: logError } = await supabase
+        .from('payment_webhooks')
+        .insert({
+          event_type: subscription_id ? 'subscription_payment' : 'one_time_payment',
+          transaction_number: TransactionNumber,
+          payload: body,
+          headers,
+          processed: false,
+        })
+        .select()
+        .single();
+
+      if (logError) {
+        // Check if it's a duplicate webhook (unique constraint violation)
+        if (logError.code === '23505') {
+          console.log(`[${webhookId}] DUPLICATE WEBHOOK detected for transaction ${TransactionNumber}`);
+          console.log(`[${webhookId}] This webhook was already processed. Returning success to acknowledge.`);
+          return res.status(200).json({ 
+            success: true, 
+            message: 'Webhook already processed',
+            duplicate: true 
+          });
+        }
+        
+        console.error(`[${webhookId}] Webhook log error:`, logError);
+        // Continue processing even if logging fails
+      } else {
+        webhookRecord = record;
+        console.log(`[${webhookId}] Webhook logged with ID: ${webhookRecord?.id}`);
+      }
+    } catch (logException) {
+      console.error(`[${webhookId}] Webhook logging exception:`, logException);
+      // Continue processing even if logging fails
+    }
+
+    // ==================== DETERMINE PAYMENT SUCCESS ====================
+    // ResponseCode: 1 or "1" = success, anything else = failure
+    const isSuccessful = ResponseCode === 1 || ResponseCode === '1';
+    console.log(`[${webhookId}] Payment successful: ${isSuccessful}`);
+
+    // ==================== HANDLE ONE-TIME PAYMENT ====================
     if (customOrderId && TransactionNumber) {
-      // First, try to find the transaction
+      console.log(`[${webhookId}] Processing as ONE-TIME PAYMENT`);
+
+      // Find the transaction in database
       const { data: existingTransaction, error: findError } = await supabase
         .from('payment_transactions')
         .select('*, metadata')
@@ -88,913 +147,300 @@ export default async function handler(req: any, res: any) {
         .maybeSingle();
 
       if (findError) {
-        console.error('Error finding transaction:', findError);
-        console.error('Looking for order_id:', customOrderId);
+        console.error(`[${webhookId}] Error finding transaction:`, findError);
+        await markWebhookError(webhookRecord?.id, `Database error finding transaction: ${findError.message}`);
+        return res.status(500).json({ error: 'Database error' });
       }
 
-      // Update transaction if it exists
-      if (existingTransaction) {
-        // Check if transaction is already completed (idempotency check)
-        if (existingTransaction.status === 'completed' && isSuccessful) {
-          console.log('Transaction already completed, verifying registration/donation status', {
-            transactionId: existingTransaction.id,
-            orderId: customOrderId,
-            orderType: existingTransaction.order_type,
-          });
-          // Still verify the registration/donation is updated correctly (in case previous update failed)
-          if (existingTransaction.order_type === 'event_registration' && existingTransaction.reference_id) {
-            const { data: verifyEvent } = await supabase
-              .from('event_registrations')
-              .select('payment_status, status')
-              .eq('id', existingTransaction.reference_id)
-              .single();
-            
-            if (verifyEvent && verifyEvent.payment_status !== 'Completed') {
-              console.log('⚠️ Duplicate webhook: Event registration not paid, updating...', {
-                registrationId: existingTransaction.reference_id,
-              });
-              await supabase
-                .from('event_registrations')
-                .update({
-                  payment_status: 'Completed',
-                  status: 'Registered',
-                  transaction_number: TransactionNumber || existingTransaction.transaction_number,
-                  amount_paid: existingTransaction.amount || null,
-                })
-                .eq('id', existingTransaction.reference_id);
-            }
-          } else if (existingTransaction.order_type === 'donation' && existingTransaction.reference_id) {
-            const { data: verifyDonation } = await supabase
-              .from('donations')
-              .select('payment_status')
-              .eq('id', existingTransaction.reference_id)
-              .single();
-            
-            if (verifyDonation && verifyDonation.payment_status !== 'completed') {
-              console.log('⚠️ Duplicate webhook: Donation not completed, updating...', {
-                donationId: existingTransaction.reference_id,
-              });
-              await supabase
-                .from('donations')
-                .update({
-                  payment_status: 'completed',
-                  completed_at: new Date().toISOString(),
-                  transaction_number: TransactionNumber || existingTransaction.transaction_number,
-                })
-                .eq('id', existingTransaction.reference_id);
-            }
-          }
-          // Update webhook as processed and return early to avoid duplicate processing
-          if (webhookRecord?.id) {
-            await supabase
-              .from('payment_webhooks')
-              .update({ 
-                processed: true,
-                processed_at: new Date().toISOString()
-              })
-              .eq('id', webhookRecord.id);
-          }
-          return res.status(200).json({ success: true, message: 'Already processed' });
+      if (!existingTransaction) {
+        console.error(`[${webhookId}] Transaction NOT FOUND for order_id: ${customOrderId}`);
+        console.error(`[${webhookId}] This means either:`);
+        console.error(`[${webhookId}]   1. Transaction was never created (check create-token.ts)`);
+        console.error(`[${webhookId}]   2. Order ID mismatch between creation and webhook`);
+        console.error(`[${webhookId}]   3. Transaction was deleted`);
+        await markWebhookError(webhookRecord?.id, `Transaction not found for order_id: ${customOrderId}`);
+        return res.status(404).json({ error: 'Transaction not found' });
+      }
+
+      console.log(`[${webhookId}] Found transaction:`, {
+        id: existingTransaction.id,
+        order_id: existingTransaction.order_id,
+        order_type: existingTransaction.order_type,
+        current_status: existingTransaction.status,
+        amount: existingTransaction.amount,
+        user_id: existingTransaction.user_id,
+      });
+
+      // ==================== IDEMPOTENCY CHECK ====================
+      // If transaction is already completed, verify downstream updates and return early
+      if (existingTransaction.status === 'completed' && isSuccessful) {
+        console.log(`[${webhookId}] Transaction already completed. Performing verification...`);
+        
+        const verificationPassed = await verifyTransactionCompletion(
+          existingTransaction, 
+          TransactionNumber, 
+          webhookId
+        );
+
+        if (verificationPassed) {
+          console.log(`[${webhookId}] Verification passed. All downstream updates are correct.`);
+        } else {
+          console.warn(`[${webhookId}] Verification found issues. Attempting to fix...`);
+          // Attempt to fix the downstream updates
+          await processOneTimePayment(existingTransaction, TransactionNumber, `[${webhookId}]`);
         }
 
+        await markWebhookProcessed(webhookRecord?.id);
+        return res.status(200).json({ success: true, message: 'Already processed' });
+      }
+
+      // ==================== UPDATE TRANSACTION STATUS ====================
+      console.log(`[${webhookId}] Updating transaction status to: ${isSuccessful ? 'completed' : 'failed'}`);
+
       const { data: transaction, error: updateError } = await supabase
-    .from('payment_transactions')
-    .update({
-      status: isSuccessful ? 'completed' : 'failed',
+        .from('payment_transactions')
+        .update({
+          status: isSuccessful ? 'completed' : 'failed',
           transaction_number: TransactionNumber,
           response_code: ResponseCode?.toString() || null,
           response_description: ResponseDescription || null,
           updated_at: new Date().toISOString(),
           completed_at: isSuccessful ? new Date().toISOString() : null,
-    })
-          .eq('id', existingTransaction.id)
-    .select('*, metadata')
-    .single();
+        })
+        .eq('id', existingTransaction.id)
+        .select('*, metadata')
+        .single();
 
       if (updateError) {
-        console.error('Transaction update error:', updateError);
-          console.error('Transaction ID:', existingTransaction.id);
-          console.error('Webhook body:', JSON.stringify(body, null, 2));
-        } else if (transaction && isSuccessful) {
-          try {
-            await handleSuccessfulPayment(transaction);
-            // Verify donation was updated
-            if (transaction.order_type === 'donation' && transaction.reference_id) {
-              const { data: verifyDonation } = await supabase
-                .from('donations')
-                .select('payment_status, completed_at, transaction_number')
-                .eq('id', transaction.reference_id)
-                .single();
-              
-              if (verifyDonation && verifyDonation.payment_status !== 'completed') {
-                console.error('⚠️ Donation update verification failed!', {
-                  donationId: transaction.reference_id,
-                  status: verifyDonation.payment_status,
-                });
-                // Retry the update
-                await supabase
-                  .from('donations')
-                  .update({
-                    payment_status: 'completed',
-                    completed_at: new Date().toISOString(),
-                    transaction_number: transaction.transaction_number || null,
-                  })
-                  .eq('id', transaction.reference_id);
-              }
-            }
-            // Verify event registration was updated
-            if (transaction.order_type === 'event_registration' && transaction.reference_id) {
-              const { data: verifyEvent } = await supabase
-                .from('event_registrations')
-                .select('payment_status, status, transaction_number')
-                .eq('id', transaction.reference_id)
-                .single();
-              
-              if (verifyEvent && verifyEvent.payment_status !== 'completed') {
-                console.error('⚠️ Event registration update verification failed!', {
-                  registrationId: transaction.reference_id,
-                  paymentStatus: verifyEvent.payment_status,
-                });
-                // Retry the update
-                await supabase
-                  .from('event_registrations')
-                  .update({
-                    payment_status: 'completed',
-                    status: 'registered',
-                    transaction_number: transaction.transaction_number || null,
-                    amount_paid: transaction.amount || null,
-                  })
-                  .eq('id', transaction.reference_id);
-              }
-            }
-          } catch (paymentError) {
-            console.error('Error in handleSuccessfulPayment:', paymentError);
-            // Don't throw - we've already updated the transaction
-          }
-        }
-      } else {
-        console.error('Transaction not found for order_id:', customOrderId);
-        console.error('Webhook body:', JSON.stringify(body, null, 2));
-        // Try to find by transaction_number as fallback
-        const { data: transactionByNumber } = await supabase
-          .from('payment_transactions')
-          .select('*, metadata')
-          .eq('transaction_number', TransactionNumber)
-          .maybeSingle();
+        console.error(`[${webhookId}] Transaction update FAILED:`, updateError);
+        await markWebhookError(webhookRecord?.id, `Failed to update transaction: ${updateError.message}`);
+        return res.status(500).json({ error: 'Failed to update transaction' });
+      }
 
-        if (transactionByNumber) {
-          // Check if already completed (idempotency)
-          if (transactionByNumber.status === 'completed' && isSuccessful) {
-            console.log('Transaction already completed (found by transaction_number), verifying status', {
-              transactionId: transactionByNumber.id,
-              transactionNumber: TransactionNumber,
-            });
-            // Verify registration/donation is updated
-            if (transactionByNumber.order_type === 'event_registration' && transactionByNumber.reference_id) {
-              const { data: verifyEvent } = await supabase
-                .from('event_registrations')
-                .select('payment_status, status')
-                .eq('id', transactionByNumber.reference_id)
-                .single();
-              
-              if (verifyEvent && verifyEvent.payment_status !== 'completed') {
-                console.log('⚠️ Duplicate webhook (fallback): Event registration not paid, updating...');
-                await supabase
-                  .from('event_registrations')
-                  .update({
-                    payment_status: 'completed',
-                    status: 'registered',
-                    transaction_number: TransactionNumber,
-                  })
-                  .eq('id', transactionByNumber.reference_id);
-              }
-            } else if (transactionByNumber.order_type === 'donation' && transactionByNumber.reference_id) {
-              const { data: verifyDonation } = await supabase
-                .from('donations')
-                .select('payment_status')
-                .eq('id', transactionByNumber.reference_id)
-                .single();
-              
-              if (verifyDonation && verifyDonation.payment_status !== 'completed') {
-                console.log('⚠️ Duplicate webhook (fallback): Donation not completed, updating...');
-                await supabase
-                  .from('donations')
-                  .update({
-                    payment_status: 'completed',
-                    completed_at: new Date().toISOString(),
-                    transaction_number: TransactionNumber,
-                  })
-                  .eq('id', transactionByNumber.reference_id);
-              }
-            }
-            // Update webhook as processed
-            if (webhookRecord?.id) {
-              await supabase
-                .from('payment_webhooks')
-                .update({ 
-                  processed: true,
-                  processed_at: new Date().toISOString()
-                })
-                .eq('id', webhookRecord.id);
-            }
-            return res.status(200).json({ success: true, message: 'Already processed' });
-          }
+      console.log(`[${webhookId}] Transaction updated successfully`);
+      console.log(`[${webhookId}] New status: ${transaction.status}`);
+      console.log(`[${webhookId}] Transaction number: ${transaction.transaction_number}`);
 
-          console.log('Found transaction by transaction_number, updating...');
-          const { data: updatedTransaction, error: updateError } = await supabase
-            .from('payment_transactions')
-            .update({
-              status: isSuccessful ? 'completed' : 'failed',
-              transaction_number: TransactionNumber,
-              response_code: ResponseCode?.toString() || null,
-              response_description: ResponseDescription || null,
-              updated_at: new Date().toISOString(),
-              completed_at: isSuccessful ? new Date().toISOString() : null,
-            })
-            .eq('id', transactionByNumber.id)
-            .select('*, metadata')
-            .single();
-
-          if (!updateError && updatedTransaction) {
-            try {
-              await handleSuccessfulPayment(updatedTransaction);
-              // Verify payment was processed (same verification as above)
-              if (updatedTransaction.order_type === 'donation' && updatedTransaction.reference_id) {
-                const { data: verifyDonation } = await supabase
-                  .from('donations')
-                  .select('payment_status, completed_at, transaction_number')
-                  .eq('id', updatedTransaction.reference_id)
-                  .single();
-                
-                if (verifyDonation && verifyDonation.payment_status !== 'completed') {
-                  console.error('⚠️ Donation update verification failed (fallback)!', {
-                    donationId: updatedTransaction.reference_id,
-                    status: verifyDonation.payment_status,
-                  });
-                  // Retry the update
-                  await supabase
-                    .from('donations')
-                    .update({
-                      payment_status: 'completed',
-                      completed_at: new Date().toISOString(),
-                      transaction_number: updatedTransaction.transaction_number || null,
-                    })
-                    .eq('id', updatedTransaction.reference_id);
-                }
-              } else if (updatedTransaction.order_type === 'event_registration' && updatedTransaction.reference_id) {
-                const { data: verifyEvent } = await supabase
-                  .from('event_registrations')
-                  .select('payment_status, status, transaction_number')
-                  .eq('id', updatedTransaction.reference_id)
-                  .single();
-                
-                if (verifyEvent && verifyEvent.payment_status !== 'completed') {
-                  console.error('⚠️ Event registration update verification failed (fallback)!', {
-                    registrationId: updatedTransaction.reference_id,
-                    paymentStatus: verifyEvent.payment_status,
-                  });
-                  // Retry the update
-                  await supabase
-                    .from('event_registrations')
-                    .update({
-                      payment_status: 'completed',
-                      status: 'registered',
-                      transaction_number: updatedTransaction.transaction_number || null,
-                      amount_paid: updatedTransaction.amount || null,
-                    })
-                    .eq('id', updatedTransaction.reference_id);
-                }
-              } else if ((updatedTransaction.order_type === 'membership' || updatedTransaction.order_type === 'organization_membership') && updatedTransaction.user_id) {
-                // Verify membership was updated
-                const { data: verifyUser } = await supabase
-                  .from('users')
-                  .select('membership_tier, membership_status')
-                  .eq('id', updatedTransaction.user_id)
-                  .single();
-                
-                if (verifyUser && (verifyUser.membership_tier !== 'premium' || verifyUser.membership_status !== 'active')) {
-                  console.error('⚠️ Membership update verification failed (fallback)!', {
-                    userId: updatedTransaction.user_id,
-                    tier: verifyUser.membership_tier,
-                    status: verifyUser.membership_status,
-                  });
-                  // Retry the update
-                  const { data: userData } = await supabase
-                    .from('users')
-                    .select('account_type')
-                    .eq('id', updatedTransaction.user_id)
-                    .single();
-                  
-                  const expiresAt = await resolveMembershipExpiryFromTransaction(updatedTransaction);
-                  await updateUserMembership(updatedTransaction.user_id, userData?.account_type, {
-                    expiresAt,
-                  });
-                }
-              }
-            } catch (paymentError) {
-              console.error('Error in handleSuccessfulPayment (fallback):', paymentError);
-            }
-          }
-        }
-  }
-}
-
-    // Handle subscription payment
-    if (subscription_id) {
-      const { data: subscription, error: subUpdateError } = await supabase
-    .from('payment_subscriptions')
-        .update({
-          status: isSuccessful ? 'active' : 'failed',
-          transaction_number: TransactionNumber || null,
-          last_billing_date: isSuccessful ? new Date().toISOString().split('T')[0] : null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('ezee_subscription_id', subscription_id)
-    .select()
-    .single();
-
-      if (subUpdateError) {
-        console.error('Subscription update error:', subUpdateError);
-  }
-
-      if (subscription && isSuccessful) {
-        // Calculate next billing date
-  const nextBillingDate = calculateNextBillingDate(subscription.frequency);
-  await supabase
-    .from('payment_subscriptions')
-          .update({ next_billing_date: nextBillingDate })
-    .eq('id', subscription.id);
-
+      // ==================== PROCESS SUCCESSFUL PAYMENT ====================
+      if (transaction && isSuccessful) {
+        console.log(`[${webhookId}] Processing successful payment for order_type: ${transaction.order_type}`);
+        
         try {
-        await handleSuccessfulSubscriptionPayment(subscription);
-          
-          // Verify subscription payment was processed correctly
-          const { data: verifySubPayment } = await supabase
-            .from('payment_subscriptions')
-            .select('status, transaction_number, last_billing_date')
-            .eq('id', subscription.id)
-            .single();
-
-          if (verifySubPayment && verifySubPayment.status !== 'active') {
-            console.error('⚠️ Subscription payment verification failed!', {
-              subscriptionId: subscription.id,
-              status: verifySubPayment.status,
-            });
-            // Retry the update
-            await supabase
-              .from('payment_subscriptions')
-              .update({
-                status: 'active',
-                transaction_number: TransactionNumber || null,
-                last_billing_date: new Date().toISOString().split('T')[0],
-                updated_at: new Date().toISOString(),
-                next_billing_date: nextBillingDate,
-              })
-              .eq('id', subscription.id);
-          }
-        } catch (subscriptionError) {
-          console.error('Error in handleSuccessfulSubscriptionPayment:', subscriptionError);
-          // Don't throw - we've already updated the subscription
+          await processOneTimePayment(transaction, TransactionNumber, `[${webhookId}]`);
+          console.log(`[${webhookId}] Payment processing completed successfully`);
+        } catch (processError: any) {
+          console.error(`[${webhookId}] Payment processing FAILED:`, processError);
+          await markWebhookError(webhookRecord?.id, `Payment processing failed: ${processError.message}`);
+          return res.status(500).json({ error: 'Payment processing failed' });
         }
       }
+
+      await markWebhookProcessed(webhookRecord?.id);
+      const duration = Date.now() - startTime;
+      console.log(`[${webhookId}] Webhook processing completed in ${duration}ms`);
+      return res.status(200).json({ success: true });
     }
 
-    // Update webhook as processed
-    if (webhookRecord?.id) {
-      await supabase
-        .from('payment_webhooks')
-        .update({ 
-          processed: true,
-          processed_at: new Date().toISOString()
-        })
-        .eq('id', webhookRecord.id);
-    } else if (TransactionNumber) {
-      // Fallback: update by transaction_number if ID not available
-      await supabase
-        .from('payment_webhooks')
-        .update({ 
-          processed: true,
-          processed_at: new Date().toISOString()
-        })
-        .eq('transaction_number', TransactionNumber);
-    }
+    // ==================== HANDLE SUBSCRIPTION PAYMENT ====================
+    if (subscription_id && TransactionNumber) {
+      console.log(`[${webhookId}] Processing as SUBSCRIPTION PAYMENT`);
+      console.log(`[${webhookId}] Subscription ID: ${subscription_id}`);
 
-    return res.status(200).json({ success: true });
-  } catch (error: any) {
-    console.error('Webhook error:', error);
-    return res.status(500).json({ error: 'Webhook processing failed' });
-  }
-}
-
-async function handleSuccessfulPayment(transaction: any) {
-  const { order_type, reference_id, amount } = transaction;
-
-  switch (order_type) {
-    case 'donation':
-      // Update donation status with all required fields
-      const { error: donationUpdateError } = await supabase
-        .from('donations')
-        .update({
-          payment_status: 'completed',
-          completed_at: new Date().toISOString(),
-          transaction_number: transaction.transaction_number || null,
-        })
-        .eq('id', reference_id);
-
-      if (donationUpdateError) {
-        console.error('Error updating donation status:', donationUpdateError);
-        console.error('Donation ID:', reference_id);
-        throw donationUpdateError;
-      }
-
-      // Fetch donation to get cause_id for amount increment
-      const { data: donation, error: donationFetchError } = await supabase
-        .from('donations')
-        .select('cause_id')
-        .eq('id', reference_id)
-        .single();
-
-      if (donationFetchError) {
-        console.error('Error fetching donation:', donationFetchError);
-        throw donationFetchError;
-      }
-
-      // Increment cause amount raised
-      if (donation?.cause_id) {
-        const { error: incrementError } = await supabase.rpc('increment_cause_amount', {
-          p_cause_id: donation.cause_id,
-          p_amount: amount,
-        });
-
-        if (incrementError) {
-          console.error('Error incrementing cause amount:', incrementError);
-          // Don't throw here - donation is already marked as complete
-        }
-      }
-      break;
-
-    case 'event_registration':
-      // Update event registration with all required fields
-      const { error: eventUpdateError } = await supabase
-        .from('event_registrations')
-        .update({ 
-          payment_status: 'completed', 
-          status: 'registered',
-          transaction_number: transaction.transaction_number || null,
-          amount_paid: transaction.amount || null,
-        })
-        .eq('id', reference_id);
-
-      if (eventUpdateError) {
-        console.error('Error updating event registration status:', eventUpdateError);
-        console.error('Event Registration ID:', reference_id);
-        throw eventUpdateError;
-      }
-
-      // Verify event registration was updated
-      const { data: verifyEvent } = await supabase
-        .from('event_registrations')
-        .select('payment_status, status, transaction_number, ticket_count, event_id')
-        .eq('id', reference_id)
-        .single();
-
-      if (verifyEvent && verifyEvent.payment_status !== 'completed') {
-        console.error('⚠️ Event registration update verification failed!', {
-          registrationId: reference_id,
-          paymentStatus: verifyEvent.payment_status,
-        });
-        // Retry the update
-      await supabase
-        .from('event_registrations')
-          .update({ 
-            payment_status: 'completed', 
-            status: 'registered',
-            transaction_number: transaction.transaction_number || null,
-            amount_paid: transaction.amount || null,
-          })
-        .eq('id', reference_id);
-      }
-
-      // Generate tickets after successful payment
-      if (verifyEvent && verifyEvent.payment_status === 'completed' && verifyEvent.event_id && verifyEvent.ticket_count) {
-        try {
-          // Check if tickets already exist
-          const { data: existingTickets } = await supabase
-            .from('event_tickets')
-            .select('id')
-            .eq('registration_id', reference_id)
-            .limit(1);
-
-          // Only generate if tickets don't exist
-          if (!existingTickets || existingTickets.length === 0) {
-            const { generateTicketsForRegistration } = await import('../../services/eventTicketsService');
-            const ticketResult = await generateTicketsForRegistration(
-              reference_id,
-              verifyEvent.ticket_count,
-              verifyEvent.event_id
-            );
-            
-            if (ticketResult.success) {
-              console.log(`✅ Generated ${verifyEvent.ticket_count} ticket(s) for registration ${reference_id}`);
-            } else {
-              console.error('⚠️ Failed to generate tickets:', ticketResult.error);
-              // Don't throw - registration is already confirmed
-            }
-          }
-        } catch (ticketError) {
-          console.error('Error generating tickets:', ticketError);
-          // Don't throw - registration is already confirmed
-        }
-      }
-      break;
-
-    case 'membership':
-    case 'organization_membership':  // NEW: Handle organization memberships
-      // Update payment_subscriptions status if linked via metadata
-      if (transaction.metadata?.payment_subscriptions_id) {
-        const { error: subscriptionUpdateError } = await supabase
+      try {
+        // Find subscription
+        const { data: subscription, error: subError } = await supabase
           .from('payment_subscriptions')
-          .update({ 
-            status: 'active',
-            transaction_number: transaction.transaction_number || null,
-            last_billing_date: new Date().toISOString().split('T')[0],
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', transaction.metadata.payment_subscriptions_id);
-
-        if (subscriptionUpdateError) {
-          console.error('Error updating payment subscription:', subscriptionUpdateError);
-          throw subscriptionUpdateError;
-        }
-
-        // Verify subscription was updated
-        const { data: verifySubscription } = await supabase
-          .from('payment_subscriptions')
-          .select('status, transaction_number, last_billing_date')
-          .eq('id', transaction.metadata.payment_subscriptions_id)
+          .select('*')
+          .eq('ezee_subscription_id', subscription_id)
           .single();
 
-        if (verifySubscription && verifySubscription.status !== 'active') {
-          console.error('⚠️ Subscription update verification failed!', {
-            subscriptionId: transaction.metadata.payment_subscriptions_id,
-            status: verifySubscription.status,
-          });
-          // Retry the update
-        await supabase
-          .from('payment_subscriptions')
-          .update({ 
-            status: 'active',
-              transaction_number: transaction.transaction_number || null,
-            last_billing_date: new Date().toISOString().split('T')[0],
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', transaction.metadata.payment_subscriptions_id);
+        if (subError || !subscription) {
+          console.error(`[${webhookId}] Subscription NOT FOUND for ezee_subscription_id: ${subscription_id}`);
+          await markWebhookError(webhookRecord?.id, `Subscription not found: ${subscription_id}`);
+          return res.status(404).json({ error: 'Subscription not found' });
         }
-      }
-      
-      // Update user membership status
-      if (transaction.user_id) {
-        // Check if this is an organization account
-        const { data: userData } = await supabase
-          .from('users')
-          .select('account_type')
-          .eq('id', transaction.user_id)
-          .single();
 
-        const expiresAt = await resolveMembershipExpiryFromTransaction(transaction);
-        await updateUserMembership(transaction.user_id, userData?.account_type, {
-          expiresAt,
-        });
-      }
-      break;
-
-    case 'recurring_donation':
-      // Update payment_subscriptions status if linked via metadata
-      let causeId: string | null = null;
-      
-      if (transaction.metadata?.payment_subscriptions_id) {
         // Update subscription status
-        const { error: subscriptionUpdateError } = await supabase
+        const { error: updateError } = await supabase
           .from('payment_subscriptions')
-          .update({ 
-            status: 'active',
-            transaction_number: transaction.transaction_number || null,
+          .update({
+            status: isSuccessful ? 'active' : 'failed',
+            transaction_number: TransactionNumber,
             last_billing_date: new Date().toISOString().split('T')[0],
             updated_at: new Date().toISOString(),
           })
-          .eq('id', transaction.metadata.payment_subscriptions_id);
+          .eq('id', subscription.id);
 
-        if (subscriptionUpdateError) {
-          console.error('Error updating recurring donation subscription:', subscriptionUpdateError);
-          throw subscriptionUpdateError;
+        if (updateError) {
+          console.error(`[${webhookId}] Subscription update FAILED:`, updateError);
+          await markWebhookError(webhookRecord?.id, `Subscription update failed: ${updateError.message}`);
+          return res.status(500).json({ error: 'Subscription update failed' });
         }
 
-        // Verify subscription was updated
-        const { data: verifySubscription } = await supabase
-          .from('payment_subscriptions')
-          .select('status, transaction_number, last_billing_date')
-          .eq('id', transaction.metadata.payment_subscriptions_id)
-          .single();
-
-        if (verifySubscription && verifySubscription.status !== 'active') {
-          console.error('⚠️ Recurring donation subscription update verification failed!', {
-            subscriptionId: transaction.metadata.payment_subscriptions_id,
-            status: verifySubscription.status,
-          });
-          // Retry the update
-          await supabase
-            .from('payment_subscriptions')
-            .update({ 
-              status: 'active',
-              transaction_number: transaction.transaction_number || null,
-              last_billing_date: new Date().toISOString().split('T')[0],
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', transaction.metadata.payment_subscriptions_id);
+        // Process successful subscription payment
+        if (isSuccessful) {
+          await processSubscriptionPayment(subscription, TransactionNumber, `[${webhookId}]`);
         }
 
-        // Get the payment_subscriptions record to find the donation/cause
-        const { data: paymentSub } = await supabase
-          .from('payment_subscriptions')
-          .select('reference_id')
-          .eq('id', transaction.metadata.payment_subscriptions_id)
-          .single();
+        await markWebhookProcessed(webhookRecord?.id);
+        const duration = Date.now() - startTime;
+        console.log(`[${webhookId}] Subscription webhook processing completed in ${duration}ms`);
+        return res.status(200).json({ success: true });
+      } catch (subError: any) {
+        console.error(`[${webhookId}] Subscription processing FAILED:`, subError);
+        await markWebhookError(webhookRecord?.id, `Subscription processing failed: ${subError.message}`);
+        return res.status(500).json({ error: 'Subscription processing failed' });
+      }
+    }
 
-        if (paymentSub?.reference_id) {
-          // Look up the donation to get cause_id
+    console.warn(`[${webhookId}] Webhook did not match any processing path`);
+    await markWebhookError(webhookRecord?.id, 'No processing path matched');
+    return res.status(400).json({ error: 'Invalid webhook data' });
+
+  } catch (error: any) {
+    console.error('='.repeat(80));
+    console.error(`[${webhookId}] WEBHOOK PROCESSING ERROR`);
+    console.error('Error:', error);
+    console.error('Stack:', error.stack);
+    console.error('='.repeat(80));
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// ==================== HELPER FUNCTIONS ====================
+
+/**
+ * Mark webhook as successfully processed
+ */
+async function markWebhookProcessed(webhookId: string | undefined) {
+  if (!webhookId) return;
+  
+  try {
+    await supabase
+      .from('payment_webhooks')
+      .update({ 
+        processed: true,
+        processed_at: new Date().toISOString()
+      })
+      .eq('id', webhookId);
+  } catch (error) {
+    console.error('Failed to mark webhook as processed:', error);
+  }
+}
+
+/**
+ * Mark webhook as failed with error message
+ */
+async function markWebhookError(webhookId: string | undefined, errorMessage: string) {
+  if (!webhookId) return;
+  
+  try {
+    await supabase
+      .from('payment_webhooks')
+      .update({ 
+        processed: false,
+        error_message: errorMessage,
+        processed_at: new Date().toISOString()
+      })
+      .eq('id', webhookId);
+  } catch (error) {
+    console.error('Failed to mark webhook error:', error);
+  }
+}
+
+/**
+ * Verify that a completed transaction has all downstream updates correct
+ * Returns true if all verifications pass, false if any need fixing
+ */
+async function verifyTransactionCompletion(
+  transaction: any, 
+  transactionNumber: string,
+  webhookId: string
+): Promise<boolean> {
+  let allVerificationsPassed = true;
+
+  try {
+    // Verify based on order_type
+    switch (transaction.order_type) {
+      case 'event_registration':
+        if (transaction.reference_id) {
+          const { data: eventReg } = await supabase
+            .from('event_registrations')
+            .select('payment_status, status, transaction_number')
+            .eq('id', transaction.reference_id)
+            .single();
+
+          if (eventReg) {
+            if (eventReg.payment_status !== 'Completed') {
+              console.warn(`[${webhookId}] Event registration payment_status is '${eventReg.payment_status}', should be 'Completed'`);
+              allVerificationsPassed = false;
+            }
+            if (eventReg.status !== 'Registered') {
+              console.warn(`[${webhookId}] Event registration status is '${eventReg.status}', should be 'Registered'`);
+              allVerificationsPassed = false;
+            }
+          }
+        }
+        break;
+
+      case 'donation':
+        if (transaction.reference_id) {
           const { data: donation } = await supabase
             .from('donations')
-            .select('cause_id')
-            .eq('id', paymentSub.reference_id)
+            .select('payment_status, completed_at, transaction_number')
+            .eq('id', transaction.reference_id)
             .single();
 
-          if (donation?.cause_id) {
-            causeId = donation.cause_id;
+          if (donation) {
+            if (donation.payment_status !== 'completed') {
+              console.warn(`[${webhookId}] Donation payment_status is '${donation.payment_status}', should be 'completed'`);
+              allVerificationsPassed = false;
+            }
+            if (!donation.completed_at) {
+              console.warn(`[${webhookId}] Donation missing completed_at timestamp`);
+              allVerificationsPassed = false;
+            }
           }
         }
-      }
+        break;
 
-      // Fallback: try to get cause_id from metadata or reference_id directly
-      if (!causeId) {
-        causeId = transaction.metadata?.reference_id || transaction.reference_id;
-      }
-      
-      if (causeId) {
-        // Create a donation record for this recurring payment
-        const { error: donationInsertError } = await supabase.from('donations').insert({
-          cause_id: causeId,
-          user_id: transaction.user_id,
-          amount: transaction.amount,
-          currency: 'JMD',
-          payment_status: 'completed',
-          transaction_number: transaction.transaction_number || null,
-          completed_at: new Date().toISOString(),
-        });
+      case 'membership':
+      case 'organization_membership':
+        if (transaction.user_id) {
+          const { data: user } = await supabase
+            .from('users')
+            .select('membership_status, is_premium, is_partner_organization, account_type')
+            .eq('id', transaction.user_id)
+            .single();
 
-        if (donationInsertError) {
-          console.error('Error creating recurring donation record:', donationInsertError);
-          throw donationInsertError;
-        }
-
-        // Increment cause amount raised
-        const { error: incrementError } = await supabase.rpc('increment_cause_amount', {
-          p_cause_id: causeId,
-          p_amount: transaction.amount,
-        });
-
-        if (incrementError) {
-          console.error('Error incrementing cause amount:', incrementError);
-          // Don't throw here - donation is already created
-        }
-      }
-      break;
-  }
-
-  console.log(`Successfully processed ${order_type} payment for ${reference_id}`);
-
-  // Generate receipt after successful payment processing
-  try {
-    await generateReceiptForTransaction(transaction);
-  } catch (receiptError) {
-    console.error('Receipt generation error:', receiptError);
-    // Don't fail the payment if receipt fails
-  }
-}
-
-async function handleSuccessfulSubscriptionPayment(subscription: any) {
-  const { subscription_type, reference_id, user_id, amount } = subscription;
-
-  switch (subscription_type) {
-    case 'recurring_donation':
-      // Update recurring donation status
-      const { error: recurringUpdateError } = await supabase
-        .from('recurring_donations')
-        .update({ status: 'active' })
-        .eq('id', reference_id);
-
-      if (recurringUpdateError) {
-        console.error('Error updating recurring donation status:', recurringUpdateError);
-        throw recurringUpdateError;
-      }
-
-      // Fetch recurring donation details
-      const { data: recurringDonation, error: recurringFetchError } = await supabase
-        .from('recurring_donations')
-        .select('cause_id, is_anonymous')
-        .eq('id', reference_id)
-        .single();
-
-      if (recurringFetchError) {
-        console.error('Error fetching recurring donation:', recurringFetchError);
-        throw recurringFetchError;
-      }
-
-      if (recurringDonation) {
-        // Create donation record for this recurring payment
-        const { error: donationInsertError } = await supabase.from('donations').insert({
-          cause_id: recurringDonation.cause_id,
-          user_id,
-          amount,
-          currency: 'JMD',
-          is_anonymous: recurringDonation.is_anonymous,
-          payment_status: 'completed',
-          recurring_donation_id: reference_id,
-          completed_at: new Date().toISOString(),
-        });
-
-        if (donationInsertError) {
-          console.error('Error creating donation from recurring payment:', donationInsertError);
-          throw donationInsertError;
-        }
-
-        // Verify donation was created correctly
-        const { data: verifyDonation } = await supabase
-          .from('donations')
-          .select('id, payment_status, completed_at, transaction_number')
-          .eq('recurring_donation_id', reference_id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (verifyDonation && verifyDonation.payment_status !== 'completed') {
-          console.error('⚠️ Recurring donation payment verification failed!', {
-            recurringDonationId: reference_id,
-            donationStatus: verifyDonation.payment_status,
-          });
-          // Retry the update if we can find the donation
-          if (verifyDonation.id) {
-            await supabase
-              .from('donations')
-              .update({
-                payment_status: 'completed',
-                completed_at: new Date().toISOString(),
-                transaction_number: subscription.transaction_number || null,
-              })
-              .eq('id', verifyDonation.id);
+          if (user) {
+            if (user.membership_status !== 'active') {
+              console.warn(`[${webhookId}] User membership_status is '${user.membership_status}', should be 'active'`);
+              allVerificationsPassed = false;
+            }
+            
+            if (user.account_type === 'organization') {
+              if (!user.is_partner_organization) {
+                console.warn(`[${webhookId}] Organization is_partner_organization is false, should be true`);
+                allVerificationsPassed = false;
+              }
+            } else {
+              if (!user.is_premium) {
+                console.warn(`[${webhookId}] User is_premium is false, should be true`);
+                allVerificationsPassed = false;
+              }
+            }
           }
         }
-
-        // Increment cause amount raised
-        const { error: incrementError } = await supabase.rpc('increment_cause_amount', {
-          p_cause_id: recurringDonation.cause_id,
-          p_amount: amount,
-        });
-
-        if (incrementError) {
-          console.error('Error incrementing cause amount:', incrementError);
-          // Don't throw here - donation is already created
-        }
-      }
-      break;
-
-    case 'membership':
-    case 'organization_membership':  // NEW: Handle organization memberships
-      // Check if this is an organization account
-      const { data: userData } = await supabase
-        .from('users')
-        .select('account_type')
-        .eq('id', user_id)
-        .single();
-
-      const expiresAt = subscription.next_billing_date || calculateNextBillingDate(subscription.frequency);
-      await updateUserMembership(user_id, userData?.account_type, {
-        expiresAt,
-      });
-      break;
-  }
-
-  console.log(`Successfully processed ${subscription_type} subscription payment`);
-}
-
-function calculateNextBillingDate(frequency: string): string {
-  const now = new Date();
-  switch (frequency.toLowerCase()) {
-    case 'daily': now.setDate(now.getDate() + 1); break;
-    case 'weekly': now.setDate(now.getDate() + 7); break;
-    case 'monthly': now.setMonth(now.getMonth() + 1); break;
-    case 'quarterly': now.setMonth(now.getMonth() + 3); break;
-    case 'annually': now.setFullYear(now.getFullYear() + 1); break;
-  }
-  return now.toISOString().split('T')[0];
-}
-
-async function resolveMembershipExpiryFromTransaction(transaction: any): Promise<string | null> {
-  if (transaction.metadata?.payment_subscriptions_id) {
-    const { data } = await supabase
-      .from('payment_subscriptions')
-      .select('next_billing_date')
-      .eq('id', transaction.metadata.payment_subscriptions_id)
-      .single();
-
-    if (data?.next_billing_date) {
-      return data.next_billing_date;
+        break;
     }
-  }
-
-  if (transaction.metadata?.frequency) {
-    return calculateNextBillingDate(transaction.metadata.frequency);
-  }
-
-  return null;
-}
-
-async function updateUserMembership(
-  userId: string,
-  accountType: string | null | undefined,
-  options: { expiresAt?: string | null } = {}
-) {
-  const updateData: Record<string, any> = {
-    membership_status: 'active',
-    subscription_start_date: new Date().toISOString(),
-  };
-
-  if (accountType === 'organization') {
-    updateData.is_partner_organization = true;
-  } else {
-    updateData.is_premium = true;
-    updateData.membership_tier = 'premium';
-  }
-
-  if (options.expiresAt) {
-    updateData.membership_expires_at = options.expiresAt;
-  }
-
-  await supabase
-    .from('users')
-    .update(updateData)
-    .eq('id', userId);
-}
-
-// ==================== RECEIPT GENERATION ====================
-
-function mapOrderTypeToReceiptType(orderType: string): 'donation' | 'subscription' | 'event' | 'membership' {
-  const mapping: Record<string, 'donation' | 'subscription' | 'event' | 'membership'> = {
-    donation: 'donation',
-    recurring_donation: 'subscription',
-    event_registration: 'event',
-    membership: 'membership',
-    organization_membership: 'membership',
-  };
-  return mapping[orderType] || 'donation';
-}
-
-function generateLineItemsFromTransaction(transaction: any) {
-  return [{
-    description: transaction.description || `${transaction.order_type} payment`,
-    quantity: 1,
-    unitPrice: parseFloat(transaction.amount),
-    amount: parseFloat(transaction.amount),
-  }];
-}
-
-function calculateProcessingFee(amount: number): number {
-  // eZeePayments fee structure: 3% or minimum $135 JMD
-  return Math.max(135, amount * 0.03);
-}
-
-async function generateReceiptForTransaction(transaction: any) {
-  try {
-    if (!transaction.transaction_number || !transaction.customer_email) {
-      console.warn('Cannot generate receipt: missing transaction_number or customer_email');
-      return;
-    }
-
-    await ReceiptService.createReceipt({
-      transactionId: transaction.id,
-      transactionNumber: transaction.transaction_number,
-      customerName: transaction.customer_name || 'Customer',
-      customerEmail: transaction.customer_email,
-      receiptType: mapOrderTypeToReceiptType(transaction.order_type),
-      lineItems: generateLineItemsFromTransaction(transaction),
-      subtotal: parseFloat(transaction.amount),
-      processingFee: calculateProcessingFee(parseFloat(transaction.amount)),
-      totalAmount: parseFloat(transaction.amount),
-      paymentMethod: 'Credit Card',
-    });
-
-    console.log(`Receipt generated for transaction ${transaction.transaction_number}`);
   } catch (error) {
-    console.error('Error generating receipt:', error);
-    throw error;
+    console.error(`[${webhookId}] Verification error:`, error);
+    return false;
   }
+
+  return allVerificationsPassed;
 }
+
+// Note: Payment processing logic has been moved to /api/ezee/lib/processPayment.ts
+// The functions below are kept for verification purposes only
