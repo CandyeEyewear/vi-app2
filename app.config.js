@@ -68,10 +68,31 @@ export default {
             {
               scheme: "https",
               host: "vibe.volunteersinc.org",
+              pathPrefix: "/post"
+            },
+            {
+              scheme: "https",
+              host: "vibe.volunteersinc.org",
+              pathPrefix: "/causes"
+            },
+            {
+              scheme: "https",
+              host: "vibe.volunteersinc.org",
+              pathPrefix: "/events"
+            },
+            {
+              scheme: "https",
+              host: "vibe.volunteersinc.org",
+              pathPrefix: "/opportunity"
+            },
+            {
+              scheme: "https",
+              host: "vibe.volunteersinc.org",
               pathPrefix: "/invite"
             },
             {
-              scheme: "vibe"
+              scheme: "vibe",
+              host: "*"
             }
           ],
           category: [

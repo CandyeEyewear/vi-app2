@@ -181,7 +181,7 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
 
   const handleShareExternal = async () => {
     try {
-      const postUrl = `https://volunteersinc.org/post?id=${post.id}`;
+      const postUrl = `https://vibe.volunteersinc.org/post/${post.id}`;
       const shareMessage = `Check out this post from ${post.user.fullName} on VIbe:\n\n${post.text}\n\n${postUrl}`;
       
       await Share.share({
@@ -754,7 +754,7 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
               onPress={async () => {
                 setShowMoreMenu(false);
                 try {
-                  const postUrl = `https://volunteersinc.org/post?id=${post.id}`;
+                  const postUrl = `https://vibe.volunteersinc.org/post/${post.id}`;
                   await Share.share({
                     message: postUrl,
                     url: postUrl,
