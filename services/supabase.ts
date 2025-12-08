@@ -1,7 +1,26 @@
 import { createClient, type SupportedStorage } from '@supabase/supabase-js';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Detect if we're running in Node.js (server) or React Native (mobile)
+const isServer = typeof window === 'undefined' || typeof document === 'undefined';
+
+let AsyncStorage: any;
+let Platform: any;
+
+if (!isServer) {
+  // We're in React Native - import mobile modules
+  AsyncStorage = require('@react-native-async-storage/async-storage').default;
+  Platform = require('react-native').Platform;
+} else {
+  // We're in Node.js - create mocks
+  AsyncStorage = {
+    getItem: async () => null,
+    setItem: async () => {},
+    removeItem: async () => {},
+  };
+  Platform = { OS: 'web' };
+}
+
 import { supabaseConfig } from '../config/supabase.config';
-import { Platform } from 'react-native';
 
 // Create AsyncStorage adapter for React Native
 // Supabase expects a storage interface with getItem, setItem, removeItem methods
