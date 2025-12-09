@@ -58,7 +58,7 @@ Deno.serve(async (req: Request) => {
         'Authorization': `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: 'VIbe <onboarding@resend.dev>',
+        from: 'VIbe <noreply@volunteersinc.org>',
         to: [to],
         subject,
         html,
