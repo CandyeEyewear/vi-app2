@@ -28,7 +28,7 @@ import { UserAvatar } from '../components/index';
 
 interface Notification {
   id: string;
-  type: 'circle_request' | 'announcement' | 'opportunity' | 'message' | 'opportunity_submitted' | 'opportunity_approved' | 'opportunity_rejected' | 'cause' | 'event';
+  type: 'circle_request' | 'announcement' | 'opportunity' | 'message' | 'opportunity_submitted' | 'opportunity_approved' | 'opportunity_rejected' | 'cause' | 'event' | 'shoutout_received';
   title: string;
   message: string;
   link: string | null;
@@ -109,6 +109,11 @@ export default function NotificationsScreen() {
         const senderId = notification.related_id;
         senderIds.add(senderId);
         notificationToSenderMap.set(notification.id, senderId);
+      }
+      // Process shoutout_received notifications - sender_id is the person who gave the shoutout
+      if (notification.type === 'shoutout_received' && notification.sender_id) {
+        senderIds.add(notification.sender_id);
+        notificationToSenderMap.set(notification.id, notification.sender_id);
       }
     });
 
@@ -312,6 +317,13 @@ export default function NotificationsScreen() {
         iconColor: colors.community,
         borderColor: colors.community,
       },
+      shoutout_received: {
+        icon: Sparkles,
+        gradient: ['#F59E0B', '#FBBF24'],
+        iconBg: 'rgba(245, 158, 11, 0.15)',
+        iconColor: '#F59E0B',
+        borderColor: '#F59E0B',
+      },
       default: {
         icon: Bell,
         gradient: [colors.primary, colors.primaryDark],
@@ -324,7 +336,7 @@ export default function NotificationsScreen() {
   };
 
   const getNotificationAvatar = (notification: Notification): SenderInfo | null => {
-    if (notification.type !== 'message' && notification.type !== 'circle_request') {
+    if (notification.type !== 'message' && notification.type !== 'circle_request' && notification.type !== 'shoutout_received') {
       return null;
     }
 
@@ -387,8 +399,8 @@ export default function NotificationsScreen() {
           </View>
         )}
 
-        {/* Show avatar for message and circle_request, enhanced icon for others */}
-        {(item.type === 'message' || item.type === 'circle_request') ? (
+        {/* Show avatar for message, circle_request, and shoutout_received, enhanced icon for others */}
+        {(item.type === 'message' || item.type === 'circle_request' || item.type === 'shoutout_received') ? (
           (() => {
             const senderInfo = getNotificationAvatar(item);
             return (
