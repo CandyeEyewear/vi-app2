@@ -49,6 +49,7 @@ import {
 import { useAuth } from '../../../contexts/AuthContext';
 import { processPayment } from '../../../services/paymentService';
 import { generateTicketsForRegistration } from '../../../services/eventTicketsService';
+import { sendEventConfirmationEmail } from '../../../services/resendService';
 import { showToast } from '../../../utils/toast';
 import ErrorBoundary from '../../../components/ErrorBoundary';
 import Card from '../../../components/Card';
@@ -584,6 +585,26 @@ export default function EventRegisterScreen() {
               // Don't fail registration if ticket generation fails
             }
           }
+
+          // Send event confirmation email (non-blocking)
+          console.log('[EVENT REGISTER] 📧 Sending event confirmation email...');
+          sendEventConfirmationEmail(
+            user.email || '',
+            user.fullName,
+            event.title,
+            formatEventDate(event.startDate),
+            event.location || 'Online'
+          )
+            .then((result) => {
+              if (result.success) {
+                console.log('[EVENT REGISTER] ✅ Event confirmation email sent');
+              } else {
+                console.error('[EVENT REGISTER] ⚠️ Event confirmation email failed:', result.error);
+              }
+            })
+            .catch((error) => {
+              console.error('[EVENT REGISTER] ⚠️ Event confirmation email error:', error);
+            });
 
           // Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setShowSuccess(true);

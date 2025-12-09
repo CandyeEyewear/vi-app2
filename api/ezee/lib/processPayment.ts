@@ -6,6 +6,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { ReceiptService } from '../../../services/receiptService';
+import { sendEventConfirmationEmail, sendPaymentReceiptEmail } from '../../../services/resendService';
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -167,6 +168,30 @@ async function handleEventRegistration(
 
     console.log(`${logPrefix} Event registration updated successfully`);
 
+    // Send event confirmation email (non-blocking)
+    console.log(`${logPrefix} 📧 Sending event confirmation email for existing registration...`);
+    const { data: eventData1 } = await supabase
+      .from('events')
+      .select('title, start_date, location')
+      .eq('id', registration.event_id)
+      .single();
+    
+    const { data: userData1 } = await supabase
+      .from('users')
+      .select('email, full_name')
+      .eq('id', transaction.user_id)
+      .single();
+    
+    if (eventData1 && userData1) {
+      sendEventConfirmationEmail(
+        userData1.email,
+        userData1.full_name,
+        eventData1.title,
+        new Date(eventData1.start_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+        eventData1.location || 'Online'
+      ).catch(err => console.error(`${logPrefix} ⚠️ Event email failed:`, err));
+    }
+
     // Generate tickets if they don't exist
     if (registration) {
       try {
@@ -248,6 +273,31 @@ async function handleEventRegistration(
     }
 
     console.log(`${logPrefix} Event registration updated successfully`);
+
+    // Send event confirmation email (non-blocking)
+    console.log(`${logPrefix} 📧 Sending event confirmation email for updated registration...`);
+    const { data: eventData2 } = await supabase
+      .from('events')
+      .select('title, start_date, location')
+      .eq('id', eventId)
+      .single();
+    
+    const { data: userData2 } = await supabase
+      .from('users')
+      .select('email, full_name')
+      .eq('id', transaction.user_id)
+      .single();
+    
+    if (eventData2 && userData2) {
+      sendEventConfirmationEmail(
+        userData2.email,
+        userData2.full_name,
+        eventData2.title,
+        new Date(eventData2.start_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+        eventData2.location || 'Online'
+      ).catch(err => console.error(`${logPrefix} ⚠️ Event email failed:`, err));
+    }
+
     return;
   }
 
@@ -320,6 +370,30 @@ async function handleEventRegistration(
   } catch (ticketError) {
     console.error(`${logPrefix} Error generating tickets:`, ticketError);
     // Don't throw - registration is created, tickets can be generated later
+  }
+
+  // Send event confirmation email (non-blocking)
+  console.log(`${logPrefix} 📧 Sending event confirmation email for new registration...`);
+  const { data: eventData3 } = await supabase
+    .from('events')
+    .select('title, start_date, location')
+    .eq('id', eventId)
+    .single();
+  
+  const { data: userData3 } = await supabase
+    .from('users')
+    .select('email, full_name')
+    .eq('id', transaction.user_id)
+    .single();
+  
+  if (eventData3 && userData3) {
+    sendEventConfirmationEmail(
+      userData3.email,
+      userData3.full_name,
+      eventData3.title,
+      new Date(eventData3.start_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+      eventData3.location || 'Online'
+    ).catch(err => console.error(`${logPrefix} ⚠️ Event email failed:`, err));
   }
 }
 
@@ -721,6 +795,27 @@ async function generateReceiptForTransaction(
     });
 
     console.log(`${logPrefix} Receipt generated successfully`);
+
+    // Send payment receipt email (non-blocking)
+    console.log(`${logPrefix} 📧 Sending payment receipt email...`);
+    const receiptDescription = transaction.description || `Payment for ${transaction.order_type}`;
+    const receiptDate = new Date(transaction.created_at || Date.now()).toLocaleDateString('en-US', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    
+    sendPaymentReceiptEmail(
+      transaction.customer_email,
+      transaction.customer_name || 'Valued Customer',
+      `JMD $${parseFloat(transaction.amount).toFixed(2)}`,
+      transactionNumber,
+      receiptDescription,
+      receiptDate
+    ).catch(err => console.error(`${logPrefix} ⚠️ Payment receipt email failed:`, err));
   } catch (error) {
     console.error(`${logPrefix} Receipt generation FAILED:`, error);
     // Don't throw - receipt generation is secondary to payment processing

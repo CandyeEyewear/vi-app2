@@ -657,6 +657,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Don't fail signup if HubSpot fails - just log it
       }
 
+      // Send welcome email (non-blocking)
+      console.log('[AUTH] 📧 Sending welcome email...');
+      sendWelcomeEmail(data.email, data.fullName)
+        .then((result) => {
+          if (result.success) {
+            console.log('[AUTH] ✅ Welcome email sent');
+          } else {
+            console.error('[AUTH] ⚠️ Welcome email failed:', result.error);
+          }
+        })
+        .catch((error) => {
+          console.error('[AUTH] ⚠️ Welcome email error:', error);
+        });
+
       console.log('[AUTH] 🎉 Signup complete!');
       return { success: true, data: userData };
       
