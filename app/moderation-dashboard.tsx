@@ -118,7 +118,7 @@ export default function ModerationDashboardScreen() {
       .select(`
         *,
         post:posts(*,
-          user:users(*)
+          user:users!posts_user_id_fkey(*)
         ),
         reporter:users!post_reports_reporter_id_fkey(*)
       `)
@@ -189,7 +189,7 @@ export default function ModerationDashboardScreen() {
       .from('posts')
       .select(`
         *,
-        user:users(*)
+        user:users!posts_user_id_fkey(*)
       `)
       .order('created_at', { ascending: false })
       .limit(50);
