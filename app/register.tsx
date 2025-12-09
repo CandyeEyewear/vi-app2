@@ -23,6 +23,7 @@ import CrossPlatformDateTimePicker from '../components/CrossPlatformDateTimePick
 import CustomAlert from '../components/CustomAlert';
 import { supabase } from '../services/supabase';
 import { syncContactToHubSpot } from '../services/hubspotService';
+import { sendWelcomeEmail } from '../services/resendService';
 
 type AccountType = 'individual' | 'organization';
 
@@ -329,6 +330,20 @@ export default function RegisterScreen() {
         console.error('[ORG_REGISTER] ⚠️ HubSpot sync failed:', hubspotResult.error);
         // Don't fail signup if HubSpot fails - just log it
       }
+
+      // Send welcome email (non-blocking)
+      console.log('[ORG_REGISTER] 📧 Sending welcome email...');
+      sendWelcomeEmail(formData.email, formData.organizationName)
+        .then((result) => {
+          if (result.success) {
+            console.log('[ORG_REGISTER] ✅ Welcome email sent');
+          } else {
+            console.error('[ORG_REGISTER] ⚠️ Welcome email failed:', result.error);
+          }
+        })
+        .catch((error) => {
+          console.error('[ORG_REGISTER] ⚠️ Welcome email error:', error);
+        });
 
       showAlert(
         'Application Submitted Successfully! 🎉',

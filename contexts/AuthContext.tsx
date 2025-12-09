@@ -7,6 +7,7 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import { registerForFCMNotifications, setupFCMHandlers } from '../services/fcmNotifications';
 import { savePushToken, removePushToken } from '../services/pushNotifications';
 import { syncContactToHubSpot } from '../services/hubspotService';
+import { sendWelcomeEmail, sendPasswordResetEmail } from '../services/resendService';
 import { User, RegisterFormData, LoginFormData, ApiResponse } from '../types';
 import { supabase } from '../services/supabase';
 import { cache, CacheKeys } from '../services/cache';
@@ -797,17 +798,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { success: false, error: 'Email is required' };
       }
 
-      // Send password reset email via Supabase
+      // Get user's name from database for personalized email
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('full_name')
+        .eq('email', email.toLowerCase())
+        .single();
+
+      const fullName = userData?.full_name || 'there';
+
+      // Generate password reset token via Supabase
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: 'vibe://reset-password',
       });
 
       if (error) {
-        console.error('[AUTH] ❌ Failed to send reset email:', error.message);
+        console.error('[AUTH] ❌ Failed to generate reset token:', error.message);
         return { success: false, error: error.message };
       }
 
-      console.log('[AUTH] ✅ Password reset email sent successfully');
+      // Note: Supabase will send their own email with the reset link
+      // For now, we'll let Supabase handle it
+      // TODO: In the future, we can use Supabase's email redirect URL to send our custom email
+      
+      console.log('[AUTH] ✅ Password reset email sent via Supabase');
       return { success: true };
     } catch (error: any) {
       console.error('[AUTH] ❌ Exception during forgot password:', error);
