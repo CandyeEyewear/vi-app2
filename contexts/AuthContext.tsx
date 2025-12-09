@@ -6,7 +6,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { registerForFCMNotifications, setupFCMHandlers } from '../services/fcmNotifications';
 import { savePushToken, removePushToken } from '../services/pushNotifications';
-import { createHubSpotContact } from '../services/hubspotService';
+import { syncContactToHubSpot } from '../services/hubspotService';
 import { User, RegisterFormData, LoginFormData, ApiResponse } from '../types';
 import { supabase } from '../services/supabase';
 import { cache, CacheKeys } from '../services/cache';
@@ -625,28 +625,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.warn('[AUTH] ⚠️ Push notification registration failed:', pushError);
       }
 
-      // Create HubSpot contact (non-blocking - don't fail signup if this fails)
-      try {
-        console.log('[AUTH] 📧 Creating HubSpot contact...');
-        const hubspotResult = await createHubSpotContact({
-          email: userData.email,
-          fullName: userData.fullName,
-          phone: userData.phone,
-          location: userData.location,
-          bio: userData.bio,
-          education: userData.education,
-          areasOfExpertise: userData.areasOfExpertise,
-        });
+      // Sync contact to HubSpot and save Contact ID
+      console.log('[AUTH] 🔄 Syncing contact to HubSpot...');
+      const hubspotResult = await syncContactToHubSpot({
+        email: data.email,
+        fullName: data.fullName,
+        phone: data.phone,
+        location: data.location,
+        bio: data.bio,
+        areasOfExpertise: data.areasOfExpertise,
+        education: data.education,
+      });
+
+      if (hubspotResult.success && hubspotResult.contactId) {
+        console.log('[AUTH] ✅ HubSpot contact synced:', hubspotResult.contactId);
         
-        if (hubspotResult.success) {
-          console.log('[AUTH] ✅ HubSpot contact created successfully');
+        // Save HubSpot Contact ID to database
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({ hubspot_contact_id: hubspotResult.contactId })
+          .eq('id', authData.user.id);
+        
+        if (updateError) {
+          console.error('[AUTH] ⚠️ Failed to save HubSpot Contact ID:', updateError);
         } else {
-          console.warn('[AUTH] ⚠️ HubSpot contact creation failed:', hubspotResult.error);
-          // Don't fail signup if HubSpot fails - just log the warning
+          console.log('[AUTH] ✅ HubSpot Contact ID saved to database');
         }
-      } catch (hubspotError) {
-        // Don't fail signup if HubSpot contact creation fails
-        console.warn('[AUTH] ⚠️ HubSpot contact creation error:', hubspotError);
+      } else {
+        console.error('[AUTH] ⚠️ HubSpot sync failed:', hubspotResult.error);
+        // Don't fail signup if HubSpot fails - just log it
       }
 
       console.log('[AUTH] 🎉 Signup complete!');
