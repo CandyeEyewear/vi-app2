@@ -329,7 +329,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
               .from('posts')
               .select(`
                 *,
-                user:users(*)
+                user:users!posts_user_id_fkey(*)
               `)
               .eq('id', newPostData.shared_post_id)
               .single();
@@ -780,7 +780,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
         .from('posts')
         .select(`
           *,
-          user:users(*)
+          user:users!posts_user_id_fkey(*)
         `)
         .order('created_at', { ascending: false });
 
@@ -1094,7 +1094,7 @@ const postsWithEvents = await Promise.all(
               .from('posts')
               .select(`
                 *,
-                user:users(*)
+                user:users!posts_user_id_fkey(*)
               `)
               .eq('id', post.sharedPostId)
               .single();
