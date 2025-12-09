@@ -29,6 +29,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useFeed } from '../../contexts/FeedContext';
 import { Colors } from '../../constants/colors';
 import FeedPostCard from '../../components/cards/FeedPostCard';
+import ShoutoutCard from '../../components/cards/ShoutoutCard';
+import CreateShoutoutModal from '../../components/CreateShoutoutModal';
 import CustomAlert from '../../components/CustomAlert';
 import { FeedSkeleton } from '../../components/SkeletonLayouts';
 import OrganizationPaymentBanner from '../../components/OrganizationPaymentBanner';
@@ -67,6 +69,7 @@ export default function FeedScreen() {
   const { posts, loading, createPost, refreshFeed } = useFeed();
   
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showShoutoutModal, setShowShoutoutModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'forYou' | 'myCircle'>('forYou');
   const [postText, setPostText] = useState('');
   const [selectedMedia, setSelectedMedia] = useState<string[]>([]);
@@ -458,7 +461,14 @@ const renderTabs = () => (
       <FlatList
         data={sortedPosts}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <FeedPostCard post={item} />}
+        renderItem={({ item }) => {
+          // Render ShoutoutCard for shoutout posts
+          if (item.postType === 'shoutout') {
+            return <ShoutoutCard post={item} />;
+          }
+          // Render regular FeedPostCard for all other posts
+          return <FeedPostCard post={item} />;
+        }}
         contentContainerStyle={[styles.listContent, { paddingBottom: 12 + insets.bottom }]}
         ListHeaderComponent={() => {
           return <OrganizationPaymentBanner />;
@@ -555,6 +565,23 @@ const renderTabs = () => (
                </Text>
              </View>
 
+              {/* Give Shoutout Option */}
+              <TouchableOpacity
+                style={[styles.shoutoutOption, { backgroundColor: colors.primarySoft, borderColor: colors.primary }]}
+                onPress={() => {
+                  setShowCreateModal(false);
+                  setTimeout(() => setShowShoutoutModal(true), 300);
+                }}
+              >
+                <Text style={styles.shoutoutOptionIcon}>🌟</Text>
+                <View style={styles.shoutoutOptionText}>
+                  <Text style={[styles.shoutoutOptionTitle, { color: colors.primary }]}>Give a Shoutout</Text>
+                  <Text style={[styles.shoutoutOptionSubtitle, { color: colors.textSecondary }]}>
+                    Recognize a volunteer who made a difference
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
               <TextInput
                 style={styles.modalInput}
                 placeholder="What's happening in your volunteer journey?"
@@ -624,6 +651,16 @@ const renderTabs = () => (
         message={alertConfig.message}
         type={alertConfig.type}
         onClose={() => setAlertVisible(false)}
+      />
+
+      {/* Shoutout Modal */}
+      <CreateShoutoutModal
+        visible={showShoutoutModal}
+        onClose={() => setShowShoutoutModal(false)}
+        onSuccess={() => {
+          // Optionally show success message or refresh feed
+          refreshFeed();
+        }}
       />
     </View>
   );
@@ -928,5 +965,28 @@ avatarContainer: {
     fontSize: 12,
     color: Colors.light.textSecondary,
     textAlign: 'center',
+  },
+  shoutoutOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    marginBottom: 16,
+    gap: 12,
+  },
+  shoutoutOptionIcon: {
+    fontSize: 28,
+  },
+  shoutoutOptionText: {
+    flex: 1,
+  },
+  shoutoutOptionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  shoutoutOptionSubtitle: {
+    fontSize: 13,
   },
 });
