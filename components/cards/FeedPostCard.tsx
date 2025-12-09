@@ -182,11 +182,11 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
   const handleShareExternal = async () => {
     try {
       const postUrl = `https://vibe.volunteersinc.org/post/${post.id}`;
-      const shareMessage = `Check out this post from ${post.user.fullName} on VIbe:\n\n${post.text}\n\n${postUrl}`;
+      const shareMessage = `Check out this post from ${post.user.fullName} on VIbe:\n\n${post.text}`;
       
       await Share.share({
-        message: shareMessage,
-        url: postUrl,
+        message: Platform.OS === 'ios' ? shareMessage : `${shareMessage}\n\n${postUrl}`,
+        url: Platform.OS === 'ios' ? postUrl : undefined,
         title: 'Share from VIbe',
       });
 
