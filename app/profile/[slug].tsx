@@ -88,6 +88,9 @@ export default function ViewProfileScreen() {
   // Check-ins tab state
   const [checkIns, setCheckIns] = useState<CheckInData[]>([]);
   const [checkInsLoading, setCheckInsLoading] = useState(false);
+  
+  // Shoutouts state
+  const [shoutoutsReceived, setShoutoutsReceived] = useState(0);
 
   const isOwnProfile = currentUser?.slug === slug || currentUser?.id === slug;
   const isPrivateProfile = profileUser?.isPrivate && !isOwnProfile;
@@ -122,6 +125,12 @@ export default function ViewProfileScreen() {
       loadCheckIns();
     }
   }, [activeTab, profileUser, canViewFullProfile]);
+
+  useEffect(() => {
+    if (profileUser) {
+      loadShoutoutsReceived();
+    }
+  }, [profileUser]);
 
   const loadProfile = async () => {
     try {
@@ -372,6 +381,23 @@ export default function ViewProfileScreen() {
       console.error('Error loading check-ins:', error);
     } finally {
       setCheckInsLoading(false);
+    }
+  };
+
+  const loadShoutoutsReceived = async () => {
+    if (!profileUser) return;
+    
+    try {
+      const { count, error } = await supabase
+        .from('posts')
+        .select('*', { count: 'exact', head: true })
+        .eq('post_type', 'shoutout')
+        .eq('shoutout_user_id', profileUser.id);
+      
+      if (error) throw error;
+      setShoutoutsReceived(count || 0);
+    } catch (error) {
+      console.error('Error loading shoutouts count:', error);
     }
   };
 
@@ -1034,6 +1060,14 @@ export default function ViewProfileScreen() {
               <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <Text style={[styles.statValue, { color: colors.primary }]}>{profileUser.organizationsHelped}</Text>
                 <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Organizations</Text>
+              </View>
+              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.statValue, { color: colors.warning }]}>
+                  {shoutoutsReceived}
+                </Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                  🌟 Shoutouts
+                </Text>
               </View>
             </View>
           )}
