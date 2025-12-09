@@ -221,6 +221,25 @@ export interface OpportunitySignup {
 
 // ==================== FEED/POST TYPES ====================
 
+// Shoutout category IDs (matches database)
+export type ShoutoutCategoryId = 
+  | 'team_player'
+  | 'above_and_beyond'
+  | 'heart_of_gold'
+  | 'problem_solver'
+  | 'first_timer_star'
+  | 'inspiring_leader';
+
+// Full shoutout category object (from shoutout_categories table)
+export interface ShoutoutCategory {
+  id: ShoutoutCategoryId;
+  label: string;
+  icon: string;
+  color: string;
+  gradientStart: string;
+  gradientEnd: string;
+}
+
 export interface Post {
   id: string;
   userId: string;
@@ -248,6 +267,13 @@ export interface Post {
   // Optional linked event
   eventId?: string;
   event?: Event;
+  
+  // Shoutout fields
+  postType?: 'regular' | 'shoutout';
+  shoutoutUserId?: string;
+  shoutoutUser?: User;  // The volunteer being recognized
+  shoutoutCategory?: ShoutoutCategoryId;
+  shoutoutCategoryData?: ShoutoutCategory;  // Full category object with colors/icon
   
   // Announcement fields
   isAnnouncement?: boolean;
