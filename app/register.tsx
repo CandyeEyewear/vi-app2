@@ -22,6 +22,7 @@ import { Colors } from '../constants/colors';
 import CrossPlatformDateTimePicker from '../components/CrossPlatformDateTimePicker';
 import CustomAlert from '../components/CustomAlert';
 import { supabase } from '../services/supabase';
+import { syncContactToHubSpot } from '../services/hubspotService';
 
 type AccountType = 'individual' | 'organization';
 
@@ -299,6 +300,35 @@ export default function RegisterScreen() {
         .eq('id', authData.user.id);
 
       if (updateError) throw updateError;
+
+      // Sync contact to HubSpot and save Contact ID
+      console.log('[ORG_REGISTER] 🔄 Syncing contact to HubSpot...');
+      const hubspotResult = await syncContactToHubSpot({
+        email: formData.email,
+        fullName: formData.organizationName,
+        phone: formData.phone,
+        location: formData.location,
+        bio: formData.organizationDescription,
+      });
+
+      if (hubspotResult.success && hubspotResult.contactId) {
+        console.log('[ORG_REGISTER] ✅ HubSpot contact synced:', hubspotResult.contactId);
+        
+        // Save HubSpot Contact ID to database
+        const { error: hubspotUpdateError } = await supabase
+          .from('users')
+          .update({ hubspot_contact_id: hubspotResult.contactId })
+          .eq('id', authData.user.id);
+        
+        if (hubspotUpdateError) {
+          console.error('[ORG_REGISTER] ⚠️ Failed to save HubSpot Contact ID:', hubspotUpdateError);
+        } else {
+          console.log('[ORG_REGISTER] ✅ HubSpot Contact ID saved to database');
+        }
+      } else {
+        console.error('[ORG_REGISTER] ⚠️ HubSpot sync failed:', hubspotResult.error);
+        // Don't fail signup if HubSpot fails - just log it
+      }
 
       showAlert(
         'Application Submitted Successfully! 🎉',
