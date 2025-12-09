@@ -4,7 +4,7 @@
  * Features gradient borders, category styling, and prominent volunteer display
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Calendar } from 'lucide-react-native';
 import { Post } from '../../types';
 import { Colors } from '../../constants/colors';
+import { useFeed } from '../../contexts/FeedContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../services/supabase';
+
+interface CoSigner {
+  id: string;
+  fullName: string;
+  avatarUrl?: string;
+}
 
 interface ShoutoutCardProps {
   post: Post;
@@ -30,6 +39,13 @@ export default function ShoutoutCard({ post, onReaction, onComment, onShare }: S
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const router = useRouter();
+  
+  // Co-Sign state and hooks
+  const { addReaction, removeReaction } = useFeed();
+  const { user: currentUser } = useAuth();
+  const [coSigners, setCoSigners] = useState<CoSigner[]>([]);
+  const [hasCoSigned, setHasCoSigned] = useState(false);
+  const [isCoSigning, setIsCoSigning] = useState(false);
 
   // Get category data (with fallback)
   const category = post.shoutoutCategoryData || {
@@ -65,6 +81,88 @@ export default function ShoutoutCard({ post, onReaction, onComment, onShare }: S
     if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
     if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
     return date.toLocaleDateString();
+  };
+
+  // Load co-signers
+  useEffect(() => {
+    loadCoSigners();
+  }, [post.id]);
+
+  const loadCoSigners = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('post_reactions')
+        .select(`
+          user_id,
+          user:users!post_reactions_user_id_fkey(id, full_name, avatar_url)
+        `)
+        .eq('post_id', post.id)
+        .eq('reaction_type', 'cosign')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+
+      if (data) {
+        const signers: CoSigner[] = data.map((r: any) => ({
+          id: r.user?.id || r.user_id,
+          fullName: r.user?.full_name || 'Unknown',
+          avatarUrl: r.user?.avatar_url,
+        }));
+        setCoSigners(signers);
+        
+        // Check if current user has co-signed
+        if (currentUser) {
+          setHasCoSigned(signers.some(s => s.id === currentUser.id));
+        }
+      }
+    } catch (error) {
+      console.error('[SHOUTOUT] Error loading co-signers:', error);
+    }
+  };
+
+  const handleCoSign = async () => {
+    if (!currentUser || isCoSigning) return;
+    
+    setIsCoSigning(true);
+    try {
+      if (hasCoSigned) {
+        // Remove co-sign
+        await removeReaction(post.id);
+        setCoSigners(prev => prev.filter(s => s.id !== currentUser.id));
+        setHasCoSigned(false);
+      } else {
+        // Add co-sign
+        await addReaction(post.id, 'cosign');
+        setCoSigners(prev => [{
+          id: currentUser.id,
+          fullName: currentUser.fullName || 'You',
+          avatarUrl: currentUser.avatarUrl,
+        }, ...prev]);
+        setHasCoSigned(true);
+      }
+    } catch (error) {
+      console.error('[SHOUTOUT] Error toggling co-sign:', error);
+    } finally {
+      setIsCoSigning(false);
+    }
+  };
+
+  const formatCoSigners = () => {
+    if (coSigners.length === 0) return null;
+    
+    const names = coSigners.map(s => s.id === currentUser?.id ? 'You' : s.fullName.split(' ')[0]);
+    
+    if (names.length === 1) {
+      return `Co-signed by ${names[0]}`;
+    } else if (names.length === 2) {
+      return `Co-signed by ${names[0]} and ${names[1]}`;
+    } else if (names.length === 3) {
+      return `Co-signed by ${names[0]}, ${names[1]}, and ${names[2]}`;
+    } else {
+      const othersCount = names.length - 2;
+      return `Co-signed by ${names[0]}, ${names[1]}, and ${othersCount} other${othersCount > 1 ? 's' : ''}`;
+    }
   };
 
   return (
@@ -170,15 +268,61 @@ export default function ShoutoutCard({ post, onReaction, onComment, onShare }: S
             </Text>
           </View>
 
-          {/* Reactions Section - You can reuse your existing reaction component here */}
-          {/* For now, showing reaction summary */}
-          {post.reactionSummary && post.reactionSummary.total > 0 && (
-            <View style={[styles.reactionsBar, { borderTopColor: colors.border }]}>
-              <Text style={[styles.reactionsText, { color: colors.textSecondary }]}>
-                {post.reactionSummary.total} {post.reactionSummary.total === 1 ? 'reaction' : 'reactions'}
+          {/* Co-Sign Section */}
+          <View style={[styles.coSignSection, { borderTopColor: colors.border }]}>
+            {/* Co-Signers List */}
+            {coSigners.length > 0 && (
+              <View style={styles.coSignersRow}>
+                {/* Avatar Stack */}
+                <View style={styles.coSignerAvatars}>
+                  {coSigners.slice(0, 3).map((signer, index) => (
+                    <View 
+                      key={signer.id} 
+                      style={[
+                        styles.coSignerAvatarContainer,
+                        { marginLeft: index > 0 ? -8 : 0, zIndex: 3 - index }
+                      ]}
+                    >
+                      {signer.avatarUrl ? (
+                        <Image source={{ uri: signer.avatarUrl }} style={styles.coSignerAvatar} />
+                      ) : (
+                        <View style={[styles.coSignerAvatar, styles.coSignerAvatarPlaceholder, { backgroundColor: colors.primary }]}>
+                          <Text style={styles.coSignerAvatarText}>
+                            {signer.fullName.charAt(0).toUpperCase()}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  ))}
+                </View>
+                {/* Names */}
+                <Text style={[styles.coSignersText, { color: colors.textSecondary }]}>
+                  {formatCoSigners()}
+                </Text>
+              </View>
+            )}
+            
+            {/* Co-Sign Button */}
+            <TouchableOpacity
+              style={[
+                styles.coSignButton,
+                hasCoSigned 
+                  ? { backgroundColor: colors.primary } 
+                  : { backgroundColor: colors.card, borderWidth: 2, borderColor: colors.primary }
+              ]}
+              onPress={handleCoSign}
+              disabled={isCoSigning}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.coSignIcon}>{hasCoSigned ? '✓' : '✍️'}</Text>
+              <Text style={[
+                styles.coSignButtonText,
+                { color: hasCoSigned ? '#FFFFFF' : colors.primary }
+              ]}>
+                {isCoSigning ? 'Saving...' : hasCoSigned ? 'Co-Signed' : 'Co-Sign'}
               </Text>
-            </View>
-          )}
+            </TouchableOpacity>
+          </View>
         </View>
       </LinearGradient>
     </View>
@@ -329,12 +473,59 @@ const styles = StyleSheet.create({
   timestamp: {
     fontSize: 12,
   },
-  reactionsBar: {
-    marginTop: 12,
-    paddingTop: 12,
+  coSignSection: {
+    marginTop: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
   },
-  reactionsText: {
+  coSignersRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 10,
+  },
+  coSignerAvatars: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  coSignerAvatarContainer: {
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    borderRadius: 14,
+  },
+  coSignerAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
+  coSignerAvatarPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  coSignerAvatarText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  coSignersText: {
+    flex: 1,
     fontSize: 13,
+    fontWeight: '500',
+  },
+  coSignButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 24,
+    gap: 8,
+  },
+  coSignIcon: {
+    fontSize: 16,
+  },
+  coSignButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
   },
 });
