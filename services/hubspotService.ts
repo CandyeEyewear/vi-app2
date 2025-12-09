@@ -3,7 +3,7 @@
  * Handles creating and updating contacts in HubSpot CRM
  */
 
-const HUBSPOT_API_KEY = 'pat-na1-51b5-c2bf-4758-9dec-e9476277a041';
+const HUBSPOT_API_KEY = process.env.EXPO_PUBLIC_HUBSPOT_API_KEY;
 const HUBSPOT_API_URL = 'https://api.hubapi.com/crm/v3/objects/contacts';
 
 interface ContactData {
@@ -17,9 +17,70 @@ interface ContactData {
 }
 
 /**
+ * Sync contact to HubSpot - searches for existing contact by email, creates if not found
+ * Returns the HubSpot Contact ID in both cases
+ */
+export async function syncContactToHubSpot(contactData: ContactData): Promise<{ 
+  success: boolean; 
+  contactId?: string; 
+  error?: string 
+}> {
+  try {
+    // First, search for existing contact by email
+    const searchUrl = `${HUBSPOT_API_URL}/search`;
+    const searchResponse = await fetch(searchUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${HUBSPOT_API_KEY}`,
+      },
+      body: JSON.stringify({
+        filterGroups: [
+          {
+            filters: [
+              {
+                propertyName: 'email',
+                operator: 'EQ',
+                value: contactData.email,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    if (!searchResponse.ok) {
+      console.error('HubSpot search failed:', searchResponse.status);
+    } else {
+      const searchData = await searchResponse.json();
+      
+      // If contact exists, return their ID
+      if (searchData.results && searchData.results.length > 0) {
+        const existingContactId = searchData.results[0].id;
+        console.log('Found existing HubSpot contact:', existingContactId);
+        return { success: true, contactId: existingContactId };
+      }
+    }
+
+    // Contact doesn't exist, create new one
+    console.log('Creating new HubSpot contact...');
+    const createResult = await createHubSpotContact(contactData);
+    
+    return createResult;
+
+  } catch (error: any) {
+    console.error('Error syncing HubSpot contact:', error);
+    return { 
+      success: false, 
+      error: error.message || 'Failed to sync HubSpot contact' 
+    };
+  }
+}
+
+/**
  * Create a new contact in HubSpot
  */
-export async function createHubSpotContact(contactData: ContactData): Promise<{ success: boolean; error?: string }> {
+export async function createHubSpotContact(contactData: ContactData): Promise<{ success: boolean; contactId?: string; error?: string }> {
   try {
     // Split full name into first and last name
     const nameParts = contactData.fullName.trim().split(' ');
@@ -78,7 +139,9 @@ export async function createHubSpotContact(contactData: ContactData): Promise<{ 
       // Check if contact already exists
       if (response.status === 409) {
         console.log('Contact already exists in HubSpot');
-        return { success: true }; // Consider this a success
+        // If contact exists, we should search for their ID
+        const searchResult = await syncContactToHubSpot(contactData);
+        return searchResult;
       }
       
       return { 
@@ -88,9 +151,10 @@ export async function createHubSpotContact(contactData: ContactData): Promise<{ 
     }
 
     const data = await response.json();
-    console.log('HubSpot contact created:', data.id);
+    const contactId = data.id;
+    console.log('HubSpot contact created:', contactId);
     
-    return { success: true };
+    return { success: true, contactId };
   } catch (error: any) {
     console.error('Error creating HubSpot contact:', error);
     return { 
