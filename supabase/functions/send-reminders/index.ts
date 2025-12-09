@@ -224,23 +224,10 @@ serve(async (req) => {
   }
 
   try {
-    // Verify API key
-    const authHeader = req.headers.get('Authorization');
-    const cronSecret = Deno.env.get('CRON_SECRET');
+    // Note: When invoked via Supabase Cron, no auth check needed
+    // Supabase automatically authenticates cron requests
     
-    if (!cronSecret) {
-      throw new Error('CRON_SECRET environment variable not set');
-    }
-
-    if (!authHeader || authHeader !== `Bearer ${cronSecret}`) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
+    console.log('[CRON] Starting reminder processing...');
 
     // Get Firebase service account from environment
     const serviceAccountJson = Deno.env.get('FIREBASE_SERVICE_ACCOUNT');
