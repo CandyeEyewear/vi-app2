@@ -70,11 +70,7 @@ async function handlePost(req: any, res: any, id: string, isCrawler: boolean) {
   const title = `${userName} on VIbe`;
   const url = `https://vibe.volunteersinc.org/post/${id}`;
 
-  if (isCrawler) {
-    return sendOGHtml(res, { title, description, image: previewImage, url, type: 'article' });
-  } else {
-    return sendRedirect(res, { deepLink: `vibe://post/${id}`, title, description });
-  }
+  return sendOGHtml(res, { title, description, image: previewImage, url, type: 'article', deepLink: `vibe://post/${id}` });
 }
 
 // ============================================================================
@@ -99,11 +95,7 @@ async function handleCause(req: any, res: any, slug: string, isCrawler: boolean)
   const image = cause.image_url || 'https://vibe.volunteersinc.org/assets/default-cause-og-image.png';
   const url = `https://vibe.volunteersinc.org/causes/${slug}`;
 
-  if (isCrawler) {
-    return sendOGHtml(res, { title, description, image, url, type: 'article' });
-  } else {
-    return sendRedirect(res, { deepLink: `vibe://causes/${slug}`, title, description });
-  }
+  return sendOGHtml(res, { title, description, image, url, type: 'article', deepLink: `vibe://causes/${slug}` });
 }
 
 // ============================================================================
@@ -129,11 +121,7 @@ async function handleEvent(req: any, res: any, slug: string, isCrawler: boolean)
   const image = event.image_url || 'https://vibe.volunteersinc.org/assets/default-event-og-image.png';
   const url = `https://vibe.volunteersinc.org/events/${slug}`;
 
-  if (isCrawler) {
-    return sendOGHtml(res, { title, description, image, url, type: 'article' });
-  } else {
-    return sendRedirect(res, { deepLink: `vibe://events/${slug}`, title, description });
-  }
+  return sendOGHtml(res, { title, description, image, url, type: 'article', deepLink: `vibe://events/${slug}` });
 }
 
 // ============================================================================
@@ -164,17 +152,13 @@ async function handleOpportunity(req: any, res: any, slug: string, isCrawler: bo
   const image = opportunity.image_url || 'https://vibe.volunteersinc.org/assets/default-opportunity-og-image.png';
   const url = `https://vibe.volunteersinc.org/opportunity/${opportunity.slug || opportunity.id}`;
 
-  if (isCrawler) {
-    return sendOGHtml(res, { title, description, image, url, type: 'article' });
-  } else {
-    return sendRedirect(res, { deepLink: `vibe://opportunity/${opportunity.slug || opportunity.id}`, title, description });
-  }
+  return sendOGHtml(res, { title, description, image, url, type: 'article', deepLink: `vibe://opportunity/${opportunity.slug || opportunity.id}` });
 }
 
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
-function sendOGHtml(res: any, params: { title: string; description: string; image: string; url: string; type: string }) {
+function sendOGHtml(res: any, params: { title: string; description: string; image: string; url: string; type: string; deepLink?: string }) {
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -200,132 +184,130 @@ function sendOGHtml(res: any, params: { title: string; description: string; imag
   <meta name="twitter:image" content="${params.image}" />
   
   <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      margin: 0;
-      padding: 20px;
-      background: #f5f5f5;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
       display: flex;
       justify-content: center;
       align-items: center;
-      min-height: 100vh;
+      padding: 20px;
     }
     .container {
-      max-width: 600px;
+      max-width: 500px;
+      width: 100%;
       background: white;
-      border-radius: 12px;
-      padding: 24px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .header {
+      background: linear-gradient(135deg, #38B6FF 0%, #1E90FF 100%);
+      padding: 20px;
       text-align: center;
     }
     .logo {
-      font-size: 32px;
+      font-size: 28px;
       font-weight: bold;
-      color: #2196F3;
-      margin-bottom: 16px;
+      color: white;
+      letter-spacing: 2px;
     }
-    h1 {
-      font-size: 24px;
-      margin-bottom: 16px;
+    .image-container {
+      width: 100%;
+      max-height: 300px;
+      overflow: hidden;
+    }
+    .image-container img {
+      width: 100%;
+      height: auto;
+      object-fit: cover;
+    }
+    .content {
+      padding: 24px;
+    }
+    .author {
+      font-size: 18px;
+      font-weight: 600;
       color: #333;
+      margin-bottom: 12px;
     }
-    p {
-      color: #666;
+    .description {
+      font-size: 16px;
+      color: #555;
       line-height: 1.6;
       margin-bottom: 24px;
     }
+    .buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
     .button {
-      display: inline-block;
-      padding: 12px 24px;
-      background: #2196F3;
-      color: white;
+      display: block;
+      padding: 14px 24px;
+      text-align: center;
       text-decoration: none;
-      border-radius: 8px;
+      border-radius: 12px;
       font-weight: 600;
+      font-size: 16px;
+      transition: transform 0.2s, box-shadow 0.2s;
     }
     .button:hover {
-      background: #1976D2;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="logo">VIbe</div>
-    <h1>${escapeHtml(params.title)}</h1>
-    <p>${escapeHtml(params.description)}</p>
-    <p style="font-size: 14px; color: #999; margin-top: 24px;">
-      <a href="https://vibe.volunteersinc.org/download" style="color: #2196F3;">Download VIbe App</a>
-    </p>
-  </div>
-</body>
-</html>`;
-
-  res.setHeader('Content-Type', 'text/html');
-  return res.status(200).send(html);
-}
-
-function sendRedirect(res: any, params: { deepLink: string; title: string; description: string }) {
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${escapeHtml(params.title)}</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      margin: 0;
-      padding: 20px;
+    .button-primary {
+      background: linear-gradient(135deg, #38B6FF 0%, #1E90FF 100%);
+      color: white;
+    }
+    .button-secondary {
       background: #f5f5f5;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
+      color: #333;
     }
-    .container {
-      max-width: 600px;
-      background: white;
-      border-radius: 12px;
-      padding: 24px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    .footer {
       text-align: center;
+      padding: 16px;
+      background: #fafafa;
+      border-top: 1px solid #eee;
     }
-    .logo {
-      font-size: 32px;
-      font-weight: bold;
-      color: #2196F3;
-      margin-bottom: 16px;
-    }
-    .spinner {
-      border: 4px solid #f3f3f3;
-      border-top: 4px solid #2196F3;
-      border-radius: 50%;
-      width: 40px;
-      height: 40px;
-      animation: spin 1s linear infinite;
-      margin: 20px auto;
-    }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
+    .footer a {
+      color: #38B6FF;
+      text-decoration: none;
+      font-size: 14px;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="logo">VIbe</div>
-    <div class="spinner"></div>
-    <p>Opening VIbe...</p>
+    <div class="header">
+      <div class="logo">VIbe</div>
+    </div>
+    
+    ${params.image && params.image !== 'https://vibe.volunteersinc.org/assets/default-og-image.png' ? `
+    <div class="image-container">
+      <img src="${params.image}" alt="Post image" />
+    </div>
+    ` : ''}
+    
+    <div class="content">
+      <div class="author">${escapeHtml(params.title)}</div>
+      <p class="description">${escapeHtml(params.description)}</p>
+      
+      <div class="buttons">
+        ${params.deepLink ? `<a href="${params.deepLink}" class="button button-primary">Open in VIbe App</a>` : ''}
+        <a href="https://vibe.volunteersinc.org/download" class="button button-secondary">Download VIbe</a>
+      </div>
+    </div>
+    
+    <div class="footer">
+      <a href="https://vibe.volunteersinc.org">Learn more about VIbe</a>
+    </div>
   </div>
-  
-  <script>
-    window.location.href = '${params.deepLink}';
-    setTimeout(function() {
-      if (document.hasFocus()) {
-        window.location.href = 'https://vibe.volunteersinc.org/download';
-      }
-    }, 2000);
-  </script>
 </body>
 </html>`;
 
