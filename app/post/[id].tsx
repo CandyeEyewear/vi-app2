@@ -65,7 +65,7 @@ export default function PostDetailScreen() {
         .from('posts')
         .select(`
           *,
-          user:users(*)
+          user:users!posts_user_id_fkey(*)
         `)
         .eq('id', postId)
         .single();
@@ -167,7 +167,7 @@ export default function PostDetailScreen() {
           .from('posts')
           .select(`
             *,
-            user:users(*)
+            user:users!posts_user_id_fkey(*)
           `)
           .eq('id', postData.shared_post_id)
           .single();
