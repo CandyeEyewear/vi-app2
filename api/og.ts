@@ -46,13 +46,22 @@ export default async function handler(req: any, res: any) {
 async function handlePost(req: any, res: any, id: string, isCrawler: boolean) {
   if (!id) return res.status(400).send('Post ID is required');
 
+  console.log('[OG] Fetching post:', id);
+  console.log('[OG] Supabase URL:', process.env.EXPO_PUBLIC_SUPABASE_URL);
+  
   const { data: post, error } = await supabase
     .from('posts')
     .select('id, text, media_urls, created_at, user:users(full_name, avatar_url)')
     .eq('id', id)
     .single();
 
-  if (error || !post) return res.status(404).send('Post not found');
+  console.log('[OG] Query result - data:', post);
+  console.log('[OG] Query result - error:', error);
+
+  if (error || !post) {
+    console.error('[OG] Post not found. Error:', error?.message, error?.details, error?.hint);
+    return res.status(404).send(`Post not found: ${error?.message || 'No data returned'}`);
+  }
 
   const user = Array.isArray(post.user) ? post.user[0] : post.user;
   const userName = user?.full_name || 'VIbe User';
