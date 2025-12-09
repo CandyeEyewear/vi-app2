@@ -51,7 +51,7 @@ async function handlePost(req: any, res: any, id: string, isCrawler: boolean) {
   
   const { data: post, error } = await supabase
     .from('posts')
-    .select('id, text, media_urls, created_at, user:users(full_name, avatar_url)')
+    .select('id, text, media_urls, created_at, user:users!posts_user_id_fkey(full_name, avatar_url)')
     .eq('id', id)
     .single();
 
