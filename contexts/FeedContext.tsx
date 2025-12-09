@@ -5,7 +5,7 @@
  */
 
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { Post, Comment, ApiResponse, ReactionType, PostReaction, ReactionSummary } from '../types';
+import { Post, Comment, ApiResponse, ReactionType, PostReaction, ReactionSummary, ShoutoutCategoryId, ShoutoutCategory, User } from '../types';
 import { supabase } from '../services/supabase';
 import { getCauseById } from '../services/causesService';
 import { useAuth } from './AuthContext';
@@ -14,6 +14,7 @@ interface FeedContextType {
   posts: Post[];
   loading: boolean;
   createPost: (text: string, mediaUrls?: string[], mediaTypes?: ('image' | 'video')[], visibility?: 'public' | 'circle') => Promise<ApiResponse<Post>>;
+  createShoutout: (shoutoutUserId: string, category: ShoutoutCategoryId, message: string, eventId?: string, visibility?: 'public' | 'circle') => Promise<ApiResponse<Post>>;
   likePost: (postId: string) => Promise<void>;
   unlikePost: (postId: string) => Promise<void>;
   addComment: (postId: string, text: string) => Promise<ApiResponse<Comment>>;
@@ -74,6 +75,26 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
     return summary;
   };
 
+  // ✅ Helper function to fetch shoutout category data
+  const fetchShoutoutCategory = async (categoryId: string): Promise<ShoutoutCategory | null> => {
+    const { data, error } = await supabase
+      .from('shoutout_categories')
+      .select('*')
+      .eq('id', categoryId)
+      .single();
+    
+    if (error || !data) return null;
+    
+    return {
+      id: data.id,
+      label: data.label,
+      icon: data.icon,
+      color: data.color,
+      gradientStart: data.gradient_start,
+      gradientEnd: data.gradient_end,
+    };
+  };
+
   // 🎯 COMPREHENSIVE REAL-TIME SUBSCRIPTIONS
   const setupRealtimeSubscriptions = () => {
     if (!user) return;
@@ -112,6 +133,51 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
           if (!userData) {
             console.log('[FEED] ⚠️ Could not fetch user data for new post');
             return;
+          }
+
+          // Fetch shoutout data if this is a shoutout post
+          let shoutoutUser: User | undefined;
+          let shoutoutCategoryData: ShoutoutCategory | undefined;
+
+          if (newPostData.post_type === 'shoutout' && newPostData.shoutout_user_id) {
+            console.log('[FEED] 🌟 Loading shoutout user data for new post');
+            const { data: shoutoutUserData } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', newPostData.shoutout_user_id)
+              .single();
+
+            if (shoutoutUserData) {
+              shoutoutUser = {
+                id: shoutoutUserData.id,
+                slug: shoutoutUserData.slug,
+                email: shoutoutUserData.email,
+                fullName: shoutoutUserData.full_name,
+                phone: shoutoutUserData.phone,
+                location: shoutoutUserData.location,
+                bio: shoutoutUserData.bio,
+                areasOfExpertise: shoutoutUserData.areas_of_expertise,
+                education: shoutoutUserData.education,
+                avatarUrl: shoutoutUserData.avatar_url,
+                role: shoutoutUserData.role,
+                totalHours: shoutoutUserData.total_hours,
+                activitiesCompleted: shoutoutUserData.activities_completed,
+                organizationsHelped: shoutoutUserData.organizations_helped,
+                achievements: [],
+                membershipTier: shoutoutUserData.membership_tier || 'free',
+                membershipStatus: shoutoutUserData.membership_status || 'inactive',
+                createdAt: shoutoutUserData.created_at,
+                updatedAt: shoutoutUserData.updated_at,
+              };
+            }
+
+            // Fetch category data
+            if (newPostData.shoutout_category) {
+              const catData = await fetchShoutoutCategory(newPostData.shoutout_category);
+              if (catData) {
+                shoutoutCategoryData = catData;
+              }
+            }
           }
 
           const newPost: Post = {
@@ -157,6 +223,11 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
             isPinned: newPostData.is_pinned || false,
             sharedPostId: newPostData.shared_post_id || null,
             opportunityId: newPostData.opportunity_id || undefined,
+            postType: newPostData.post_type || 'regular',
+            shoutoutUserId: newPostData.shoutout_user_id,
+            shoutoutUser: shoutoutUser,
+            shoutoutCategory: newPostData.shoutout_category,
+            shoutoutCategoryData: shoutoutCategoryData,
             createdAt: newPostData.created_at,
             updatedAt: newPostData.updated_at,
           };
@@ -765,6 +836,51 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
             },
           })) || [];
 
+          // Fetch shoutout user data if this is a shoutout post
+          let shoutoutUser: User | undefined;
+          let shoutoutCategoryData: ShoutoutCategory | undefined;
+
+          if (post.post_type === 'shoutout' && post.shoutout_user_id) {
+            console.log('[FEED] 🌟 Loading shoutout user data for post:', post.id);
+            const { data: shoutoutUserData } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', post.shoutout_user_id)
+              .single();
+
+            if (shoutoutUserData) {
+              shoutoutUser = {
+                id: shoutoutUserData.id,
+                slug: shoutoutUserData.slug,
+                email: shoutoutUserData.email,
+                fullName: shoutoutUserData.full_name,
+                phone: shoutoutUserData.phone,
+                location: shoutoutUserData.location,
+                bio: shoutoutUserData.bio,
+                areasOfExpertise: shoutoutUserData.areas_of_expertise,
+                education: shoutoutUserData.education,
+                avatarUrl: shoutoutUserData.avatar_url,
+                role: shoutoutUserData.role,
+                totalHours: shoutoutUserData.total_hours,
+                activitiesCompleted: shoutoutUserData.activities_completed,
+                organizationsHelped: shoutoutUserData.organizations_helped,
+                achievements: [],
+                membershipTier: shoutoutUserData.membership_tier || 'free',
+                membershipStatus: shoutoutUserData.membership_status || 'inactive',
+                createdAt: shoutoutUserData.created_at,
+                updatedAt: shoutoutUserData.updated_at,
+              };
+            }
+
+            // Fetch category data
+            if (post.shoutout_category) {
+              const catData = await fetchShoutoutCategory(post.shoutout_category);
+              if (catData) {
+                shoutoutCategoryData = catData;
+              }
+            }
+          }
+
           return {
             id: post.id,
             userId: post.user_id,
@@ -831,6 +947,11 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
             reactions, // ✅ Add reactions
             reactionSummary: calculateReactionSummary(reactions, user?.id), // ✅ Add summary
             sharedPostId: post.shared_post_id || null,
+            postType: post.post_type || 'regular',
+            shoutoutUserId: post.shoutout_user_id,
+            shoutoutUser: shoutoutUser,
+            shoutoutCategory: post.shoutout_category,
+            shoutoutCategoryData: shoutoutCategoryData,
             createdAt: post.created_at,
             updatedAt: post.updated_at,
           } as Post;
@@ -1190,6 +1311,137 @@ const postsWithEvents = await Promise.all(
       return { success: true, data: newPost };
     } catch (error: any) {
       console.error('[FEED] ❌ Error creating post:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  const createShoutout = async (
+    shoutoutUserId: string,
+    category: ShoutoutCategoryId,
+    message: string,
+    eventId?: string,
+    visibility: 'public' | 'circle' = 'public'
+  ): Promise<ApiResponse<Post>> => {
+    if (!user) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    // Check if user is banned
+    if (user.isBanned) {
+      const now = new Date();
+      const bannedUntil = user.bannedUntil ? new Date(user.bannedUntil) : null;
+      
+      if (!bannedUntil || bannedUntil > now) {
+        return { 
+          success: false, 
+          error: user.bannedUntil 
+            ? `You are banned from posting until ${bannedUntil.toLocaleDateString()}`
+            : 'You are permanently banned from posting'
+        };
+      }
+    }
+
+    try {
+      console.log('[FEED] 🌟 Creating shoutout for user:', shoutoutUserId);
+      
+      // Fetch the user being recognized
+      const { data: shoutoutUserData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', shoutoutUserId)
+        .single();
+
+      if (userError || !shoutoutUserData) {
+        return { success: false, error: 'Could not find the volunteer to recognize' };
+      }
+
+      // Fetch category data
+      const categoryData = await fetchShoutoutCategory(category);
+      if (!categoryData) {
+        return { success: false, error: 'Invalid shoutout category' };
+      }
+
+      // Create the shoutout post
+      const { data, error } = await supabase
+        .from('posts')
+        .insert({
+          user_id: user.id,
+          text: message,
+          post_type: 'shoutout',
+          shoutout_user_id: shoutoutUserId,
+          shoutout_category: category,
+          event_id: eventId || null,
+          visibility: visibility,
+          media_urls: [],
+          media_types: [],
+          likes: [],
+          shares: 0,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Build the shoutout user object
+      const shoutoutUser: User = {
+        id: shoutoutUserData.id,
+        slug: shoutoutUserData.slug,
+        email: shoutoutUserData.email,
+        fullName: shoutoutUserData.full_name,
+        phone: shoutoutUserData.phone,
+        location: shoutoutUserData.location,
+        bio: shoutoutUserData.bio,
+        areasOfExpertise: shoutoutUserData.areas_of_expertise,
+        education: shoutoutUserData.education,
+        avatarUrl: shoutoutUserData.avatar_url,
+        role: shoutoutUserData.role,
+        totalHours: shoutoutUserData.total_hours,
+        activitiesCompleted: shoutoutUserData.activities_completed,
+        organizationsHelped: shoutoutUserData.organizations_helped,
+        achievements: [],
+        membershipTier: shoutoutUserData.membership_tier || 'free',
+        membershipStatus: shoutoutUserData.membership_status || 'inactive',
+        createdAt: shoutoutUserData.created_at,
+        updatedAt: shoutoutUserData.updated_at,
+      };
+
+      const newPost: Post = {
+        id: data.id,
+        userId: user.id,
+        user: user,
+        text: data.text,
+        mediaUrls: [],
+        mediaTypes: [],
+        visibility: data.visibility || 'public',
+        likes: [],
+        comments: [],
+        shares: 0,
+        reactions: [],
+        reactionSummary: {
+          heart: 0,
+          thumbsup: 0,
+          clap: 0,
+          fire: 0,
+          star: 0,
+          total: 0,
+        },
+        isAnnouncement: false,
+        isPinned: false,
+        postType: 'shoutout',
+        shoutoutUserId: shoutoutUserId,
+        shoutoutUser: shoutoutUser,
+        shoutoutCategory: category,
+        shoutoutCategoryData: categoryData,
+        eventId: eventId,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      };
+
+      console.log('[FEED] ✅ Shoutout created, adding optimistically');
+      setPosts((prev) => [newPost, ...prev]);
+      return { success: true, data: newPost };
+    } catch (error: any) {
+      console.error('[FEED] ❌ Error creating shoutout:', error);
       return { success: false, error: error.message };
     }
   };
@@ -2008,6 +2260,7 @@ const postsWithEvents = await Promise.all(
         posts,
         loading,
         createPost,
+        createShoutout,
         likePost,
         unlikePost,
         addComment,
