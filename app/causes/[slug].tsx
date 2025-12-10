@@ -699,12 +699,10 @@ export default function CauseDetailScreen() {
   // Fetch cause data
   const fetchCause = useCallback(async () => {
     if (!id) {
-      console.error('[CAUSE DETAIL] No slug/id provided in route params:', params);
+      console.error('[CAUSE DETAIL] No slug/id provided');
       setLoading(false);
       return;
     }
-
-    console.log('[CAUSE DETAIL] Fetching cause with identifier:', id);
 
     try {
       const response = await getCauseById(id, user?.id);
@@ -713,19 +711,14 @@ export default function CauseDetailScreen() {
       } else {
         console.error('[CAUSE DETAIL] Failed to load cause:', response.error);
         Alert.alert('Error', response.error || 'Failed to load cause details');
-        // Don't use router.back() - it might redirect incorrectly
-        // Instead, navigate to discover tab
-        router.replace('/(tabs)/discover');
       }
     } catch (error) {
       console.error('[CAUSE DETAIL] Error fetching cause:', error);
       Alert.alert('Error', 'Something went wrong');
-      // Don't use router.back() - navigate to discover instead
-      router.replace('/(tabs)/discover');
     } finally {
       setLoading(false);
     }
-  }, [id, router, user?.id, params]);
+  }, [id, user?.id]);
 
   // Fetch recent donations
   const fetchDonations = useCallback(async () => {
@@ -746,10 +739,6 @@ export default function CauseDetailScreen() {
 
   // Initial load
   useEffect(() => {
-    // Log route params for debugging
-    console.log('[CAUSE DETAIL] Route params:', params);
-    console.log('[CAUSE DETAIL] Extracted id/slug:', id);
-    
     if (!id) {
       console.error('[CAUSE DETAIL] No identifier found in route, redirecting to discover');
       router.replace('/(tabs)/discover');
@@ -758,7 +747,14 @@ export default function CauseDetailScreen() {
     
     fetchCause();
     fetchDonations();
-  }, [fetchCause, fetchDonations, id, params, router]);
+  }, [id, fetchCause, fetchDonations]);
+
+  // Handle navigation when cause fails to load
+  useEffect(() => {
+    if (!loading && !cause && id) {
+      router.replace('/(tabs)/discover');
+    }
+  }, [loading, cause, id, router]);
 
   // Pull to refresh
   const handleRefresh = useCallback(async () => {
