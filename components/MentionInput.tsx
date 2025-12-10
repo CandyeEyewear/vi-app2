@@ -1,7 +1,7 @@
 /**
  * MentionInput Component
- * A TextInput wrapper that enables @mention functionality
- * Shows friendly @Name while typing, but stores @[Name](userId) format
+ * A TextInput wrapper that enables @mention and #hashtag functionality
+ * Shows user picker for @ and tabbed picker for # (Events/Causes/Opportunities)
  */
 
 import React, { useState, useCallback, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
@@ -21,6 +21,7 @@ import {
 import { Colors } from '../constants/colors';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { HashtagItem, HashtagType, getTypingHashtag, insertHashtag } from '../utils/hashtags';
 import debounce from 'lodash/debounce';
 
 interface MentionInputProps extends Omit<TextInputProps, 'onChangeText' | 'value'> {
@@ -39,13 +40,27 @@ interface SearchUser {
 interface InsertedMention {
   userId: string;
   fullName: string;
-  displayText: string; // @Name
-  rawText: string; // @[Name](userId)
+  displayText: string;
+  rawText: string;
 }
 
-// Convert raw format to display format
+interface InsertedHashtag {
+  id: string;
+  name: string;
+  type: HashtagType;
+  displayText: string;
+  rawText: string;
+}
+
+type PickerMode = 'none' | 'mention' | 'hashtag';
+
+// Convert raw format to display format (both mentions and hashtags)
 const rawToDisplay = (text: string): string => {
-  return text.replace(/@\[([^\]]+)\]\([^)]+\)/g, '@$1');
+  // Convert mentions: @[Name](userId) -> @Name
+  let result = text.replace(/@\[([^\]]+)\]\([^)]+\)/g, '@$1');
+  // Convert hashtags: #[Name](type:id) -> #Name
+  result = result.replace(/#\[([^\]]+)\]\((event|cause|opportunity):[^)]+\)/g, '#$1');
+  return result;
 };
 
 // Check if user is typing a mention
@@ -55,7 +70,7 @@ const getTypingMention = (text: string, cursorPosition: number): string | null =
   return match ? match[1] : null;
 };
 
-const MentionInput = forwardRef<TextInput, MentionInputProps>(({ 
+const MentionInput = forwardRef<TextInput, MentionInputProps>(({
   value,
   onChangeText,
   placeholder = "What's on your mind?",
@@ -66,84 +81,106 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
   const { user: currentUser } = useAuth();
   
   const inputRef = useRef<TextInput>(null);
-  
-  // Expose ref to parent
   useImperativeHandle(ref, () => inputRef.current as TextInput);
   
-  // The display text (what user sees) - derived from value
+  // Display text (what user sees)
   const [displayText, setDisplayText] = useState(() => rawToDisplay(value));
-  
-  // Track cursor position
   const [cursorPosition, setCursorPosition] = useState(0);
   
-  // Mention picker state
-  const [showMentionPicker, setShowMentionPicker] = useState(false);
-  const [mentionSearch, setMentionSearch] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchUser[]>([]);
+  // Picker state
+  const [pickerMode, setPickerMode] = useState<PickerMode>('none');
+  const [searchQuery, setSearchQuery] = useState('');
   const [searching, setSearching] = useState(false);
   
-  // Track the mapping between display positions and raw format
-  // This helps us reconstruct raw text when user types
+  // Mention state
+  const [userResults, setUserResults] = useState<SearchUser[]>([]);
+  
+  // Hashtag state
+  const [hashtagTab, setHashtagTab] = useState<HashtagType>('event');
+  const [eventResults, setEventResults] = useState<HashtagItem[]>([]);
+  const [causeResults, setCauseResults] = useState<HashtagItem[]>([]);
+  const [opportunityResults, setOpportunityResults] = useState<HashtagItem[]>([]);
+  
+  // Track mappings for converting display <-> raw
   const mentionMapRef = useRef<Map<string, InsertedMention>>(new Map());
+  const hashtagMapRef = useRef<Map<string, InsertedHashtag>>(new Map());
 
   // Sync display text when value changes externally
   useEffect(() => {
     const newDisplay = rawToDisplay(value);
     if (newDisplay !== displayText) {
       setDisplayText(newDisplay);
-      // Rebuild mention map from value
-      rebuildMentionMap(value);
+      rebuildMaps(value);
     }
   }, [value]);
 
-  const rebuildMentionMap = (rawText: string) => {
-    const map = new Map<string, InsertedMention>();
-    const pattern = /@\[([^\]]+)\]\(([^)]+)\)/g;
+  const rebuildMaps = (rawText: string) => {
+    // Rebuild mention map
+    const mentionMap = new Map<string, InsertedMention>();
+    const mentionPattern = /@\[([^\]]+)\]\(([^)]+)\)/g;
     let match;
     
-    while ((match = pattern.exec(rawText)) !== null) {
+    while ((match = mentionPattern.exec(rawText)) !== null) {
       const fullName = match[1];
       const userId = match[2];
       const displayText = `@${fullName}`;
-      const rawTextPart = match[0];
-      
-      map.set(displayText, {
+      mentionMap.set(displayText, {
         userId,
         fullName,
         displayText,
-        rawText: rawTextPart,
+        rawText: match[0],
       });
     }
+    mentionMapRef.current = mentionMap;
     
-    mentionMapRef.current = map;
+    // Rebuild hashtag map
+    const hashtagMap = new Map<string, InsertedHashtag>();
+    const hashtagPattern = /#\[([^\]]+)\]\((event|cause|opportunity):([^)]+)\)/g;
+    
+    while ((match = hashtagPattern.exec(rawText)) !== null) {
+      const name = match[1];
+      const type = match[2] as HashtagType;
+      const id = match[3];
+      const displayText = `#${name}`;
+      hashtagMap.set(displayText, {
+        id,
+        name,
+        type,
+        displayText,
+        rawText: match[0],
+      });
+    }
+    hashtagMapRef.current = hashtagMap;
   };
 
-  // Convert display text back to raw format using mention map
+  // Convert display text back to raw format
   const displayToRaw = (display: string): string => {
     let raw = display;
     
-    // Sort by length descending to replace longer names first (avoid partial matches)
+    // Replace mentions (sort by length to avoid partial matches)
     const mentions = Array.from(mentionMapRef.current.values())
       .sort((a, b) => b.displayText.length - a.displayText.length);
-    
     for (const mention of mentions) {
-      // Only replace if the mention still exists in the text
       if (raw.includes(mention.displayText)) {
         raw = raw.replace(mention.displayText, mention.rawText);
+      }
+    }
+    
+    // Replace hashtags
+    const hashtags = Array.from(hashtagMapRef.current.values())
+      .sort((a, b) => b.displayText.length - a.displayText.length);
+    for (const hashtag of hashtags) {
+      if (raw.includes(hashtag.displayText)) {
+        raw = raw.replace(hashtag.displayText, hashtag.rawText);
       }
     }
     
     return raw;
   };
 
-  // Debounced user search
+  // Search users for mentions
   const searchUsers = useCallback(
     debounce(async (query: string) => {
-      if (query.length < 1) {
-        loadSuggestedUsers();
-        return;
-      }
-
       try {
         setSearching(true);
         const { data, error } = await supabase
@@ -155,14 +192,12 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
 
         if (error) throw error;
 
-        const users: SearchUser[] = (data || []).map((u) => ({
+        setUserResults((data || []).map((u) => ({
           id: u.id,
           fullName: u.full_name,
           avatarUrl: u.avatar_url,
           location: u.location,
-        }));
-
-        setSearchResults(users);
+        })));
       } catch (error) {
         console.error('[MENTION] Error searching users:', error);
       } finally {
@@ -184,14 +219,12 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
 
       if (error) throw error;
 
-      const users: SearchUser[] = (data || []).map((u) => ({
+      setUserResults((data || []).map((u) => ({
         id: u.id,
         fullName: u.full_name,
         avatarUrl: u.avatar_url,
         location: u.location,
-      }));
-
-      setSearchResults(users);
+      })));
     } catch (error) {
       console.error('[MENTION] Error loading suggested users:', error);
     } finally {
@@ -199,42 +232,211 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
     }
   };
 
+  // Search events, causes, opportunities for hashtags
+  const searchHashtags = useCallback(
+    debounce(async (query: string, type: HashtagType) => {
+      try {
+        setSearching(true);
+        
+        if (type === 'event') {
+          const { data, error } = await supabase
+            .from('events')
+            .select('id, title, description, image_url')
+            .ilike('title', `%${query}%`)
+            .eq('status', 'approved')
+            .limit(10);
+
+          if (error) throw error;
+
+          setEventResults((data || []).map((e) => ({
+            id: e.id,
+            name: e.title,
+            type: 'event' as HashtagType,
+            description: e.description,
+            imageUrl: e.image_url,
+          })));
+        } else if (type === 'cause') {
+          const { data, error } = await supabase
+            .from('causes')
+            .select('id, title, description, image_url')
+            .ilike('title', `%${query}%`)
+            .eq('status', 'approved')
+            .limit(10);
+
+          if (error) throw error;
+
+          setCauseResults((data || []).map((c) => ({
+            id: c.id,
+            name: c.title,
+            type: 'cause' as HashtagType,
+            description: c.description,
+            imageUrl: c.image_url,
+          })));
+        } else if (type === 'opportunity') {
+          const { data, error } = await supabase
+            .from('opportunities')
+            .select('id, title, description, image_url')
+            .ilike('title', `%${query}%`)
+            .eq('status', 'approved')
+            .limit(10);
+
+          if (error) throw error;
+
+          setOpportunityResults((data || []).map((o) => ({
+            id: o.id,
+            name: o.title,
+            type: 'opportunity' as HashtagType,
+            description: o.description,
+            imageUrl: o.image_url,
+          })));
+        }
+      } catch (error) {
+        console.error('[HASHTAG] Error searching:', error);
+      } finally {
+        setSearching(false);
+      }
+    }, 200),
+    []
+  );
+
+  const loadSuggestedHashtags = async (type: HashtagType) => {
+    try {
+      setSearching(true);
+      
+      if (type === 'event') {
+        const { data, error } = await supabase
+          .from('events')
+          .select('id, title, description, image_url')
+          .eq('status', 'approved')
+          .order('created_at', { ascending: false })
+          .limit(8);
+
+        if (error) throw error;
+
+        setEventResults((data || []).map((e) => ({
+          id: e.id,
+          name: e.title,
+          type: 'event' as HashtagType,
+          description: e.description,
+          imageUrl: e.image_url,
+        })));
+      } else if (type === 'cause') {
+        const { data, error } = await supabase
+          .from('causes')
+          .select('id, title, description, image_url')
+          .eq('status', 'approved')
+          .order('created_at', { ascending: false })
+          .limit(8);
+
+        if (error) throw error;
+
+        setCauseResults((data || []).map((c) => ({
+          id: c.id,
+          name: c.title,
+          type: 'cause' as HashtagType,
+          description: c.description,
+          imageUrl: c.image_url,
+        })));
+      } else if (type === 'opportunity') {
+        const { data, error } = await supabase
+          .from('opportunities')
+          .select('id, title, description, image_url')
+          .eq('status', 'approved')
+          .order('created_at', { ascending: false })
+          .limit(8);
+
+        if (error) throw error;
+
+        setOpportunityResults((data || []).map((o) => ({
+          id: o.id,
+          name: o.title,
+          type: 'opportunity' as HashtagType,
+          description: o.description,
+          imageUrl: o.image_url,
+        })));
+      }
+    } catch (error) {
+      console.error('[HASHTAG] Error loading suggested:', error);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  // Handle text changes
   const handleTextChange = (newDisplayText: string) => {
     setDisplayText(newDisplayText);
     
-    // Check if user is typing a mention
-    const typingMention = getTypingMention(newDisplayText, cursorPosition + (newDisplayText.length - displayText.length));
+    const newCursorPos = cursorPosition + (newDisplayText.length - displayText.length);
     
+    // Check for @ mention
+    const typingMention = getTypingMention(newDisplayText, newCursorPos);
     if (typingMention !== null) {
-      setShowMentionPicker(true);
-      setMentionSearch(typingMention);
-      searchUsers(typingMention);
-    } else {
-      setShowMentionPicker(false);
-      setMentionSearch('');
+      setPickerMode('mention');
+      setSearchQuery(typingMention);
+      if (typingMention.length > 0) {
+        searchUsers(typingMention);
+      } else {
+        loadSuggestedUsers();
+      }
+      onChangeText(displayToRaw(newDisplayText));
+      return;
     }
     
-    // Convert back to raw format and update parent
-    const rawText = displayToRaw(newDisplayText);
-    onChangeText(rawText);
+    // Check for # hashtag
+    const typingHashtag = getTypingHashtag(newDisplayText, newCursorPos);
+    if (typingHashtag !== null) {
+      setPickerMode('hashtag');
+      setSearchQuery(typingHashtag);
+      if (typingHashtag.length > 0) {
+        searchHashtags(typingHashtag, hashtagTab);
+      } else {
+        loadSuggestedHashtags(hashtagTab);
+      }
+      onChangeText(displayToRaw(newDisplayText));
+      return;
+    }
+    
+    // No special character being typed
+    setPickerMode('none');
+    setSearchQuery('');
+    onChangeText(displayToRaw(newDisplayText));
   };
 
   const handleSelectionChange = (event: any) => {
     const position = event.nativeEvent.selection.end;
     setCursorPosition(position);
     
+    // Check for mention
     const typingMention = getTypingMention(displayText, position);
     if (typingMention !== null) {
-      setShowMentionPicker(true);
-      setMentionSearch(typingMention);
-      searchUsers(typingMention);
-    } else {
-      setShowMentionPicker(false);
+      setPickerMode('mention');
+      setSearchQuery(typingMention);
+      if (typingMention.length > 0) {
+        searchUsers(typingMention);
+      } else {
+        loadSuggestedUsers();
+      }
+      return;
     }
+    
+    // Check for hashtag
+    const typingHashtag = getTypingHashtag(displayText, position);
+    if (typingHashtag !== null) {
+      setPickerMode('hashtag');
+      setSearchQuery(typingHashtag);
+      if (typingHashtag.length > 0) {
+        searchHashtags(typingHashtag, hashtagTab);
+      } else {
+        loadSuggestedHashtags(hashtagTab);
+      }
+      return;
+    }
+    
+    setPickerMode('none');
   };
 
+  // Handle user selection (mention)
   const handleSelectUser = (user: SearchUser) => {
-    // Find the @ position
     const textBeforeCursor = displayText.slice(0, cursorPosition);
     const atIndex = textBeforeCursor.lastIndexOf('@');
     
@@ -243,11 +445,9 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
     const textBefore = displayText.slice(0, atIndex);
     const textAfter = displayText.slice(cursorPosition);
     
-    // Create mention texts
     const displayMention = `@${user.fullName}`;
     const rawMention = `@[${user.fullName}](${user.id})`;
     
-    // Store in mention map
     mentionMapRef.current.set(displayMention, {
       userId: user.id,
       fullName: user.fullName,
@@ -255,82 +455,225 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
       rawText: rawMention,
     });
     
-    // Build new texts
     const newDisplayText = textBefore + displayMention + ' ' + textAfter;
     const newRawText = displayToRaw(newDisplayText);
     
-    // Update states
     setDisplayText(newDisplayText);
     onChangeText(newRawText);
     setCursorPosition(textBefore.length + displayMention.length + 1);
     
-    setShowMentionPicker(false);
-    setMentionSearch('');
-    
+    setPickerMode('none');
+    setSearchQuery('');
     inputRef.current?.focus();
+  };
+
+  // Handle hashtag selection
+  const handleSelectHashtag = (item: HashtagItem) => {
+    const textBeforeCursor = displayText.slice(0, cursorPosition);
+    const hashIndex = textBeforeCursor.lastIndexOf('#');
+    
+    if (hashIndex === -1) return;
+    
+    const textBefore = displayText.slice(0, hashIndex);
+    const textAfter = displayText.slice(cursorPosition);
+    
+    const displayHashtag = `#${item.name}`;
+    const rawHashtag = `#[${item.name}](${item.type}:${item.id})`;
+    
+    hashtagMapRef.current.set(displayHashtag, {
+      id: item.id,
+      name: item.name,
+      type: item.type,
+      displayText: displayHashtag,
+      rawText: rawHashtag,
+    });
+    
+    const newDisplayText = textBefore + displayHashtag + ' ' + textAfter;
+    const newRawText = displayToRaw(newDisplayText);
+    
+    setDisplayText(newDisplayText);
+    onChangeText(newRawText);
+    setCursorPosition(textBefore.length + displayHashtag.length + 1);
+    
+    setPickerMode('none');
+    setSearchQuery('');
+    inputRef.current?.focus();
+  };
+
+  // Handle tab change for hashtags
+  const handleTabChange = (tab: HashtagType) => {
+    setHashtagTab(tab);
+    if (searchQuery.length > 0) {
+      searchHashtags(searchQuery, tab);
+    } else {
+      loadSuggestedHashtags(tab);
+    }
   };
 
   useEffect(() => {
     const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
-      setShowMentionPicker(false);
+      setPickerMode('none');
     });
-
-    return () => {
-      hideSubscription.remove();
-    };
+    return () => hideSubscription.remove();
   }, []);
+
+  // Get current hashtag results based on tab
+  const getCurrentHashtagResults = () => {
+    switch (hashtagTab) {
+      case 'event': return eventResults;
+      case 'cause': return causeResults;
+      case 'opportunity': return opportunityResults;
+      default: return [];
+    }
+  };
 
   const renderUserItem = ({ item }: { item: SearchUser }) => (
     <TouchableOpacity
-      style={[styles.userItem, { borderBottomColor: colors.border }]}
+      style={[styles.pickerItem, { borderBottomColor: colors.border }]}
       onPress={() => handleSelectUser(item)}
       activeOpacity={0.7}
     >
       {item.avatarUrl ? (
-        <Image source={{ uri: item.avatarUrl }} style={styles.userAvatar} />
+        <Image source={{ uri: item.avatarUrl }} style={styles.itemAvatar} />
       ) : (
-        <View style={[styles.userAvatar, styles.userAvatarPlaceholder, { backgroundColor: colors.primary }]}> 
-          <Text style={styles.userAvatarText}>
-            {item.fullName?.charAt(0).toUpperCase() || '?'}
-          </Text>
+        <View style={[styles.itemAvatar, styles.itemAvatarPlaceholder, { backgroundColor: colors.primary }]}>
+          <Text style={styles.itemAvatarText}>{item.fullName?.charAt(0).toUpperCase() || '?'}</Text>
         </View>
       )}
-      <View style={styles.userInfo}>
-        <Text style={[styles.userName, { color: colors.text }]}>{item.fullName}</Text>
+      <View style={styles.itemInfo}>
+        <Text style={[styles.itemName, { color: colors.text }]}>{item.fullName}</Text>
         {item.location && (
-          <Text style={[styles.userLocation, { color: colors.textSecondary }]}> 
-            📍 {item.location}
+          <Text style={[styles.itemSubtext, { color: colors.textSecondary }]}>📍 {item.location}</Text>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderHashtagItem = ({ item }: { item: HashtagItem }) => (
+    <TouchableOpacity
+      style={[styles.pickerItem, { borderBottomColor: colors.border }]}
+      onPress={() => handleSelectHashtag(item)}
+      activeOpacity={0.7}
+    >
+      {item.imageUrl ? (
+        <Image source={{ uri: item.imageUrl }} style={styles.itemAvatar} />
+      ) : (
+        <View style={[styles.itemAvatar, styles.itemAvatarPlaceholder, { backgroundColor: getHashtagColor(item.type) }]}>
+          <Text style={styles.itemAvatarText}>{getHashtagIcon(item.type)}</Text>
+        </View>
+      )}
+      <View style={styles.itemInfo}>
+        <Text style={[styles.itemName, { color: colors.text }]} numberOfLines={1}>{item.name}</Text>
+        {item.description && (
+          <Text style={[styles.itemSubtext, { color: colors.textSecondary }]} numberOfLines={1}>
+            {item.description}
           </Text>
         )}
       </View>
     </TouchableOpacity>
   );
 
+  const getHashtagColor = (type: HashtagType) => {
+    switch (type) {
+      case 'event': return '#4CAF50';
+      case 'cause': return '#E91E63';
+      case 'opportunity': return '#2196F3';
+      default: return colors.primary;
+    }
+  };
+
+  const getHashtagIcon = (type: HashtagType) => {
+    switch (type) {
+      case 'event': return '📅';
+      case 'cause': return '❤️';
+      case 'opportunity': return '🤝';
+      default: return '#';
+    }
+  };
+
   return (
     <View style={styles.container}>
-      {/* Mention Picker Dropdown */}
-      {showMentionPicker && (
-        <View style={[styles.mentionPicker, { backgroundColor: colors.card, borderColor: colors.border }]}> 
-          <View style={[styles.mentionHeader, { borderBottomColor: colors.border }]}> 
-            <Text style={[styles.mentionHeaderText, { color: colors.textSecondary }]}> 
-              {mentionSearch ? `Searching "${mentionSearch}"...` : 'Mention someone'}
+      {/* Mention Picker */}
+      {pickerMode === 'mention' && (
+        <View style={[styles.picker, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={[styles.pickerHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.pickerHeaderText, { color: colors.textSecondary }]}>
+              {searchQuery ? `Searching "${searchQuery}"...` : 'Mention someone'}
             </Text>
             {searching && <ActivityIndicator size="small" color={colors.primary} />}
           </View>
           
-          {searchResults.length > 0 ? (
+          {userResults.length > 0 ? (
             <FlatList
-              data={searchResults}
+              data={userResults}
               keyExtractor={(item) => item.id}
               renderItem={renderUserItem}
               keyboardShouldPersistTaps="handled"
-              style={styles.userList}
+              style={styles.pickerList}
               showsVerticalScrollIndicator={false}
             />
           ) : !searching ? (
             <View style={styles.emptyState}>
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}> 
-                {mentionSearch ? 'No users found' : 'Type a name to search'}
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                {searchQuery ? 'No users found' : 'Type a name to search'}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      )}
+
+      {/* Hashtag Picker */}
+      {pickerMode === 'hashtag' && (
+        <View style={[styles.picker, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          {/* Tabs */}
+          <View style={[styles.tabContainer, { borderBottomColor: colors.border }]}>
+            <TouchableOpacity
+              style={[styles.tab, hashtagTab === 'event' && { borderBottomColor: '#4CAF50', borderBottomWidth: 2 }]}
+              onPress={() => handleTabChange('event')}
+            >
+              <Text style={[styles.tabText, { color: hashtagTab === 'event' ? '#4CAF50' : colors.textSecondary }]}> 
+                📅 Events
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, hashtagTab === 'cause' && { borderBottomColor: '#E91E63', borderBottomWidth: 2 }]}
+              onPress={() => handleTabChange('cause')}
+            >
+              <Text style={[styles.tabText, { color: hashtagTab === 'cause' ? '#E91E63' : colors.textSecondary }]}> 
+                ❤️ Causes
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, hashtagTab === 'opportunity' && { borderBottomColor: '#2196F3', borderBottomWidth: 2 }]}
+              onPress={() => handleTabChange('opportunity')}
+            >
+              <Text style={[styles.tabText, { color: hashtagTab === 'opportunity' ? '#2196F3' : colors.textSecondary }]}> 
+                🤝 Opps
+              </Text>
+            </TouchableOpacity>
+          </View>
+          
+          {/* Search hint */}
+          <View style={[styles.pickerHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.pickerHeaderText, { color: colors.textSecondary }]}>
+              {searchQuery ? `Searching "${searchQuery}"...` : `Select a ${hashtagTab}`}
+            </Text>
+            {searching && <ActivityIndicator size="small" color={colors.primary} />}
+          </View>
+          
+          {getCurrentHashtagResults().length > 0 ? (
+            <FlatList
+              data={getCurrentHashtagResults()}
+              keyExtractor={(item) => item.id}
+              renderItem={renderHashtagItem}
+              keyboardShouldPersistTaps="handled"
+              style={styles.pickerList}
+              showsVerticalScrollIndicator={false}
+            />
+          ) : !searching ? (
+            <View style={styles.emptyState}>
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                {searchQuery ? `No ${hashtagTab}s found` : `No ${hashtagTab}s available`}
               </Text>
             </View>
           ) : null}
@@ -340,11 +683,7 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
       {/* Text Input */}
       <TextInput
         ref={inputRef}
-        style={[
-          styles.input,
-          { color: colors.text },
-          textInputProps.style,
-        ]}
+        style={[styles.input, { color: colors.text }, textInputProps.style]}
         value={displayText}
         onChangeText={handleTextChange}
         onSelectionChange={handleSelectionChange}
@@ -370,12 +709,12 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: 'top',
   },
-  mentionPicker: {
+  picker: {
     position: 'absolute',
     bottom: '100%',
     left: 0,
     right: 0,
-    maxHeight: 250,
+    maxHeight: 300,
     borderRadius: 12,
     borderWidth: 1,
     marginBottom: 8,
@@ -386,58 +725,71 @@ const styles = StyleSheet.create({
     elevation: 5,
     zIndex: 1000,
   },
-  mentionHeader: {
+  tabContainer: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  pickerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderBottomWidth: 1,
   },
-  mentionHeaderText: {
-    fontSize: 13,
-    fontWeight: '600',
+  pickerHeaderText: {
+    fontSize: 12,
+    fontWeight: '500',
   },
-  userList: {
-    maxHeight: 200,
+  pickerList: {
+    maxHeight: 180,
   },
-  userItem: {
+  pickerItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    padding: 10,
     borderBottomWidth: 1,
   },
-  userAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  itemAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
   },
-  userAvatarPlaceholder: {
+  itemAvatarPlaceholder: {
     justifyContent: 'center',
     alignItems: 'center',
   },
-  userAvatarText: {
-    fontSize: 16,
+  itemAvatarText: {
+    fontSize: 14,
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
-  userInfo: {
-    marginLeft: 12,
+  itemInfo: {
+    marginLeft: 10,
     flex: 1,
   },
-  userName: {
-    fontSize: 15,
+  itemName: {
+    fontSize: 14,
     fontWeight: '600',
   },
-  userLocation: {
-    fontSize: 12,
+  itemSubtext: {
+    fontSize: 11,
     marginTop: 2,
   },
   emptyState: {
-    padding: 20,
+    padding: 16,
     alignItems: 'center',
   },
   emptyText: {
-    fontSize: 14,
+    fontSize: 13,
   },
 });
