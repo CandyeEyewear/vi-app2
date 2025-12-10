@@ -51,6 +51,7 @@ import { sendNotificationToUser } from '../../services/pushNotifications';
 import { cache, CacheKeys } from '../../services/cache';
 import FeedPostCard from '../../components/cards/FeedPostCard';
 import { UserAvatar, UserNameWithBadge } from '../../components';
+import { goBack } from '../../utils/navigation';
 
 type TabType = 'posts' | 'checkins' | 'about';
 
@@ -892,7 +893,7 @@ export default function ViewProfileScreen() {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => goBack('/(tabs)/feed')} style={styles.backButton}>
             <ChevronLeft size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
@@ -909,7 +910,7 @@ export default function ViewProfileScreen() {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => goBack('/(tabs)/feed')} style={styles.backButton}>
             <ChevronLeft size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
@@ -926,7 +927,7 @@ export default function ViewProfileScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Fixed Header */}
       <View style={[styles.header, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => goBack('/(tabs)/feed')} style={styles.backButton}>
           <ChevronLeft size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
