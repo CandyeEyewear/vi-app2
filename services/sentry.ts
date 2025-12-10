@@ -1,33 +1,67 @@
-/**
- * Sentry Error Tracking
- * 
- * To enable Sentry:
- * 1. Install: npm install @sentry/react-native
- * 2. Get your DSN from https://sentry.io
- * 3. Uncomment the code below and add your DSN
- * 4. Update app/_layout.tsx to initialize Sentry
- */
+import { Platform } from 'react-native';
 
-// Uncomment when ready to use Sentry:
-/*
-import * as Sentry from '@sentry/react-native';
+type SentryModule = typeof import('@sentry/react-native');
 
-const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN || 'YOUR_SENTRY_DSN_HERE';
+// Sentry React Native doesn't work on web
+const IS_WEB = Platform.OS === 'web';
+const IS_PRODUCTION = !__DEV__;
+const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN || process.env.SENTRY_DSN || '';
 
-export function initSentry() {
-  if (!SENTRY_DSN || SENTRY_DSN === 'YOUR_SENTRY_DSN_HERE') {
-    console.warn('Sentry DSN not configured. Error tracking disabled.');
+let sentryModule: SentryModule | null = null;
+let hasInitialized = false;
+
+function getSentry(): SentryModule | null {
+  if (IS_WEB) {
+    return null;
+  }
+
+  if (sentryModule) {
+    return sentryModule;
+  }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    sentryModule = require('@sentry/react-native');
+  } catch (error) {
+    console.warn('[Sentry] Module not available. Did you install @sentry/react-native?', error);
+    sentryModule = null;
+  }
+
+  return sentryModule;
+}
+
+export function initSentry(): void {
+  // Skip on web - @sentry/react-native doesn't support web
+  if (IS_WEB) {
+    console.log('[Sentry] Skipping initialization on web platform');
     return;
   }
 
-  Sentry.init({
+  if (!IS_PRODUCTION) {
+    console.log('[Sentry] Skipping initialization in development mode');
+    return;
+  }
+
+  if (hasInitialized) {
+    return;
+  }
+
+  if (!SENTRY_DSN) {
+    console.warn('[Sentry] Missing DSN. Error tracking disabled.');
+    return;
+  }
+
+  const sentry = getSentry();
+  if (!sentry) {
+    return;
+  }
+
+  sentry.init({
     dsn: SENTRY_DSN,
-    enableInExpoDevelopment: false, // Disable in development
-    debug: __DEV__, // Enable debug mode in development
-    environment: __DEV__ ? 'development' : 'production',
-    tracesSampleRate: 1.0, // Adjust based on your needs (0.0 to 1.0)
-    beforeSend(event, hint) {
-      // Filter out sensitive data
+    enableInExpoDevelopment: false,
+    environment: 'production',
+    tracesSampleRate: 1.0,
+    beforeSend(event) {
       if (event.request) {
         delete event.request.cookies;
         delete event.request.headers?.Authorization;
@@ -35,26 +69,47 @@ export function initSentry() {
       return event;
     },
   });
+
+  hasInitialized = true;
 }
 
-export { Sentry };
-*/
+export function captureException(
+  error: Error | unknown,
+  context?: Record<string, any>
+): void {
+  if (IS_WEB || !IS_PRODUCTION) {
+    console.error('[Sentry] Would capture exception:', error, context);
+    return;
+  }
 
-// Placeholder exports for when Sentry is not enabled
-export const initSentry = () => {
-  // No-op when Sentry is not configured
-};
+  const sentry = getSentry();
+  if (!sentry || !hasInitialized) {
+    return;
+  }
+
+  const exception = error instanceof Error ? error : new Error(String(error));
+  sentry.captureException(exception, context ? { extra: context } : undefined);
+}
+
+export function captureMessage(
+  message: string,
+  level?: Parameters<SentryModule['captureMessage']>[1]
+): void {
+  if (IS_WEB || !IS_PRODUCTION) {
+    console.log('[Sentry] Would capture message:', message, level);
+    return;
+  }
+
+  const sentry = getSentry();
+  if (!sentry || !hasInitialized) {
+    return;
+  }
+
+  sentry.captureMessage(message, level);
+}
 
 export const Sentry = {
-  captureException: (error: any, context?: any) => {
-    if (__DEV__) {
-      console.error('Sentry not configured. Error:', error, context);
-    }
-  },
-  captureMessage: (message: string, level?: any) => {
-    if (__DEV__) {
-      console.log('Sentry not configured. Message:', message, level);
-    }
-  },
+  captureException,
+  captureMessage,
 };
 
