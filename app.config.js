@@ -122,7 +122,8 @@ export default {
       "expo-location",
       "expo-video",
       "expo-web-browser",
-      "expo-updates"
+      "expo-updates",
+      "@sentry/react-native/expo"
     ],
     extra: {
       router: {

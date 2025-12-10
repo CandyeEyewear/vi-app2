@@ -19,6 +19,11 @@ import WebNavigation from '../components/WebNavigation';
 import { logger } from '../utils/logger';
 import { setupFCMHandlers } from '../services/fcmNotifications';
 import { isWeb } from '../utils/platform';
+import { initSentry, setUser, clearUser } from '@/services/sentry';
+import supabase from '@/services/supabase';
+
+// Initialize Sentry immediately (outside component)
+initSentry();
 
 // Import splash screen with error handling
 let SplashScreen: any = null;
@@ -63,6 +68,20 @@ function AppContent() {
       return () => clearTimeout(timer);
     }
   }, [authLoading]);
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        setUser(session.user.id, session.user.user_metadata?.account_type);
+      } else {
+        clearUser();
+      }
+    });
+
+    return () => {
+      subscription?.unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     setupFCMHandlers((path: string) => {
