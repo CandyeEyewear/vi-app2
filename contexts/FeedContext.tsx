@@ -9,6 +9,7 @@ import { Post, Comment, ApiResponse, ReactionType, PostReaction, ReactionSummary
 import { supabase } from '../services/supabase';
 import { getCauseById } from '../services/causesService';
 import { useAuth } from './AuthContext';
+import { extractMentionedUserIds } from '../utils/mentions';
 
 interface FeedContextType {
   posts: Post[];
@@ -1561,6 +1562,24 @@ const postsWithEvents = await Promise.all(
             : p
         )
       );
+
+      // Save mentions related to this comment
+      const mentionedUserIds = extractMentionedUserIds(text);
+
+      if (mentionedUserIds.length > 0 && data?.id) {
+        try {
+          const mentionInserts = mentionedUserIds.map((mentionedUserId) => ({
+            comment_id: data.id,
+            mentioned_user_id: mentionedUserId,
+            mentioned_by_user_id: user.id,
+          }));
+
+          await supabase.from('post_mentions').insert(mentionInserts);
+          console.log('[FEED] 📣 Saved comment mentions:', mentionedUserIds);
+        } catch (error) {
+          console.error('[FEED] Error saving comment mentions:', error);
+        }
+      }
 
       return { success: true, data: newComment };
     } catch (error: any) {
