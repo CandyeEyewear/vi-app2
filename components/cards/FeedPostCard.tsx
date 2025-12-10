@@ -39,9 +39,10 @@ import SharedCauseCard from '../SharedCauseCard';
 import SharedEventCard from '../SharedEventCard';
 import ImageCollage from '../ImageCollage';
 import VideoPlayer from '../VideoPlayer';
-import LinkText from '../LinkText';
 import MentionText from '../MentionText';
+import MentionInput from '../MentionInput';
 import { UserAvatar, UserNameWithBadge } from '../index';
+import { mentionToDisplayText } from '../../utils/mentions';
 
 const { width } = Dimensions.get('window');
 
@@ -420,10 +421,8 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
             const commentId = lastComment.id;
             const isExpanded = expandedComments[commentId] || false;
             const MAX_COMMENT_LENGTH = 100;
-            const isLongComment = lastComment.text.length > MAX_COMMENT_LENGTH;
-            const displayText = isExpanded || !isLongComment 
-              ? lastComment.text 
-              : lastComment.text.substring(0, MAX_COMMENT_LENGTH) + '...';
+            const plainCommentText = mentionToDisplayText(lastComment.text || '');
+            const isLongComment = plainCommentText.length > MAX_COMMENT_LENGTH;
             
             return (
               <View key={lastComment.id} style={styles.commentItem}>
@@ -444,7 +443,11 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
                     />
                   </TouchableOpacity>
                   <View style={styles.commentTextContainer}>
-                    <Text style={styles.commentText}>{displayText}</Text>
+                    <MentionText
+                      text={lastComment.text || ''}
+                      style={styles.commentText}
+                      numberOfLines={!isExpanded && isLongComment ? 2 : undefined}
+                    />
                     {isLongComment && !isExpanded && (
                       <TouchableOpacity
                         onPress={() => setExpandedComments(prev => ({ ...prev, [commentId]: true }))}
@@ -545,8 +548,8 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
                                 {formatTimeAgo(comment.createdAt)}
                               </Text>
                             </View>
-                            <LinkText
-                              text={comment.text}
+                            <MentionText
+                              text={comment.text || ''}
                               style={[
                                 styles.modalCommentText,
                                 isOwnComment && styles.modalCommentTextOwn
@@ -568,10 +571,9 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
                       paddingTop: 8,
                     }
                   ]}>
-                    <TextInput
+                    <MentionInput
                       style={styles.commentInput}
-                      placeholder="Write a comment..."
-                      placeholderTextColor={Colors.light.textSecondary}
+                      placeholder="Write a comment... Use @ to mention"
                       value={commentText}
                       onChangeText={setCommentText}
                       multiline
