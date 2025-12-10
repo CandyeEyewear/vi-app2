@@ -243,7 +243,7 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
             .from('events')
             .select('id, title, description, image_url')
             .ilike('title', `%${query}%`)
-            .eq('status', 'approved')
+            .eq('status', 'upcoming')
             .limit(10);
 
           if (error) throw error;
@@ -260,7 +260,7 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
             .from('causes')
             .select('id, title, description, image_url')
             .ilike('title', `%${query}%`)
-            .eq('status', 'approved')
+            .eq('status', 'active')
             .limit(10);
 
           if (error) throw error;
@@ -277,7 +277,7 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
             .from('opportunities')
             .select('id, title, description, image_url')
             .ilike('title', `%${query}%`)
-            .eq('status', 'approved')
+            .eq('status', 'active')
             .limit(10);
 
           if (error) throw error;
@@ -307,7 +307,7 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
         const { data, error } = await supabase
           .from('events')
           .select('id, title, description, image_url')
-          .eq('status', 'approved')
+          .eq('status', 'upcoming')
           .order('created_at', { ascending: false })
           .limit(8);
 
@@ -324,7 +324,7 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
         const { data, error } = await supabase
           .from('causes')
           .select('id, title, description, image_url')
-          .eq('status', 'approved')
+          .eq('status', 'active')
           .order('created_at', { ascending: false })
           .limit(8);
 
@@ -341,7 +341,7 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
         const { data, error } = await supabase
           .from('opportunities')
           .select('id, title, description, image_url')
-          .eq('status', 'approved')
+          .eq('status', 'active')
           .order('created_at', { ascending: false })
           .limit(8);
 
