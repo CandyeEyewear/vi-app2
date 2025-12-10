@@ -216,7 +216,10 @@ export default async function handler(req: any, res: any) {
         user_id: userId,
         order_id: subscriptionOrderId,  // This is what webhook looks for
         order_type: orderType,
-        reference_id: subscription?.id || null,  // Link to payment_subscriptions record
+        // reference_id needs to point at the recurring donation record for those subscriptions
+        reference_id: subscriptionType === 'recurring_donation'
+          ? (referenceId && isValidUUID(referenceId) ? referenceId : null)
+          : (subscription?.id || null),
         amount,
         currency: 'JMD',
         description: description || `${frequency} subscription`,
@@ -228,7 +231,7 @@ export default async function handler(req: any, res: any) {
           frequency: frequency,
           ezee_subscription_id: ezeeSubscriptionId,
           payment_subscriptions_id: subscription?.id,
-          cause_id: referenceId || null,  // Store cause_id for recurring donations
+          recurring_donations_id: subscriptionType === 'recurring_donation' ? referenceId : null,
         },
       });
 
