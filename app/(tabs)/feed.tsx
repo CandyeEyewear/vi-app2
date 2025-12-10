@@ -13,7 +13,6 @@ import {
   StyleSheet,
   RefreshControl,
   Modal,
-  TextInput,
   ActivityIndicator,
   Image,
   useColorScheme,
@@ -34,6 +33,7 @@ import CreateShoutoutModal from '../../components/CreateShoutoutModal';
 import CustomAlert from '../../components/CustomAlert';
 import { FeedSkeleton } from '../../components/SkeletonLayouts';
 import OrganizationPaymentBanner from '../../components/OrganizationPaymentBanner';
+import MentionInput from '../../components/MentionInput';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
@@ -41,6 +41,7 @@ import { decode } from 'base64-arraybuffer';
 import { supabase } from '../../services/supabase';
 import { uploadMultipleImages } from '../../services/imageUpload';
 import { uploadVideo, getVideoSize, formatFileSize, isVideoTooLarge } from '../../services/videoUtils';
+import { extractMentionedUserIds, mentionToDisplayText } from '../../utils/mentions';
 
 export default function FeedScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -149,15 +150,16 @@ const loadNotificationCount = async () => {
    }, [posts, activeTab]);
 
   const handleSubmitPost = async () => {
+    const postContent = postText;
     try {
       console.log('🚀 [POST] handleSubmitPost called');
       console.log('📊 [POST] Media count:', selectedMedia.length);
-      console.log('📝 [POST] Text length:', postText.trim().length);
+      console.log('📝 [POST] Text length:', postContent.trim().length);
       
       setSubmitting(true);
       setUploadProgress(0);
 
-      if (!postText.trim() && selectedMedia.length === 0) {
+      if (!postContent.trim() && selectedMedia.length === 0) {
         showAlert('Error', 'Please add some text or media', 'error');
         return;
       }
@@ -259,10 +261,35 @@ const loadNotificationCount = async () => {
       
       // Create post
       const visibility = activeTab === 'forYou' ? 'public' : 'circle';
-      const response = await createPost(postText, uploadedUrls, mediaTypes, visibility);
+      const response = await createPost(postContent, uploadedUrls, mediaTypes, visibility);
 
       if (response.success) {
         console.log('✅ [POST] Post created successfully');
+        const newPost = response.data;
+        const newPostId = newPost?.id;
+
+        // After post is created successfully, save mentions
+        const mentionedUserIds = extractMentionedUserIds(postContent);
+
+        if (mentionedUserIds.length > 0 && newPostId) {
+          try {
+            const mentionInserts = mentionedUserIds.map(userId => ({
+              post_id: newPostId,
+              mentioned_user_id: userId,
+              mentioned_by_user_id: user?.id,
+            }));
+
+            await supabase
+              .from('post_mentions')
+              .insert(mentionInserts);
+            
+            console.log('[FEED] Saved mentions for post:', mentionedUserIds);
+          } catch (error) {
+            console.error('[FEED] Error saving mentions:', error);
+            // Don't fail the post creation if mentions fail to save
+          }
+        }
+
         setPostText('');
         setSelectedMedia([]);
         setShowCreateModal(false);
@@ -462,12 +489,16 @@ const renderTabs = () => (
         data={sortedPosts}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => {
-          // Render ShoutoutCard for shoutout posts
-          if (item.postType === 'shoutout') {
-            return <ShoutoutCard post={item} />;
+          const postWithDisplayMentions = {
+            ...item,
+            text: mentionToDisplayText(item.text || ''),
+          };
+
+          if (postWithDisplayMentions.postType === 'shoutout') {
+            return <ShoutoutCard post={postWithDisplayMentions} />;
           }
           // Render regular FeedPostCard for all other posts
-          return <FeedPostCard post={item} />;
+          return <FeedPostCard post={postWithDisplayMentions} />;
         }}
         contentContainerStyle={[styles.listContent, { paddingBottom: 12 + insets.bottom }]}
         ListHeaderComponent={() => {
@@ -582,13 +613,11 @@ const renderTabs = () => (
                 </View>
               </TouchableOpacity>
 
-              <TextInput
+              <MentionInput
                 style={styles.modalInput}
-                placeholder="What's happening in your volunteer journey?"
-                placeholderTextColor={Colors.light.textSecondary}
+                placeholder="What's happening in your volunteer journey? Use @ to mention someone"
                 value={postText}
                 onChangeText={setPostText}
-                multiline
                 autoFocus
                 editable={!submitting}
               />
