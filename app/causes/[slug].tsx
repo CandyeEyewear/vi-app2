@@ -746,19 +746,16 @@ export default function CauseDetailScreen() {
 
   // Initial load
   useEffect(() => {
-    // Log route params for debugging
-    console.log('[CAUSE DETAIL] Route params:', params);
-    console.log('[CAUSE DETAIL] Extracted id/slug:', id);
-    
     if (!id) {
       console.error('[CAUSE DETAIL] No identifier found in route, redirecting to discover');
       router.replace('/(tabs)/discover');
       return;
     }
     
+    console.log('[CAUSE DETAIL] Fetching cause with id/slug:', id);
     fetchCause();
     fetchDonations();
-  }, [fetchCause, fetchDonations, id, params, router]);
+  }, [id]);
 
   // Pull to refresh
   const handleRefresh = useCallback(async () => {
