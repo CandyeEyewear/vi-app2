@@ -90,9 +90,9 @@ const getHashtagColor = (type: HashtagType): string => {
 // Get route for hashtag type
 const getHashtagRoute = (type: HashtagType, id: string): string => {
   switch (type) {
-    case 'event': return `/events/${id}`;
-    case 'cause': return `/causes/${id}`;
-    case 'opportunity': return `/opportunities/${id}`;
+    case 'event': return `/event/${id}`;
+    case 'cause': return `/cause/${id}`;
+    case 'opportunity': return `/opportunity/${id}`;
     default: return '/';
   }
 };
