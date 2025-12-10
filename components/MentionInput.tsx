@@ -21,7 +21,7 @@ import {
 import { Colors } from '../constants/colors';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { getTypingMention, insertMention, MentionUser } from '../utils/mentions';
+import { getTypingMention, insertMention, MentionUser, mentionToDisplayText } from '../utils/mentions';
 import debounce from 'lodash/debounce';
 
 interface MentionInputProps extends Omit<TextInputProps, 'onChangeText'> {
@@ -58,6 +58,15 @@ export default function MentionInput({
   const [searchResults, setSearchResults] = useState<SearchUser[]>([]);
   const [searching, setSearching] = useState(false);
   const [cursorPosition, setCursorPosition] = useState(0);
+  const [displayText, setDisplayText] = useState(mentionToDisplayText(value));
+
+  useEffect(() => {
+    // Only update display text if value changed externally (not from our own edits)
+    const newDisplayText = mentionToDisplayText(value);
+    if (newDisplayText !== displayText && !showMentionPicker) {
+      setDisplayText(newDisplayText);
+    }
+  }, [value, displayText, showMentionPicker]);
 
   // Debounced user search
   const searchUsers = useCallback(
@@ -126,11 +135,11 @@ export default function MentionInput({
   };
 
   // Handle text change and detect @ mentions
-  const handleTextChange = (text: string) => {
-    onChangeText(text);
-
+  const handleTextChange = (newDisplayText: string) => {
+    setDisplayText(newDisplayText);
+    
     // Check if user is typing a mention
-    const typingMention = getTypingMention(text, cursorPosition + (text.length - value.length));
+    const typingMention = getTypingMention(newDisplayText, cursorPosition + (newDisplayText.length - displayText.length));
 
     if (typingMention !== null) {
       setShowMentionPicker(true);
@@ -140,6 +149,10 @@ export default function MentionInput({
       setShowMentionPicker(false);
       setMentionSearch('');
     }
+    
+    // For simple text changes (no mentions being edited), sync to parent
+    // We'll rebuild the raw format when mentions are inserted
+    onChangeText(newDisplayText);
   };
 
   // Handle cursor position changes
@@ -147,8 +160,8 @@ export default function MentionInput({
     const position = event.nativeEvent.selection.end;
     setCursorPosition(position);
 
-    // Re-check for mention when cursor moves
-    const typingMention = getTypingMention(value, position);
+    // Check for mention in display text
+    const typingMention = getTypingMention(displayText, position);
     if (typingMention !== null) {
       setShowMentionPicker(true);
       setMentionSearch(typingMention);
@@ -165,10 +178,23 @@ export default function MentionInput({
       fullName: user.fullName,
     };
 
-    const { newText, newCursorPosition } = insertMention(value, cursorPosition, mentionUser);
-
-    onChangeText(newText);
-    setCursorPosition(newCursorPosition);
+    // Insert raw format into the actual value (for data extraction)
+    const { newText: newRawText, newCursorPosition } = insertMention(value, cursorPosition, mentionUser);
+    
+    // Calculate the display version
+    const newDisplayTextValue = mentionToDisplayText(newRawText);
+    
+    // Update both
+    setDisplayText(newDisplayTextValue);
+    onChangeText(newRawText);
+    
+    // Calculate new cursor position for display text
+    // The display text is shorter, so we need to adjust
+    const rawMentionLength = `@[${user.fullName}](${user.id}) `.length;
+    const displayMentionLength = `@${user.fullName} `.length;
+    const adjustedCursor = newCursorPosition - (rawMentionLength - displayMentionLength);
+    
+    setCursorPosition(adjustedCursor);
     setShowMentionPicker(false);
     setMentionSearch('');
 
@@ -252,7 +278,7 @@ export default function MentionInput({
           { color: colors.text },
           textInputProps.style,
         ]}
-        value={value}
+        value={displayText}
         onChangeText={handleTextChange}
         onSelectionChange={handleSelectionChange}
         placeholder={placeholder}
