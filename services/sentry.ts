@@ -1,60 +1,170 @@
 /**
- * Sentry Error Tracking
- * 
- * To enable Sentry:
- * 1. Install: npm install @sentry/react-native
- * 2. Get your DSN from https://sentry.io
- * 3. Uncomment the code below and add your DSN
- * 4. Update app/_layout.tsx to initialize Sentry
+ * Sentry Error Tracking Service
+ * Captures crashes and errors in production
+ * File: services/sentry.ts
  */
 
-// Uncomment when ready to use Sentry:
-/*
 import * as Sentry from '@sentry/react-native';
 
-const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN || 'YOUR_SENTRY_DSN_HERE';
+// Only enable Sentry in production builds
+const IS_PRODUCTION = !__DEV__;
 
-export function initSentry() {
-  if (!SENTRY_DSN || SENTRY_DSN === 'YOUR_SENTRY_DSN_HERE') {
-    console.warn('Sentry DSN not configured. Error tracking disabled.');
+// Sentry DSN
+const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN || 'https://e3cd7fd70496e616a2ed41f8085eaee3@o4510512782180352.ingest.us.sentry.io/4510512792600576';
+
+/**
+ * Initialize Sentry
+ * Call this early in your app startup (e.g., in _layout.tsx)
+ */
+export function initSentry(): void {
+  if (!IS_PRODUCTION) {
+    console.log('[Sentry] Skipping initialization in development mode');
     return;
   }
 
-  Sentry.init({
-    dsn: SENTRY_DSN,
-    enableInExpoDevelopment: false, // Disable in development
-    debug: __DEV__, // Enable debug mode in development
-    environment: __DEV__ ? 'development' : 'production',
-    tracesSampleRate: 1.0, // Adjust based on your needs (0.0 to 1.0)
-    beforeSend(event, hint) {
-      // Filter out sensitive data
-      if (event.request) {
-        delete event.request.cookies;
-        delete event.request.headers?.Authorization;
-      }
-      return event;
-    },
-  });
+  if (!SENTRY_DSN) {
+    console.warn('[Sentry] No DSN configured - error tracking disabled');
+    return;
+  }
+
+  try {
+    Sentry.init({
+      dsn: SENTRY_DSN,
+      environment: IS_PRODUCTION ? 'production' : 'development',
+      tracesSampleRate: 0.2,
+      enabled: IS_PRODUCTION,
+      
+      beforeSend(event) {
+        // Remove sensitive data before sending
+        if (event.request?.data) {
+          delete event.request.data;
+        }
+        return event;
+      },
+      
+      ignoreErrors: [
+        'Network request failed',
+        'Failed to fetch',
+        'AbortError',
+        'User cancelled',
+        'cancelled',
+      ],
+    });
+
+    console.log('[Sentry] Initialized successfully');
+  } catch (error) {
+    console.error('[Sentry] Failed to initialize:', error);
+  }
+}
+
+/**
+ * Capture an exception
+ */
+export function captureException(
+  error: Error | unknown,
+  context?: Record<string, any>
+): void {
+  if (!IS_PRODUCTION) {
+    console.error('[Sentry] Would capture exception:', error, context);
+    return;
+  }
+
+  try {
+    if (context) {
+      Sentry.withScope((scope) => {
+        Object.entries(context).forEach(([key, value]) => {
+          scope.setExtra(key, value);
+        });
+        Sentry.captureException(error);
+      });
+    } else {
+      Sentry.captureException(error);
+    }
+  } catch (sentryError) {
+    console.error('[Sentry] Failed to capture exception:', sentryError);
+  }
+}
+
+/**
+ * Capture a message
+ */
+export function captureMessage(
+  message: string,
+  level: 'info' | 'warning' | 'error' = 'info',
+  context?: Record<string, any>
+): void {
+  if (!IS_PRODUCTION) {
+    console.log(`[Sentry] Would capture message (${level}):`, message, context);
+    return;
+  }
+
+  try {
+    if (context) {
+      Sentry.withScope((scope) => {
+        Object.entries(context).forEach(([key, value]) => {
+          scope.setExtra(key, value);
+        });
+        Sentry.captureMessage(message, level);
+      });
+    } else {
+      Sentry.captureMessage(message, level);
+    }
+  } catch (sentryError) {
+    console.error('[Sentry] Failed to capture message:', sentryError);
+  }
+}
+
+/**
+ * Set user context (call after login)
+ */
+export function setUser(userId: string | null, accountType?: string): void {
+  if (!IS_PRODUCTION) {
+    console.log('[Sentry] Would set user:', userId);
+    return;
+  }
+
+  try {
+    if (userId) {
+      Sentry.setUser({
+        id: userId,
+        ...(accountType && { accountType }),
+      });
+    } else {
+      Sentry.setUser(null);
+    }
+  } catch (error) {
+    console.error('[Sentry] Failed to set user:', error);
+  }
+}
+
+/**
+ * Clear user context (call on logout)
+ */
+export function clearUser(): void {
+  setUser(null);
+}
+
+/**
+ * Add breadcrumb for debugging
+ */
+export function addBreadcrumb(
+  category: string,
+  message: string,
+  data?: Record<string, any>,
+  level: 'info' | 'warning' | 'error' = 'info'
+): void {
+  if (!IS_PRODUCTION) return;
+
+  try {
+    Sentry.addBreadcrumb({
+      category,
+      message,
+      data,
+      level,
+    });
+  } catch (error) {
+    // Silently fail
+  }
 }
 
 export { Sentry };
-*/
-
-// Placeholder exports for when Sentry is not enabled
-export const initSentry = () => {
-  // No-op when Sentry is not configured
-};
-
-export const Sentry = {
-  captureException: (error: any, context?: any) => {
-    if (__DEV__) {
-      console.error('Sentry not configured. Error:', error, context);
-    }
-  },
-  captureMessage: (message: string, level?: any) => {
-    if (__DEV__) {
-      console.log('Sentry not configured. Message:', message, level);
-    }
-  },
-};
-
