@@ -2,9 +2,7 @@
 * Vercel API Route: /api/ezee/create-token.ts
 * Creates a payment token for one-time payments
 * WITH CORS SUPPORT
- * Uses official eZeePayments API format with form data
- * 
- * DEBUGGING VERSION - Added detailed logging
+* Uses official eZeePayments API format with form data
 */
 
 import { createClient } from '@supabase/supabase-js';
@@ -66,18 +64,6 @@ export default async function handler(req: any, res: any) {
      returnPath,  // Path to redirect to after successful payment
     } = req.body;
 
-   // ========== DEBUG LOGGING START ==========
-   console.log('='.repeat(60));
-   console.log('CREATE TOKEN REQUEST STARTED');
-   console.log('='.repeat(60));
-   console.log('Environment Variables:');
-   console.log('  EZEE_API_URL:', EZEE_API_URL);
-   console.log('  EZEE_SITE:', EZEE_SITE);
-   console.log('  EZEE_LICENCE_KEY:', EZEE_LICENCE_KEY ? `${EZEE_LICENCE_KEY.substring(0, 8)}...` : 'NOT SET');
-   console.log('  APP_URL:', APP_URL);
-   console.log('Request Body:', JSON.stringify(req.body, null, 2));
-   // ========== DEBUG LOGGING END ==========
-
    // Validate required fields
    if (!amount || !orderId || !orderType || !customerEmail) {
       console.log('VALIDATION FAILED: Missing required fields');
@@ -117,22 +103,6 @@ export default async function handler(req: any, res: any) {
     formData.append('return_url', returnUrl);
     formData.append('cancel_url', cancelUrl);
 
-   // ========== DEBUG LOGGING START ==========
-   console.log('-'.repeat(60));
-   console.log('CALLING EZEEPAYMENTS API');
-   console.log('-'.repeat(60));
-   console.log('URL:', `${EZEE_API_URL}/v1/custom_token/`);
-   console.log('Headers:');
-   console.log('  Content-Type: application/x-www-form-urlencoded');
-   console.log('  licence_key:', EZEE_LICENCE_KEY ? `${EZEE_LICENCE_KEY.substring(0, 8)}...` : 'NOT SET');
-   console.log('  site:', EZEE_SITE);
-   console.log('Form Data:', formData.toString());
-   console.log('Form Data (decoded):');
-   for (const [key, value] of formData.entries()) {
-     console.log(`  ${key}: ${value}`);
-   }
-   // ========== DEBUG LOGGING END ==========
-
    // Create token with eZeePayments
     // licence_key and site MUST be in headers, not body
    const tokenResponse = await fetch(`${EZEE_API_URL}/v1/custom_token/`, {
@@ -145,45 +115,23 @@ export default async function handler(req: any, res: any) {
       body: formData.toString(),
     });
 
-    // ========== DEBUG LOGGING START ==========
-    console.log('-'.repeat(60));
-    console.log('EZEEPAYMENTS RESPONSE');
-    console.log('-'.repeat(60));
-    console.log('HTTP Status:', tokenResponse.status);
-    console.log('HTTP Status Text:', tokenResponse.statusText);
-    // ========== DEBUG LOGGING END ==========
-
     // Get raw response text first
     const responseText = await tokenResponse.text();
-    console.log('Raw Response Body:', responseText);
 
     let tokenData;
     try {
       tokenData = JSON.parse(responseText);
-      console.log('Parsed Response:', JSON.stringify(tokenData, null, 2));
     } catch (jsonError) {
       console.error('FAILED TO PARSE JSON:', jsonError);
-      console.error('Raw text was:', responseText);
       return res.status(500).json({ 
         error: 'Invalid response from payment provider',
         rawResponse: responseText 
       });
     }
 
-    // ========== DEBUG LOGGING START ==========
-    console.log('-'.repeat(60));
-    console.log('RESPONSE ANALYSIS');
-    console.log('-'.repeat(60));
-    console.log('Has result?', !!tokenData.result);
-    console.log('result.status:', tokenData.result?.status);
-    console.log('result.token:', tokenData.result?.token);
-    console.log('result.message:', tokenData.result?.message);
-    // ========== DEBUG LOGGING END ==========
-
     // Check response - note the "result" wrapper
     if (!tokenData.result || tokenData.result.status !== 1) {
-     console.error('TOKEN CREATION FAILED!');
-     console.error('Full response:', JSON.stringify(tokenData, null, 2));
+     console.error('TOKEN CREATION FAILED:', tokenData.result?.message);
       return res.status(500).json({ 
         error: tokenData.result?.message || 'Failed to create payment token',
         details: tokenData 
@@ -192,7 +140,6 @@ export default async function handler(req: any, res: any) {
 
     // Token is inside result object
     const token = tokenData.result.token;
-    console.log('TOKEN CREATED SUCCESSFULLY:', token);
 
    // Store transaction in database
     // Use uniqueOrderId as order_id (this is what eZeePayments will send back as CustomOrderId)
@@ -202,7 +149,7 @@ export default async function handler(req: any, res: any) {
    // OrderId format: EVT_{eventId}_{timestamp}_{random}
    // Description format: "{Event Title} - {ticketCount} ticket(s)"
    let eventMetadata: any = {};
-   if (orderType === 'event_registration' && !referenceId) {
+    if (orderType === 'event_registration' && !referenceId) {
      // Extract event_id from orderId (format: EVT_{eventId}_{timestamp}_{random})
      const orderIdMatch = orderId.match(/^EVT_([^_]+)_/);
      if (orderIdMatch && orderIdMatch[1]) {
@@ -217,7 +164,10 @@ export default async function handler(req: any, res: any) {
        eventMetadata.ticket_count = 1; // Default to 1 if not found
      }
      
-     console.log('[CREATE-TOKEN] Event registration metadata:', eventMetadata);
+    console.log('[CREATE-TOKEN] Event registration metadata:', {
+      event_id: eventMetadata.event_id,
+      ticket_count: eventMetadata.ticket_count,
+    });
    }
    
    const { data: transaction, error: dbError } = await supabase
@@ -242,11 +192,9 @@ export default async function handler(req: any, res: any) {
      .select()
      .single();
 
-   if (dbError) {
-     console.error('Database error:', dbError);
+  if (dbError) {
+    console.error('Database error:', dbError?.message);
       // Continue even if DB insert fails - we still return the token
-   } else {
-     console.log('Transaction saved to DB:', transaction?.id);
    }
 
     // Build the redirect URL to our payment form page
@@ -260,11 +208,6 @@ export default async function handler(req: any, res: any) {
       name: customerName || '',
       description: description || `Payment for ${orderType}`,
     }).toString();
-
-    console.log('='.repeat(60));
-    console.log('CREATE TOKEN COMPLETED SUCCESSFULLY');
-    console.log('Payment URL:', paymentRedirectUrl);
-    console.log('='.repeat(60));
 
     return res.status(200).json({
        success: true,
@@ -282,11 +225,7 @@ export default async function handler(req: any, res: any) {
       },
     });
   } catch (error: any) {
-   console.error('='.repeat(60));
-   console.error('CREATE TOKEN FATAL ERROR');
-   console.error('='.repeat(60));
-   console.error('Error:', error);
-   console.error('Stack:', error.stack);
+   console.error('CREATE TOKEN ERROR:', error?.message);
     return res.status(500).json({ error: 'Internal server error' });
  }
 }
