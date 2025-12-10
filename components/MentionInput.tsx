@@ -1,10 +1,10 @@
 /**
  * MentionInput Component
  * A TextInput wrapper that enables @mention functionality
- * Shows a user picker when @ is typed
+ * Shows friendly @Name while typing, but stores @[Name](userId) format
  */
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import {
   View,
   Text,
@@ -21,14 +21,12 @@ import {
 import { Colors } from '../constants/colors';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { getTypingMention, insertMention, MentionUser, mentionToDisplayText } from '../utils/mentions';
 import debounce from 'lodash/debounce';
 
-interface MentionInputProps extends Omit<TextInputProps, 'onChangeText'> {
+interface MentionInputProps extends Omit<TextInputProps, 'onChangeText' | 'value'> {
   value: string;
   onChangeText: (text: string) => void;
   placeholder?: string;
-  inputRef?: React.RefObject<TextInput>;
 }
 
 interface SearchUser {
@@ -38,41 +36,110 @@ interface SearchUser {
   location?: string;
 }
 
-export default function MentionInput({
+interface InsertedMention {
+  userId: string;
+  fullName: string;
+  displayText: string; // @Name
+  rawText: string; // @[Name](userId)
+}
+
+// Convert raw format to display format
+const rawToDisplay = (text: string): string => {
+  return text.replace(/@\[([^\]]+)\]\([^)]+\)/g, '@$1');
+};
+
+// Check if user is typing a mention
+const getTypingMention = (text: string, cursorPosition: number): string | null => {
+  const textBeforeCursor = text.slice(0, cursorPosition);
+  const match = textBeforeCursor.match(/@(\w*)$/);
+  return match ? match[1] : null;
+};
+
+const MentionInput = forwardRef<TextInput, MentionInputProps>(({ 
   value,
   onChangeText,
   placeholder = "What's on your mind?",
-  inputRef: externalRef,
   ...textInputProps
-}: MentionInputProps) {
+}, ref) => {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const { user: currentUser } = useAuth();
-
-  const internalRef = useRef<TextInput>(null);
-  const inputRef = externalRef || internalRef;
-
+  
+  const inputRef = useRef<TextInput>(null);
+  
+  // Expose ref to parent
+  useImperativeHandle(ref, () => inputRef.current as TextInput);
+  
+  // The display text (what user sees) - derived from value
+  const [displayText, setDisplayText] = useState(() => rawToDisplay(value));
+  
+  // Track cursor position
+  const [cursorPosition, setCursorPosition] = useState(0);
+  
   // Mention picker state
   const [showMentionPicker, setShowMentionPicker] = useState(false);
   const [mentionSearch, setMentionSearch] = useState('');
   const [searchResults, setSearchResults] = useState<SearchUser[]>([]);
   const [searching, setSearching] = useState(false);
-  const [cursorPosition, setCursorPosition] = useState(0);
-  const [displayText, setDisplayText] = useState(mentionToDisplayText(value));
+  
+  // Track the mapping between display positions and raw format
+  // This helps us reconstruct raw text when user types
+  const mentionMapRef = useRef<Map<string, InsertedMention>>(new Map());
 
+  // Sync display text when value changes externally
   useEffect(() => {
-    // Only update display text if value changed externally (not from our own edits)
-    const newDisplayText = mentionToDisplayText(value);
-    if (newDisplayText !== displayText && !showMentionPicker) {
-      setDisplayText(newDisplayText);
+    const newDisplay = rawToDisplay(value);
+    if (newDisplay !== displayText) {
+      setDisplayText(newDisplay);
+      // Rebuild mention map from value
+      rebuildMentionMap(value);
     }
-  }, [value, displayText, showMentionPicker]);
+  }, [value]);
+
+  const rebuildMentionMap = (rawText: string) => {
+    const map = new Map<string, InsertedMention>();
+    const pattern = /@\[([^\]]+)\]\(([^)]+)\)/g;
+    let match;
+    
+    while ((match = pattern.exec(rawText)) !== null) {
+      const fullName = match[1];
+      const userId = match[2];
+      const displayText = `@${fullName}`;
+      const rawTextPart = match[0];
+      
+      map.set(displayText, {
+        userId,
+        fullName,
+        displayText,
+        rawText: rawTextPart,
+      });
+    }
+    
+    mentionMapRef.current = map;
+  };
+
+  // Convert display text back to raw format using mention map
+  const displayToRaw = (display: string): string => {
+    let raw = display;
+    
+    // Sort by length descending to replace longer names first (avoid partial matches)
+    const mentions = Array.from(mentionMapRef.current.values())
+      .sort((a, b) => b.displayText.length - a.displayText.length);
+    
+    for (const mention of mentions) {
+      // Only replace if the mention still exists in the text
+      if (raw.includes(mention.displayText)) {
+        raw = raw.replace(mention.displayText, mention.rawText);
+      }
+    }
+    
+    return raw;
+  };
 
   // Debounced user search
   const searchUsers = useCallback(
     debounce(async (query: string) => {
       if (query.length < 1) {
-        // Show recent/suggested users when @ is typed with no query
         loadSuggestedUsers();
         return;
       }
@@ -108,8 +175,6 @@ export default function MentionInput({
   const loadSuggestedUsers = async () => {
     try {
       setSearching(true);
-      // Load users the current user has interacted with recently
-      // For now, just load some active users
       const { data, error } = await supabase
         .from('users')
         .select('id, full_name, avatar_url, location')
@@ -134,13 +199,12 @@ export default function MentionInput({
     }
   };
 
-  // Handle text change and detect @ mentions
   const handleTextChange = (newDisplayText: string) => {
     setDisplayText(newDisplayText);
     
     // Check if user is typing a mention
     const typingMention = getTypingMention(newDisplayText, cursorPosition + (newDisplayText.length - displayText.length));
-
+    
     if (typingMention !== null) {
       setShowMentionPicker(true);
       setMentionSearch(typingMention);
@@ -150,17 +214,15 @@ export default function MentionInput({
       setMentionSearch('');
     }
     
-    // For simple text changes (no mentions being edited), sync to parent
-    // We'll rebuild the raw format when mentions are inserted
-    onChangeText(newDisplayText);
+    // Convert back to raw format and update parent
+    const rawText = displayToRaw(newDisplayText);
+    onChangeText(rawText);
   };
 
-  // Handle cursor position changes
   const handleSelectionChange = (event: any) => {
     const position = event.nativeEvent.selection.end;
     setCursorPosition(position);
-
-    // Check for mention in display text
+    
     const typingMention = getTypingMention(displayText, position);
     if (typingMention !== null) {
       setShowMentionPicker(true);
@@ -171,38 +233,43 @@ export default function MentionInput({
     }
   };
 
-  // Handle user selection from picker
   const handleSelectUser = (user: SearchUser) => {
-    const mentionUser: MentionUser = {
-      id: user.id,
+    // Find the @ position
+    const textBeforeCursor = displayText.slice(0, cursorPosition);
+    const atIndex = textBeforeCursor.lastIndexOf('@');
+    
+    if (atIndex === -1) return;
+    
+    const textBefore = displayText.slice(0, atIndex);
+    const textAfter = displayText.slice(cursorPosition);
+    
+    // Create mention texts
+    const displayMention = `@${user.fullName}`;
+    const rawMention = `@[${user.fullName}](${user.id})`;
+    
+    // Store in mention map
+    mentionMapRef.current.set(displayMention, {
+      userId: user.id,
       fullName: user.fullName,
-    };
-
-    // Insert raw format into the actual value (for data extraction)
-    const { newText: newRawText, newCursorPosition } = insertMention(value, cursorPosition, mentionUser);
+      displayText: displayMention,
+      rawText: rawMention,
+    });
     
-    // Calculate the display version
-    const newDisplayTextValue = mentionToDisplayText(newRawText);
+    // Build new texts
+    const newDisplayText = textBefore + displayMention + ' ' + textAfter;
+    const newRawText = displayToRaw(newDisplayText);
     
-    // Update both
-    setDisplayText(newDisplayTextValue);
+    // Update states
+    setDisplayText(newDisplayText);
     onChangeText(newRawText);
+    setCursorPosition(textBefore.length + displayMention.length + 1);
     
-    // Calculate new cursor position for display text
-    // The display text is shorter, so we need to adjust
-    const rawMentionLength = `@[${user.fullName}](${user.id}) `.length;
-    const displayMentionLength = `@${user.fullName} `.length;
-    const adjustedCursor = newCursorPosition - (rawMentionLength - displayMentionLength);
-    
-    setCursorPosition(adjustedCursor);
     setShowMentionPicker(false);
     setMentionSearch('');
-
-    // Keep keyboard open and focus
+    
     inputRef.current?.focus();
   };
 
-  // Close picker when keyboard hides
   useEffect(() => {
     const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
       setShowMentionPicker(false);
@@ -222,7 +289,7 @@ export default function MentionInput({
       {item.avatarUrl ? (
         <Image source={{ uri: item.avatarUrl }} style={styles.userAvatar} />
       ) : (
-        <View style={[styles.userAvatar, styles.userAvatarPlaceholder, { backgroundColor: colors.primary }]}>
+        <View style={[styles.userAvatar, styles.userAvatarPlaceholder, { backgroundColor: colors.primary }]}> 
           <Text style={styles.userAvatarText}>
             {item.fullName?.charAt(0).toUpperCase() || '?'}
           </Text>
@@ -231,7 +298,7 @@ export default function MentionInput({
       <View style={styles.userInfo}>
         <Text style={[styles.userName, { color: colors.text }]}>{item.fullName}</Text>
         {item.location && (
-          <Text style={[styles.userLocation, { color: colors.textSecondary }]}>
+          <Text style={[styles.userLocation, { color: colors.textSecondary }]}> 
             📍 {item.location}
           </Text>
         )}
@@ -243,14 +310,14 @@ export default function MentionInput({
     <View style={styles.container}>
       {/* Mention Picker Dropdown */}
       {showMentionPicker && (
-        <View style={[styles.mentionPicker, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={[styles.mentionHeader, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.mentionHeaderText, { color: colors.textSecondary }]}>
+        <View style={[styles.mentionPicker, { backgroundColor: colors.card, borderColor: colors.border }]}> 
+          <View style={[styles.mentionHeader, { borderBottomColor: colors.border }]}> 
+            <Text style={[styles.mentionHeaderText, { color: colors.textSecondary }]}> 
               {mentionSearch ? `Searching "${mentionSearch}"...` : 'Mention someone'}
             </Text>
             {searching && <ActivityIndicator size="small" color={colors.primary} />}
           </View>
-
+          
           {searchResults.length > 0 ? (
             <FlatList
               data={searchResults}
@@ -262,7 +329,7 @@ export default function MentionInput({
             />
           ) : !searching ? (
             <View style={styles.emptyState}>
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}> 
                 {mentionSearch ? 'No users found' : 'Type a name to search'}
               </Text>
             </View>
@@ -288,7 +355,11 @@ export default function MentionInput({
       />
     </View>
   );
-}
+});
+
+MentionInput.displayName = 'MentionInput';
+
+export default MentionInput;
 
 const styles = StyleSheet.create({
   container: {
