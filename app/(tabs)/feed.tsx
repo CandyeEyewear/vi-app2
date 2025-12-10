@@ -41,7 +41,7 @@ import { decode } from 'base64-arraybuffer';
 import { supabase } from '../../services/supabase';
 import { uploadMultipleImages } from '../../services/imageUpload';
 import { uploadVideo, getVideoSize, formatFileSize, isVideoTooLarge } from '../../services/videoUtils';
-import { extractMentionedUserIds, mentionToDisplayText } from '../../utils/mentions';
+import { extractMentionedUserIds } from '../../utils/mentions';
 
 export default function FeedScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -489,16 +489,11 @@ const renderTabs = () => (
         data={sortedPosts}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => {
-          const postWithDisplayMentions = {
-            ...item,
-            text: mentionToDisplayText(item.text || ''),
-          };
-
-          if (postWithDisplayMentions.postType === 'shoutout') {
-            return <ShoutoutCard post={postWithDisplayMentions} />;
+          if (item.postType === 'shoutout') {
+            return <ShoutoutCard post={item} />;
           }
           // Render regular FeedPostCard for all other posts
-          return <FeedPostCard post={postWithDisplayMentions} />;
+          return <FeedPostCard post={item} />;
         }}
         contentContainerStyle={[styles.listContent, { paddingBottom: 12 + insets.bottom }]}
         ListHeaderComponent={() => {

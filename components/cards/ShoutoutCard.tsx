@@ -21,6 +21,7 @@ import { Colors } from '../../constants/colors';
 import { useFeed } from '../../contexts/FeedContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../services/supabase';
+import MentionText from '../MentionText';
 
 interface CoSigner {
   id: string;
@@ -223,8 +224,15 @@ export default function ShoutoutCard({ post, onReaction, onComment, onShare }: S
           {/* Recognition Message */}
           {post.text && (
             <View style={styles.messageSection}>
-              <Text style={[styles.messageText, { color: colors.text }]}>
-                "{post.text}"
+              <Text style={[styles.messageText, styles.messageQuote, { color: colors.text }]}>
+                "
+              </Text>
+              <MentionText
+                text={post.text || ''}
+                style={[styles.messageText, styles.messageBody, { color: colors.text }]}
+              />
+              <Text style={[styles.messageText, styles.messageQuote, { color: colors.text }]}>
+                "
               </Text>
             </View>
           )}
@@ -423,11 +431,20 @@ const styles = StyleSheet.create({
   },
   messageSection: {
     marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
   },
   messageText: {
     fontSize: 15,
     lineHeight: 22,
     fontStyle: 'italic',
+  },
+  messageQuote: {
+    marginHorizontal: 2,
+  },
+  messageBody: {
+    flexShrink: 1,
   },
   eventTag: {
     flexDirection: 'row',
