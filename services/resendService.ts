@@ -23,7 +23,6 @@ export async function sendWelcomeEmail(
     
     console.log('[RESEND] Sending welcome email...');
     console.log('[RESEND] Environment:', typeof Deno !== 'undefined' ? 'Deno/Edge' : 'Node.js');
-    console.log('[RESEND] API Key exists?', !!RESEND_API_KEY);
 
     const isNodeEnv = !!globalProcess && typeof Deno === 'undefined';
 
@@ -389,7 +388,6 @@ export async function sendEventConfirmationEmail(
     
     console.log('[RESEND] Sending event confirmation email...');
     console.log('[RESEND] Environment:', typeof Deno !== 'undefined' ? 'Deno/Edge' : 'Node.js');
-    console.log('[RESEND] API Key exists?', !!RESEND_API_KEY);
 
     const isNodeEnv = !!globalProcess && typeof Deno === 'undefined';
 
@@ -705,7 +703,6 @@ export async function sendPaymentReceiptEmail(
     
     console.log('[RESEND] Sending payment receipt email...');
     console.log('[RESEND] Environment:', typeof Deno !== 'undefined' ? 'Deno/Edge' : 'Node.js');
-    console.log('[RESEND] API Key exists?', !!RESEND_API_KEY);
 
     const isNodeEnv = !!globalProcess && typeof Deno === 'undefined';
 
