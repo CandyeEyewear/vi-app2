@@ -310,6 +310,19 @@ export interface Mention {
   createdAt: string;
 }
 
+export interface Hashtag {
+  id: string;
+  postId?: string;
+  commentId?: string;
+  eventId?: string;
+  causeId?: string;
+  opportunityId?: string;
+  taggedByUserId: string;
+  createdAt: string;
+}
+
+export type HashtagType = 'event' | 'cause' | 'opportunity';
+
 // ==================== MODERATION TYPES ====================
 
 export type ReportReason = 
