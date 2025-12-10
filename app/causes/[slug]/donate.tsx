@@ -67,6 +67,7 @@ import {
   processSubscription,
   type Frequency as PaymentFrequency,
 } from '../../../services/paymentService';
+import { goBack } from '../../../utils/navigation';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -782,11 +783,11 @@ export default function DonateScreen() {
           }
         } else {
           showAlert('Error', 'Failed to load cause');
-          router.back();
+          goBack(id ? `/causes/${id}` : '/(tabs)/discover');
         }
       } catch (error) {
         console.error('Error fetching cause:', error);
-        router.back();
+        goBack(id ? `/causes/${id}` : '/(tabs)/discover');
       } finally {
         setLoading(false);
       }
@@ -1030,7 +1031,7 @@ export default function DonateScreen() {
             borderBottomColor: colors.border,
           }
         ]}>
-          <HeaderButton onPress={() => router.back()} colors={colors}>
+          <HeaderButton onPress={() => goBack(id ? `/causes/${id}` : '/(tabs)/discover')} colors={colors}>
             <ArrowLeft size={22} color={colors.text} />
           </HeaderButton>
           <Text style={[styles.headerTitle, { color: colors.text }]}>Donate</Text>
@@ -1055,7 +1056,7 @@ export default function DonateScreen() {
           borderBottomColor: colors.border,
         }
       ]}>
-        <HeaderButton onPress={() => router.back()} colors={colors}>
+        <HeaderButton onPress={() => goBack(id ? `/causes/${id}` : '/(tabs)/discover')} colors={colors}>
           <ArrowLeft size={22} color={colors.text} />
         </HeaderButton>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Donate</Text>

@@ -65,6 +65,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import WebContainer from '../../components/WebContainer';
 import { UserAvatar } from '../../components';
+import { goBack } from '../../utils/navigation';
 
 // ============================================================================
 // RESPONSIVE UTILITIES
@@ -815,7 +816,7 @@ export default function CauseDetailScreen() {
           styles.header, 
           { paddingTop: insets.top + 8 }
         ]}>
-          <HeaderButton onPress={() => router.back()} colors={colors}>
+          <HeaderButton onPress={() => goBack('/(tabs)/discover')} colors={colors}>
             <ArrowLeft size={22} color={colors.text} />
           </HeaderButton>
         </View>
@@ -848,7 +849,7 @@ export default function CauseDetailScreen() {
 
       {/* Floating Header */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <HeaderButton onPress={() => router.back()} colors={colors}>
+        <HeaderButton onPress={() => goBack('/(tabs)/discover')} colors={colors}>
           <ArrowLeft size={22} color={colors.text} />
         </HeaderButton>
         <HeaderButton onPress={handleShare} colors={colors}>

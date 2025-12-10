@@ -51,6 +51,7 @@ import { processPayment } from '../../../services/paymentService';
 import { generateTicketsForRegistration } from '../../../services/eventTicketsService';
 import { sendEventConfirmationEmail } from '../../../services/resendService';
 import { showToast } from '../../../utils/toast';
+import { goBack } from '../../../utils/navigation';
 import ErrorBoundary from '../../../components/ErrorBoundary';
 import Card from '../../../components/Card';
 import Button from '../../../components/Button';
@@ -476,6 +477,7 @@ function SuccessAnimation({ visible }: { visible: boolean }) {
 // Main Component
 export default function EventRegisterScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
+  const fallbackRoute = slug ? `/events/${slug}` : '/(tabs)/discover';
   const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
@@ -612,7 +614,7 @@ export default function EventRegisterScreen() {
           
           // Delayed navigation to show success animation
           setTimeout(() => {
-            router.back();
+            goBack(fallbackRoute);
           }, 2000);
         } else {
           throw new Error(response.error || 'Registration failed');
@@ -650,7 +652,7 @@ export default function EventRegisterScreen() {
 
       // Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast('Payment processing! You\'ll receive confirmation soon.', 'success');
-      router.back();
+      goBack(fallbackRoute);
 
     } catch (error) {
       console.error('Registration/Purchase error:', error);
@@ -669,7 +671,7 @@ export default function EventRegisterScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
         <RegistrationHeader 
-          onBack={() => router.back()} 
+          onBack={() => goBack(fallbackRoute)} 
           isFree={false}
           colors={colors} 
         />
@@ -686,7 +688,7 @@ export default function EventRegisterScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
         <RegistrationHeader 
-          onBack={() => router.back()} 
+          onBack={() => goBack(fallbackRoute)} 
           isFree={false}
           colors={colors} 
         />
@@ -703,7 +705,7 @@ export default function EventRegisterScreen() {
         <Stack.Screen options={{ headerShown: false }} />
 
         <RegistrationHeader 
-          onBack={() => router.back()} 
+          onBack={() => goBack(fallbackRoute)} 
           isFree={event.isFree}
           colors={colors} 
         />

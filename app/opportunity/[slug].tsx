@@ -64,6 +64,7 @@ import ParticipantsList from '../../components/ParticipantsList';
 import QRScanner from '../../components/QRScanner';
 import ShareOpportunityModal from '../../components/ShareOpportunityModal';
 import { useFeed } from '../../contexts/FeedContext';
+import { goBack } from '../../utils/navigation';
 
 // ============================================================================
 // CONSTANTS & HELPERS
@@ -564,7 +565,7 @@ export default function OpportunityDetailsScreen() {
       setSubmitting(true);
       await supabase.from('opportunities').delete().eq('id', opportunity.id);
       showAlert('Deleted', 'Opportunity has been deleted', 'success');
-      setTimeout(() => router.back(), 1500);
+      setTimeout(() => goBack('/(tabs)/discover'), 1500);
     } catch (error: any) {
       console.error('Error deleting opportunity:', error);
       showAlert('Error', error.message || 'Failed to delete opportunity', 'error');
@@ -707,7 +708,7 @@ export default function OpportunityDetailsScreen() {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => router.back()} style={[styles.headerBtn, { backgroundColor: colors.card }]}>
+          <TouchableOpacity onPress={() => goBack('/(tabs)/discover')} style={[styles.headerBtn, { backgroundColor: colors.card }]}>
             <ChevronLeft size={22} color={colors.text} />
           </TouchableOpacity>
         </View>
@@ -726,7 +727,7 @@ export default function OpportunityDetailsScreen() {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => router.back()} style={[styles.headerBtn, { backgroundColor: colors.card }]}>
+          <TouchableOpacity onPress={() => goBack('/(tabs)/discover')} style={[styles.headerBtn, { backgroundColor: colors.card }]}>
             <ChevronLeft size={22} color={colors.text} />
           </TouchableOpacity>
         </View>
@@ -736,7 +737,7 @@ export default function OpportunityDetailsScreen() {
           </View>
           <Text style={[styles.errorTitle, { color: colors.text }]}>Opportunity Not Found</Text>
           <Text style={[styles.errorSubtitle, { color: colors.textSecondary }]}>This opportunity may have been removed.</Text>
-          <AnimatedPressable onPress={() => router.back()}>
+          <AnimatedPressable onPress={() => goBack('/(tabs)/discover')}>
             <LinearGradient colors={[colors.primary, colors.primaryDark || colors.primary]} style={styles.errorBtn}>
               <Text style={styles.errorBtnText}>Go Back</Text>
             </LinearGradient>
@@ -758,7 +759,7 @@ export default function OpportunityDetailsScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* HEADER */}
       <View style={[styles.header, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={[styles.headerBtn, { backgroundColor: colors.card }]}>
+        <TouchableOpacity onPress={() => goBack('/(tabs)/discover')} style={[styles.headerBtn, { backgroundColor: colors.card }]}>
           <ChevronLeft size={22} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerActions}>

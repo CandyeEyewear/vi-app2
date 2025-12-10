@@ -41,6 +41,7 @@ import TypingIndicator from '../../components/TypingIndicator';
 import OnlineStatusDot from '../../components/OnlineStatusDot';
 import SwipeableMessage from '../../components/SwipeableMessage';
 import { UserAvatar, UserNameWithBadge } from '../../components/index';
+import { goBack } from '../../utils/navigation';
 
 export default function ConversationScreen() {
   const router = useRouter();
@@ -957,7 +958,7 @@ export default function ConversationScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       {/* Header - Fixed at top, never moves */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => goBack('/(tabs)/messages')} style={styles.backButton}>
           <ChevronLeft size={28} color={Colors.light.primary} />
         </TouchableOpacity>
         <TouchableOpacity 

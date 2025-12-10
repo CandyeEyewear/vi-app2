@@ -61,6 +61,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { showToast } from '../../utils/toast';
 import { logImageDebugInfo } from '../../utils/webImageDebug';
+import { goBack } from '../../utils/navigation';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import Button from '../../components/Button';
 import { ShimmerSkeleton } from '../../components/ShimmerSkeleton';
@@ -845,7 +846,7 @@ export default function EventDetailScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <EventHeader onBack={() => router.back()} onShare={() => {}} colors={colors} />
+        <EventHeader onBack={() => goBack('/(tabs)/discover')} onShare={() => {}} colors={colors} />
         <ScrollView style={styles.scrollView}>
           <ShimmerSkeleton
             colors={colors}
@@ -910,7 +911,7 @@ export default function EventDetailScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <EventHeader onBack={() => router.back()} onShare={() => {}} colors={colors} />
+        <EventHeader onBack={() => goBack('/(tabs)/discover')} onShare={() => {}} colors={colors} />
         <ErrorBoundary>
           <ErrorScreen onRetry={refetch} colors={colors} />
         </ErrorBoundary>
@@ -951,7 +952,7 @@ export default function EventDetailScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
 
-        <EventHeader onBack={() => router.back()} onShare={handleShare} colors={colors} />
+        <EventHeader onBack={() => goBack('/(tabs)/discover')} onShare={handleShare} colors={colors} />
 
         <ScrollView
           style={styles.scrollView}
