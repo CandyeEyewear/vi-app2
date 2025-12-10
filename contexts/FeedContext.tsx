@@ -10,6 +10,7 @@ import { supabase } from '../services/supabase';
 import { getCauseById } from '../services/causesService';
 import { useAuth } from './AuthContext';
 import { extractMentionedUserIds } from '../utils/mentions';
+import { extractHashtagIds } from '../utils/hashtags';
 
 interface FeedContextType {
   posts: Post[];
@@ -1578,6 +1579,39 @@ const postsWithEvents = await Promise.all(
           console.log('[FEED] 📣 Saved comment mentions:', mentionedUserIds);
         } catch (error) {
           console.error('[FEED] Error saving comment mentions:', error);
+        }
+      }
+
+      // Save hashtags for the comment
+      const { eventIds, causeIds, opportunityIds } = extractHashtagIds(text);
+
+      if (data?.id && (eventIds.length > 0 || causeIds.length > 0 || opportunityIds.length > 0)) {
+        try {
+          const hashtagInserts = [
+            ...eventIds.map((eventId) => ({
+              comment_id: data.id,
+              post_id: postId,
+              event_id: eventId,
+              tagged_by_user_id: user.id,
+            })),
+            ...causeIds.map((causeId) => ({
+              comment_id: data.id,
+              post_id: postId,
+              cause_id: causeId,
+              tagged_by_user_id: user.id,
+            })),
+            ...opportunityIds.map((oppId) => ({
+              comment_id: data.id,
+              post_id: postId,
+              opportunity_id: oppId,
+              tagged_by_user_id: user.id,
+            })),
+          ];
+
+          await supabase.from('post_hashtags').insert(hashtagInserts);
+          console.log('[COMMENTS] 🏷️ Saved hashtags:', { eventIds, causeIds, opportunityIds });
+        } catch (error) {
+          console.error('[COMMENTS] Error saving hashtags:', error);
         }
       }
 

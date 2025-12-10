@@ -42,6 +42,7 @@ import { supabase } from '../../services/supabase';
 import { uploadMultipleImages } from '../../services/imageUpload';
 import { uploadVideo, getVideoSize, formatFileSize, isVideoTooLarge } from '../../services/videoUtils';
 import { extractMentionedUserIds } from '../../utils/mentions';
+import { extractHashtagIds } from '../../utils/hashtags';
 
 export default function FeedScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -287,6 +288,39 @@ const loadNotificationCount = async () => {
           } catch (error) {
             console.error('[FEED] Error saving mentions:', error);
             // Don't fail the post creation if mentions fail to save
+          }
+        }
+
+        // Save hashtags (events, causes, opportunities)
+        const { eventIds, causeIds, opportunityIds } = extractHashtagIds(postContent);
+
+        if (newPostId && (eventIds.length > 0 || causeIds.length > 0 || opportunityIds.length > 0)) {
+          try {
+            const hashtagInserts = [
+              ...eventIds.map(eventId => ({
+                post_id: newPostId,
+                event_id: eventId,
+                tagged_by_user_id: user?.id,
+              })),
+              ...causeIds.map(causeId => ({
+                post_id: newPostId,
+                cause_id: causeId,
+                tagged_by_user_id: user?.id,
+              })),
+              ...opportunityIds.map(oppId => ({
+                post_id: newPostId,
+                opportunity_id: oppId,
+                tagged_by_user_id: user?.id,
+              })),
+            ];
+
+            await supabase
+              .from('post_hashtags')
+              .insert(hashtagInserts);
+            
+            console.log('[FEED] 🏷️ Saved hashtags:', { eventIds, causeIds, opportunityIds });
+          } catch (error) {
+            console.error('[FEED] Error saving hashtags:', error);
           }
         }
 
