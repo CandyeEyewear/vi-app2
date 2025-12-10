@@ -653,6 +653,8 @@ export default function EventDetailScreen() {
   const { user } = useAuth();
   const responsive = getResponsiveValues();
   const insets = useSafeAreaInsets();
+  // Extra padding needed for mobile web browsers
+  const webBottomPadding = Platform.OS === 'web' ? 40 : 0;
 
   const { event, registration, registrations, loading, error, refetch } = useEventDetails(slug);
 
@@ -958,7 +960,7 @@ export default function EventDetailScreen() {
           style={styles.scrollView}
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingBottom: 120 + insets.bottom },
+            { paddingBottom: 120 + insets.bottom + webBottomPadding },
           ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -1112,7 +1114,9 @@ export default function EventDetailScreen() {
             )}
 
             {/* Bottom spacing for fixed button */}
-            <View style={[styles.bottomSpacing, { height: 120 + insets.bottom }]} />
+            <View
+              style={[styles.bottomSpacing, { height: 120 + insets.bottom + webBottomPadding }]}
+            />
           </View>
         </ScrollView>
 
@@ -1124,7 +1128,7 @@ export default function EventDetailScreen() {
               {
                 backgroundColor: colors.background,
                 borderTopColor: colors.border,
-                paddingBottom: Spacing.xl + insets.bottom,
+                paddingBottom: Spacing.xl + insets.bottom + webBottomPadding,
               },
             ]}
           >
