@@ -56,15 +56,19 @@ const createAsyncStorageAdapter = (): SupportedStorage => {
 // - React Native: AsyncStorage adapter
 // - Server: undefined (no storage needed, but undefined is acceptable)
 const getStorage = (): SupportedStorage | undefined => {
-  if (typeof window !== 'undefined') {
-    // Web environment - Supabase will use localStorage automatically
+  // Server environment - no storage needed
+  if (isServer) {
     return undefined;
   }
-  if (Platform.OS !== 'web') {
-    // React Native - use AsyncStorage
+
+  // React Native (iOS/Android) - use AsyncStorage for session persistence
+  if (Platform.OS === 'ios' || Platform.OS === 'android') {
+    console.log('[SUPABASE] Using AsyncStorage for session persistence');
     return createAsyncStorageAdapter();
   }
-  // Server environment - return undefined (Supabase handles this gracefully)
+
+  // Web environment - Supabase uses localStorage automatically
+  console.log('[SUPABASE] Using localStorage for session persistence (web)');
   return undefined;
 };
 
