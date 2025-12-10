@@ -645,6 +645,7 @@ export async function getUserDonations(
         cause:causes(id, title, image_url, status)
       `)
       .eq('user_id', userId)
+      .eq('payment_status', 'completed')
       .order('created_at', { ascending: false });
 
     if (options?.limit) {
