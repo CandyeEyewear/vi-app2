@@ -4,12 +4,12 @@
  */
 
 
-import React, { useEffect, useRef, useState } from 'react';
-import { Stack, useRouter, useSegments, usePathname, Redirect } from 'expo-router';
+import React, { useEffect, useRef } from 'react';
+import { Stack, useRouter, usePathname, Redirect } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import * as Linking from 'expo-linking';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { View, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, useWindowDimensions, Image, ActivityIndicator } from 'react-native';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { FeedProvider } from '../contexts/FeedContext';
 import { MessagingProvider } from '../contexts/MessagingContext';
@@ -29,9 +29,10 @@ try {
   logger.warn('expo-splash-screen not available, splash screen will auto-hide');
 }
 
+const splashImage = require('../assets/images/splash.png');
+
 function AppContent() {
   const router = useRouter();
-  const segments = useSegments();
   const pathname = usePathname();
   const { refreshUser } = useAuth();
   const { loading: authLoading, user } = useAuth();
@@ -42,26 +43,15 @@ function AppContent() {
   const isDesktop = isWeb && width >= 992;
   const showWebNav = isDesktop && !!user;
 
-  // Define public routes that don't require authentication
-  const publicRoutes = ['login', 'register', 'forgot-password', 'reset-password'];
-  
-  // Get current route to check if it's public
-  const currentRoute = segments[0] || pathname?.split('/')[1] || '';
-  // Check if path is exactly a public route (not just containing the word)
-  const isExactPublicRoute = 
-    pathname === '/login' || 
-    pathname === '/register' || 
-    pathname === '/forgot-password' || 
-    pathname === '/reset-password' ||
-    pathname === '/' || 
-    pathname === '';
-  
-  const isPublicRoute = 
-    publicRoutes.includes(currentRoute) || 
-    isExactPublicRoute;
+  const sanitizedPathname = pathname || '/';
+  const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/reset-password'];
+  const publicRoutePrefixes = ['/post/'];
+  const isPublicRoute =
+    publicRoutes.includes(sanitizedPathname) ||
+    publicRoutePrefixes.some((prefix) => sanitizedPathname.startsWith(prefix));
 
-  const isLoginPage = pathname === '/login';
-  const isRegisterPage = pathname === '/register';
+  const isLoginPage = sanitizedPathname === '/login';
+  const isRegisterPage = sanitizedPathname === '/register';
   const shouldRedirectToLogin = !authLoading && !user && !isPublicRoute;
   const shouldRedirectToFeed = !authLoading && !!user && (isLoginPage || isRegisterPage);
 
@@ -228,6 +218,15 @@ function AppContent() {
     };
   }, [router]);
 
+  if (authLoading) {
+    return (
+      <View style={styles.splashContainer}>
+        <Image source={splashImage} style={styles.splashImage} resizeMode="contain" />
+        <ActivityIndicator size="large" color="#111827" style={styles.splashSpinner} />
+      </View>
+    );
+  }
+
   return (
     <>
       <NetworkStatusBanner />
@@ -285,6 +284,22 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  splashContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  splashImage: {
+    width: '70%',
+    maxWidth: 320,
+    height: 200,
+    marginBottom: 24,
+  },
+  splashSpinner: {
+    marginTop: 8,
   },
 });
 
