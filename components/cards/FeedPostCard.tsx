@@ -40,6 +40,7 @@ import SharedEventCard from '../SharedEventCard';
 import ImageCollage from '../ImageCollage';
 import VideoPlayer from '../VideoPlayer';
 import LinkText from '../LinkText';
+import MentionText from '../MentionText';
 import { UserAvatar, UserNameWithBadge } from '../index';
 
 const { width } = Dimensions.get('window');
@@ -310,7 +311,10 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
       )}
 
       {/* Content - Text Only (username already in header) */}
-      <LinkText text={post.text} style={[styles.text, isAnnouncement && styles.announcementText]} />
+      <MentionText
+        text={post.text || ''}
+        style={[styles.text, isAnnouncement && styles.announcementText]}
+      />
 
       {/* NEW: Render Shared Post if this is a share */}
       {post.sharedPost && (
