@@ -5,6 +5,11 @@
 
 import { supabase } from './supabase';
 
+const RESEND_API_KEY =
+  (typeof Deno !== 'undefined' ? Deno.env.get('RESEND_API_KEY') : null) ||
+  (typeof process !== 'undefined' ? process.env.RESEND_API_KEY : null) ||
+  (typeof process !== 'undefined' ? process.env.EXPO_PUBLIC_RESEND_API_KEY : null);
+
 /**
  * Send welcome email to new user
  */
