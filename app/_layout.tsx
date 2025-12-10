@@ -221,8 +221,8 @@ function AppContent() {
   if (authLoading) {
     return (
       <View style={styles.splashContainer}>
-        <Image source={splashImage} style={styles.splashImage} resizeMode="contain" />
-        <ActivityIndicator size="large" color="#111827" style={styles.splashSpinner} />
+        <Image source={splashImage} style={styles.splashImage} resizeMode="cover" />
+        <ActivityIndicator size="large" color="#FFFFFF" style={styles.splashSpinner} />
       </View>
     );
   }
@@ -287,19 +287,15 @@ const styles = StyleSheet.create({
   },
   splashContainer: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
+    backgroundColor: '#38B6FF',
   },
   splashImage: {
-    width: '70%',
-    maxWidth: 320,
-    height: 200,
-    marginBottom: 24,
+    width: '100%',
+    height: '100%',
   },
   splashSpinner: {
-    marginTop: 8,
+    position: 'absolute',
+    bottom: 80,
   },
 });
 
