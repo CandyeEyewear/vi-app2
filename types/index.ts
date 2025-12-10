@@ -300,6 +300,16 @@ export interface Comment {
   createdAt: string;
 }
 
+export interface Mention {
+  id: string;
+  postId?: string;
+  commentId?: string;
+  mentionedUserId: string;
+  mentionedByUserId: string;
+  mentionedUser?: User;
+  createdAt: string;
+}
+
 // ==================== MODERATION TYPES ====================
 
 export type ReportReason = 
