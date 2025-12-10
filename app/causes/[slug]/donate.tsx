@@ -930,11 +930,16 @@ export default function DonateScreen() {
           return;
         }
 
-        showAlert(
-          'Subscription Created! 💝',
-          `Your recurring donation of ${formatCurrency(finalAmount)} to "${cause.title}" has been set up successfully.`,
-          () => router.back()
-        );
+        // Don't show alert - it blocks the redirect to eZeePayments!
+        // On web: window.location.href redirect is already scheduled
+        // On mobile native: in-app browser has opened
+        console.log('🔵 [DONATE] Recurring donation initiated, redirecting to payment...');
+
+        if (Platform.OS !== 'web') {
+          // On mobile native, reset submitting state
+          setSubmitting(false);
+        }
+        // On web, don't reset state - page is redirecting
         return;
       }
 
