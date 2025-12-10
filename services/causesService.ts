@@ -680,8 +680,11 @@ export async function createRecurringDonation(data: {
   userId: string;
   amount: number;
   frequency: RecurringFrequency;
-  subscriptionId: string;
+  subscriptionId?: string;
   isAnonymous?: boolean;
+  donorName?: string;
+  donorEmail?: string;
+  message?: string;
   endDate?: string;
 }): Promise<ApiResponse<RecurringDonation>> {
   try {
@@ -692,8 +695,11 @@ export async function createRecurringDonation(data: {
         user_id: data.userId,
         amount: data.amount,
         frequency: data.frequency,
-        subscription_id: data.subscriptionId,
+        subscription_id: data.subscriptionId || null,
         is_anonymous: data.isAnonymous ?? false,
+        donor_name: data.donorName,
+        donor_email: data.donorEmail,
+        message: data.message,
         end_date: data.endDate,
         status: 'active',
         currency: 'JMD',
