@@ -204,8 +204,10 @@ export default async function handler(req: any, res: any) {
     let orderType: string = 'other';
     if (subscriptionType === 'membership') {
       orderType = 'membership';
+    } else if (subscriptionType === 'organization_membership') {
+      orderType = 'organization_membership';
     } else if (subscriptionType === 'recurring_donation') {
-      orderType = 'donation';
+      orderType = 'recurring_donation';
     }
 
     const { error: txError } = await supabase

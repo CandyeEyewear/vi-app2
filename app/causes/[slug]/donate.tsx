@@ -57,6 +57,7 @@ import { Cause, RecurringFrequency } from '../../../types';
 import {
   getCauseById,
   createDonation,
+  createRecurringDonation,
   formatCurrency,
 } from '../../../services/causesService';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -892,27 +893,31 @@ export default function DonateScreen() {
       const donorNameValue = isAnonymous ? undefined : donorName.trim();
 
       if (isRecurring && user) {
-        const donationResponse = await createDonation({
+        // ✅ Step 1: Create recurring_donations record (NOT donations record)
+        const recurringResponse = await createRecurringDonation({
           causeId: cause.id,
-          amount: finalAmount,
           userId: user.id,
+          amount: finalAmount,
+          frequency,
+          isAnonymous,
           donorName: donorNameValue,
           donorEmail: donorEmailValue,
-          isAnonymous,
           message: message.trim() || undefined,
         });
 
-        if (!donationResponse.success || !donationResponse.data) {
-          throw new Error('Failed to create donation record');
+        if (!recurringResponse.success || !recurringResponse.data) {
+          throw new Error('Failed to create recurring donation record');
         }
 
-        const donation = donationResponse.data;
+        const recurringDonation = recurringResponse.data;
+        console.log('🔵 [DONATE] Created recurring_donations record:', recurringDonation.id);
 
+        // ✅ Step 2: Process subscription with recurring_donations.id as referenceId
         const subscriptionResult = await processSubscription({
           amount: finalAmount,
           frequency: mapFrequency(frequency),
           subscriptionType: 'recurring_donation',
-          referenceId: cause.id, // Use cause ID (UUID) for recurring donations
+          referenceId: recurringDonation.id, // Pass recurring_donations.id, not cause.id
           userId: user.id,
           customerEmail: donorEmailValue || user.email || '',
           customerName: donorNameValue || user.fullName,
