@@ -5,7 +5,7 @@
 
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Stack, useRouter, useSegments, usePathname } from 'expo-router';
+import { Stack, useRouter, useSegments, usePathname, Redirect } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import * as Linking from 'expo-linking';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -47,7 +47,6 @@ function AppContent() {
   
   // Get current route to check if it's public
   const currentRoute = segments[0] || pathname?.split('/')[1] || '';
-  const normalizedPath = pathname?.toLowerCase() || '';
   // Check if path is exactly a public route (not just containing the word)
   const isExactPublicRoute = 
     pathname === '/login' || 
@@ -61,32 +60,10 @@ function AppContent() {
     publicRoutes.includes(currentRoute) || 
     isExactPublicRoute;
 
-  // Redirect unauthenticated users to login (except for public routes)
-  useEffect(() => {
-    if (!authLoading) {
-      // If user is not logged in and trying to access a protected route
-      if (!user && !isPublicRoute) {
-        console.log('[AUTH REDIRECT] User not authenticated, redirecting to login', {
-          currentRoute,
-          pathname,
-          isPublicRoute,
-        });
-        router.replace('/login');
-        return;
-      }
-      
-      // If user is logged in but on login/register page, redirect to feed
-      // Only match exact routes, not paths that contain these words (e.g., /events/[slug]/register)
-      const isLoginPage = pathname === '/login';
-      const isRegisterPage = pathname === '/register';
-      
-      if (user && (isLoginPage || isRegisterPage)) {
-        console.log('[AUTH REDIRECT] User authenticated, redirecting from login/register to feed');
-        router.replace('/feed');
-        return;
-      }
-    }
-  }, [authLoading, user, isPublicRoute, currentRoute, router, pathname, normalizedPath]);
+  const isLoginPage = pathname === '/login';
+  const isRegisterPage = pathname === '/register';
+  const shouldRedirectToLogin = !authLoading && !user && !isPublicRoute;
+  const shouldRedirectToFeed = !authLoading && !!user && (isLoginPage || isRegisterPage);
 
   useEffect(() => {
     if (!authLoading && SplashScreen) {
@@ -256,28 +233,32 @@ function AppContent() {
       <NetworkStatusBanner />
       {showWebNav && <WebNavigation />}
       <View style={showWebNav ? { paddingTop: 64, flex: 1 } : { flex: 1 }}>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="login" />
-          <Stack.Screen name="register" />
-          <Stack.Screen name="forgot-password" />
-          <Stack.Screen name="reset-password" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="edit-profile" />
-          <Stack.Screen name="settings" />
-          <Stack.Screen name="conversation/[id]" />
-          <Stack.Screen name="opportunity/[slug]" />
-          <Stack.Screen name="profile/[slug]" />
-          <Stack.Screen name="post/[id]" />
-          <Stack.Screen name="propose-opportunity" />
-          <Stack.Screen name="membership-features" />
-          <Stack.Screen name="membership" />
-          <Stack.Screen name="membership/subscribe" />
-          <Stack.Screen name="causes/[slug]" />
-          <Stack.Screen name="causes/[slug]/donate" />
-          <Stack.Screen name="events/[slug]" />
-          <Stack.Screen name="events/[slug]/register" />
-          <Stack.Screen name="(admin)" />
-        </Stack>
+        {shouldRedirectToLogin && <Redirect href="/login" />}
+        {shouldRedirectToFeed && <Redirect href="/feed" />}
+        {!shouldRedirectToLogin && !shouldRedirectToFeed && (
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="login" />
+            <Stack.Screen name="register" />
+            <Stack.Screen name="forgot-password" />
+            <Stack.Screen name="reset-password" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="edit-profile" />
+            <Stack.Screen name="settings" />
+            <Stack.Screen name="conversation/[id]" />
+            <Stack.Screen name="opportunity/[slug]" />
+            <Stack.Screen name="profile/[slug]" />
+            <Stack.Screen name="post/[id]" />
+            <Stack.Screen name="propose-opportunity" />
+            <Stack.Screen name="membership-features" />
+            <Stack.Screen name="membership" />
+            <Stack.Screen name="membership/subscribe" />
+            <Stack.Screen name="causes/[slug]" />
+            <Stack.Screen name="causes/[slug]/donate" />
+            <Stack.Screen name="events/[slug]" />
+            <Stack.Screen name="events/[slug]/register" />
+            <Stack.Screen name="(admin)" />
+          </Stack>
+        )}
       </View>
     </>
   );
