@@ -4,6 +4,7 @@
  */
 
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import { useRouter } from 'expo-router';
 import { registerForFCMNotifications, setupFCMHandlers } from '../services/fcmNotifications';
 import { savePushToken, removePushToken } from '../services/pushNotifications';
 import { syncContactToHubSpot } from '../services/hubspotService';
@@ -30,6 +31,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   // Initialize auth state on mount
   useEffect(() => {
@@ -58,6 +60,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.log('[AUTH] ✅ Active session found');
           console.log('[AUTH] User ID:', session.user.id);
           console.log('[AUTH] User email:', session.user.email);
+          if (session?.user?.user_metadata?.needs_password_setup === true) {
+            console.log('[AUTH] Session found but needs password setup');
+            router.replace('/set-password');
+            setLoading(false);
+            return;
+          }
           await loadUserProfile(session.user.id);
         } else {
           console.log('[AUTH] ℹ️ No active session found');
@@ -306,6 +314,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log('[AUTH] ✅ Authentication successful');
       console.log('[AUTH] User ID:', authData.user.id);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.user_metadata?.needs_password_setup === true) {
+        console.log('[AUTH] User needs to set password - redirecting to set-password screen');
+        router.replace('/set-password');
+        return { success: true };
+      }
 
       // Fetch user profile
       console.log('[AUTH] 📥 Fetching user profile from database...');
