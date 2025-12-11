@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ScrollView, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../services/supabase';
@@ -8,6 +8,19 @@ export default function SetPasswordScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    console.log('[DEBUG] Full hash:', hash);
+
+    if (hash) {
+      const params = new URLSearchParams(hash.substring(1));
+      console.log('[DEBUG] access_token:', params.get('access_token')?.substring(0, 50) + '...');
+      console.log('[DEBUG] refresh_token:', params.get('refresh_token') ? 'Present' : 'Missing');
+      console.log('[DEBUG] type:', params.get('type'));
+      console.log('[DEBUG] token_hash:', params.get('token_hash'));
+    }
+  }, []);
 
   const handleSetPassword = async () => {
     if (!password || !confirmPassword) {
