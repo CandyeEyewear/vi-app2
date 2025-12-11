@@ -56,14 +56,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        if (event === 'SIGNED_IN') {
-          const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
-          if (currentPath === '/set-password') {
-            console.log('[AUTH] Ignoring SIGNED_IN event - user is setting password');
-            return;
-          }
-        }
-
         if (session) {
           console.log('[AUTH] ✅ Active session found');
           console.log('[AUTH] User ID:', session.user.id);
