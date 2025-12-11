@@ -14,6 +14,7 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -194,15 +195,23 @@ export default function RegisterScreen() {
       }
 
       if ((response as any).requiresEmailConfirmation || !response.data) {
-        showAlert(
-          'Account Created! 🎉',
-          'Your account has been created successfully! We sent you a confirmation email. Please verify your email address to complete registration and start using VIbe.',
-          'warning'
+        console.log('[REGISTER] Email confirmation required - showing alert');
+
+        Alert.alert(
+          'Check Your Email! 📧',
+          `We sent a verification link to ${formData.email}. Please check your inbox (and spam folder) to verify your account before logging in.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                console.log('[REGISTER] Alert dismissed, redirecting to login');
+                router.replace('/login?needsVerification=true&email=' + encodeURIComponent(formData.email));
+              },
+            },
+          ],
+          { cancelable: false }
         );
-        
-        setTimeout(() => {
-          router.replace('/login');
-        }, 3000);
+        return;
       } else if (response.data) {
         showAlert(
           'Account Created Successfully! 🎉',
