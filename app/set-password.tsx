@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ScrollView, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../services/supabase';
 
@@ -78,7 +78,10 @@ export default function SetPasswordScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.header}>
-        <Text style={styles.emoji}>🔐</Text>
+        <Image 
+          source={{ uri: 'https://46485094.fs1.hubspotusercontent-na1.net/hubfs/46485094/icon%2022a.png' }}
+          style={styles.logo}
+        />
         <Text style={styles.title}>Set Your Password</Text>
         <Text style={styles.subtitle}>
           Secure your VIbe account by creating a strong password
@@ -154,6 +157,12 @@ const styles = StyleSheet.create({
   contentContainer: { padding: 20 },
   header: { alignItems: 'center', marginTop: 40, marginBottom: 40 },
   emoji: { fontSize: 64, marginBottom: 16 },
+  logo: { 
+    width: 80, 
+    height: 80, 
+    marginBottom: 16,
+    resizeMode: 'contain'
+  },
   title: { fontSize: 28, fontWeight: '700', color: '#2c3e50', marginBottom: 8 },
   subtitle: { fontSize: 16, color: '#666', textAlign: 'center', paddingHorizontal: 20 },
   form: { backgroundColor: 'white', borderRadius: 12, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
