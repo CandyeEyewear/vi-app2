@@ -67,7 +67,13 @@ export default function SetPasswordScreen() {
 
     } catch (error: any) {
       console.error('[SET-PASSWORD] Error:', error);
-      Alert.alert('Error', error.message || 'Failed to set password');
+      const errorMessage = error.message || 'Failed to set password';
+      const errorDetails = error.status ? ` (Status: ${error.status})` : '';
+      Alert.alert(
+        'Error Details',
+        `${errorMessage}${errorDetails}\n\nError: ${JSON.stringify(error, null, 2)}`,
+        [{ text: 'OK' }]
+      );
     } finally {
       setLoading(false);
     }
