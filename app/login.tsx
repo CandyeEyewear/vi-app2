@@ -16,12 +16,14 @@ import {
   ActivityIndicator,
   Linking,
   Image,
+  Alert,
 } from 'react-native';
 import { useRouter, Redirect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
 import CustomAlert from '../components/CustomAlert';
+import { supabase } from '../services/supabase';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -40,6 +42,7 @@ export default function LoginScreen() {
     message: '',
     type: 'error' as 'success' | 'error' | 'warning',
   });
+  const [resendingEmail, setResendingEmail] = useState(false);
 
   // Redirect authenticated users away from login screen
   useEffect(() => {
@@ -64,6 +67,28 @@ export default function LoginScreen() {
 
   const handlePrivacyPolicy = () => {
     Linking.openURL('https://volunteersinc.org/vibe-privacy-policy');
+  };
+
+  const handleResendVerification = async () => {
+    if (!userEmail) return;
+
+    setResendingEmail(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: userEmail,
+      });
+
+      if (error) {
+        Alert.alert('Error', 'Failed to resend verification email. Please try again.');
+      } else {
+        Alert.alert('Email Sent!', 'We sent you a new verification link. Please check your inbox.');
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Something went wrong. Please try again.');
+    } finally {
+      setResendingEmail(false);
+    }
   };
 
   const handleLogin = async () => {
@@ -165,6 +190,22 @@ export default function LoginScreen() {
                 <Text style={{ fontWeight: '600' }}>{userEmail}</Text>. Please check your
                 inbox (and spam folder) to verify your account before logging in.
               </Text>
+              <TouchableOpacity
+                onPress={handleResendVerification}
+                disabled={resendingEmail}
+                style={{
+                  marginTop: 12,
+                  backgroundColor: '#4A90E2',
+                  paddingVertical: 8,
+                  paddingHorizontal: 16,
+                  borderRadius: 6,
+                  alignSelf: 'flex-start',
+                }}
+              >
+                <Text style={{ color: 'white', fontWeight: '600', fontSize: 14 }}>
+                  {resendingEmail ? 'Sending...' : 'Resend Verification Link'}
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
 
