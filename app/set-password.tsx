@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ScrollView, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../services/supabase';
@@ -9,6 +9,42 @@ export default function SetPasswordScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    const exchangeRecoveryToken = async () => {
+      if (typeof window === 'undefined') return;
+
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
+      const type = hashParams.get('type');
+
+      if (accessToken && type === 'recovery') {
+        console.log('[SET-PASSWORD] Recovery token detected, establishing session...');
+
+        try {
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken || ''
+          });
+
+          if (error) {
+            console.error('[SET-PASSWORD] Error setting session:', error);
+            Alert.alert('Error', 'Invalid or expired reset link. Please request a new password reset.');
+            router.replace('/forgot-password');
+          } else {
+            console.log('[SET-PASSWORD] ✅ Session established:', data.session?.user?.email);
+            window.location.hash = '';
+          }
+        } catch (err) {
+          console.error('[SET-PASSWORD] Exception:', err);
+          Alert.alert('Error', 'Failed to initialize password reset. Please try again.');
+        }
+      }
+    };
+
+    exchangeRecoveryToken();
+  }, []);
 
   const getPasswordStrength = (pwd: string) => {
     if (pwd.length < 6) return { text: 'Too short', color: '#f44336' };
