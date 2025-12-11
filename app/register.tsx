@@ -7,14 +7,13 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  TextInput,
+  ScrollView,
   TouchableOpacity,
+  TextInput,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -81,6 +80,8 @@ export default function RegisterScreen() {
     return individualFormData.dateOfBirth ? new Date(individualFormData.dateOfBirth) : new Date(2000, 0, 1);
   });
   const [selectedFocus, setSelectedFocus] = useState<string[]>([]);
+  const [showVerificationMessage, setShowVerificationMessage] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState('');
 
   // Industry focus options (for organizations)
   const industryOptions = [
@@ -195,22 +196,15 @@ export default function RegisterScreen() {
       }
 
       if ((response as any).requiresEmailConfirmation || !response.data) {
-        console.log('[REGISTER] Email confirmation required - showing alert');
+        console.log('[REGISTER] Email confirmation required - showing message');
+        
+        setVerificationEmail(formData.email);
+        setShowVerificationMessage(true);
 
-        Alert.alert(
-          'Check Your Email! 📧',
-          `We sent a verification link to ${formData.email}. Please check your inbox (and spam folder) to verify your account before logging in.`,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                console.log('[REGISTER] Alert dismissed, redirecting to login');
-                router.replace('/login?needsVerification=true&email=' + encodeURIComponent(formData.email));
-              },
-            },
-          ],
-          { cancelable: false }
-        );
+        setTimeout(() => {
+          router.replace('/login?needsVerification=true&email=' + encodeURIComponent(formData.email));
+        }, 5000);
+
         return;
       } else if (response.data) {
         showAlert(
@@ -415,6 +409,110 @@ export default function RegisterScreen() {
           { paddingBottom: styles.scrollContent.paddingBottom + insets.bottom + 80 }
         ]}
       >
+        {showVerificationMessage && (
+          <View
+            style={{
+              backgroundColor: '#4CAF50',
+              padding: 20,
+              borderRadius: 12,
+              marginBottom: 20,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 8,
+              elevation: 4,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+              <Text style={{ fontSize: 32, marginRight: 12 }}>✅</Text>
+              <Text
+                style={{
+                  fontSize: 20,
+                  fontWeight: '700',
+                  color: 'white',
+                  flex: 1,
+                }}
+              >
+                Account Created!
+              </Text>
+            </View>
+
+            <View
+              style={{
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                padding: 16,
+                borderRadius: 8,
+                marginBottom: 16,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: '600',
+                  color: 'white',
+                  marginBottom: 8,
+                }}
+              >
+                📧 Check Your Email
+              </Text>
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: 'white',
+                  lineHeight: 20,
+                }}
+              >
+                We sent a verification link to:
+              </Text>
+              <Text
+                style={{
+                  fontSize: 15,
+                  fontWeight: '700',
+                  color: 'white',
+                  marginTop: 4,
+                }}
+              >
+                {verificationEmail}
+              </Text>
+            </View>
+
+            <Text
+              style={{
+                fontSize: 13,
+                color: 'white',
+                textAlign: 'center',
+                opacity: 0.9,
+              }}
+            >
+              Please check your inbox (and spam folder) to verify your account.
+            </Text>
+
+            <TouchableOpacity
+              onPress={() => {
+                router.replace('/login?needsVerification=true&email=' + encodeURIComponent(verificationEmail));
+              }}
+              style={{
+                backgroundColor: 'white',
+                paddingVertical: 12,
+                paddingHorizontal: 24,
+                borderRadius: 8,
+                marginTop: 16,
+                alignItems: 'center',
+              }}
+            >
+              <Text
+                style={{
+                  color: '#4CAF50',
+                  fontWeight: '600',
+                  fontSize: 15,
+                }}
+              >
+                Go to Login →
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
