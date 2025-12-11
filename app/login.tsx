@@ -44,6 +44,22 @@ export default function LoginScreen() {
   });
   const [resendingEmail, setResendingEmail] = useState(false);
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.location?.hash) {
+      return;
+    }
+
+    // Check for password reset/recovery token in URL hash
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const accessToken = hashParams.get('access_token');
+    const type = hashParams.get('type');
+
+    if (accessToken && type === 'recovery') {
+      console.log('[LOGIN] Password recovery token detected - redirecting to set-password');
+      router.replace('/set-password');
+    }
+  }, [router]);
+
   // Redirect authenticated users away from login screen
   useEffect(() => {
     if (!loading && user) {
