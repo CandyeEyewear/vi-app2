@@ -44,7 +44,7 @@ function AppContent() {
   const showWebNav = isDesktop && !!user;
 
   const sanitizedPathname = pathname || '/';
-  const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/reset-password'];
+  const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/reset-password', '/set-password'];
   const publicRoutePrefixes = ['/post/'];
   const isPublicRoute =
     publicRoutes.includes(sanitizedPathname) ||
