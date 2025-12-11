@@ -16,17 +16,22 @@ import {
   ActivityIndicator,
   Linking,
   Image,
+  Alert,
 } from 'react-native';
-import { useRouter, Redirect } from 'expo-router';
+import { useRouter, Redirect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
 import CustomAlert from '../components/CustomAlert';
+import { supabase } from '../services/supabase';
 
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { signIn, loading, user } = useAuth();
+  const params = useLocalSearchParams();
+  const needsVerification = params.needsVerification === 'true';
+  const userEmail = params.email as string;
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -37,6 +42,7 @@ export default function LoginScreen() {
     message: '',
     type: 'error' as 'success' | 'error' | 'warning',
   });
+  const [resendingEmail, setResendingEmail] = useState(false);
 
   // Redirect authenticated users away from login screen
   useEffect(() => {
@@ -61,6 +67,28 @@ export default function LoginScreen() {
 
   const handlePrivacyPolicy = () => {
     Linking.openURL('https://volunteersinc.org/vibe-privacy-policy');
+  };
+
+  const handleResendVerification = async () => {
+    if (!userEmail) return;
+
+    setResendingEmail(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: userEmail,
+      });
+
+      if (error) {
+        Alert.alert('Error', 'Failed to resend verification email. Please try again.');
+      } else {
+        Alert.alert('Email Sent!', 'We sent you a new verification link. Please check your inbox.');
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Something went wrong. Please try again.');
+    } finally {
+      setResendingEmail(false);
+    }
   };
 
   const handleLogin = async () => {
@@ -125,6 +153,61 @@ export default function LoginScreen() {
         <View style={styles.formSection}>
           <Text style={styles.title}>Welcome Back!</Text>
           <Text style={styles.subtitle}>Sign in to continue volunteering</Text>
+          {needsVerification && (
+            <View
+              style={{
+                backgroundColor: '#e3f2fd',
+                borderLeftWidth: 4,
+                borderLeftColor: '#4A90E2',
+                padding: 16,
+                marginBottom: 20,
+                borderRadius: 8,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 4,
+                elevation: 3,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: '600',
+                  color: '#2c3e50',
+                  marginBottom: 8,
+                }}
+              >
+                📧 Verify Your Email
+              </Text>
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: '#555',
+                  lineHeight: 20,
+                }}
+              >
+                We sent a verification link to{' '}
+                <Text style={{ fontWeight: '600' }}>{userEmail}</Text>. Please check your
+                inbox (and spam folder) to verify your account before logging in.
+              </Text>
+              <TouchableOpacity
+                onPress={handleResendVerification}
+                disabled={resendingEmail}
+                style={{
+                  marginTop: 12,
+                  backgroundColor: '#4A90E2',
+                  paddingVertical: 8,
+                  paddingHorizontal: 16,
+                  borderRadius: 6,
+                  alignSelf: 'flex-start',
+                }}
+              >
+                <Text style={{ color: 'white', fontWeight: '600', fontSize: 14 }}>
+                  {resendingEmail ? 'Sending...' : 'Resend Verification Link'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Email Input */}
           <View style={styles.inputContainer}>
