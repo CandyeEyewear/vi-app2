@@ -17,7 +17,7 @@ import {
   Linking,
   Image,
 } from 'react-native';
-import { useRouter, Redirect } from 'expo-router';
+import { useRouter, Redirect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
@@ -27,6 +27,9 @@ export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { signIn, loading, user } = useAuth();
+  const params = useLocalSearchParams();
+  const needsVerification = params.needsVerification === 'true';
+  const userEmail = params.email as string;
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -125,6 +128,45 @@ export default function LoginScreen() {
         <View style={styles.formSection}>
           <Text style={styles.title}>Welcome Back!</Text>
           <Text style={styles.subtitle}>Sign in to continue volunteering</Text>
+          {needsVerification && (
+            <View
+              style={{
+                backgroundColor: '#e3f2fd',
+                borderLeftWidth: 4,
+                borderLeftColor: '#4A90E2',
+                padding: 16,
+                marginBottom: 20,
+                borderRadius: 8,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 4,
+                elevation: 3,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: '600',
+                  color: '#2c3e50',
+                  marginBottom: 8,
+                }}
+              >
+                📧 Verify Your Email
+              </Text>
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: '#555',
+                  lineHeight: 20,
+                }}
+              >
+                We sent a verification link to{' '}
+                <Text style={{ fontWeight: '600' }}>{userEmail}</Text>. Please check your
+                inbox (and spam folder) to verify your account before logging in.
+              </Text>
+            </View>
+          )}
 
           {/* Email Input */}
           <View style={styles.inputContainer}>
