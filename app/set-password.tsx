@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ScrollView, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../services/supabase';
@@ -8,50 +8,6 @@ export default function SetPasswordScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-
-  useEffect(() => {
-    const exchangeRecoveryToken = async () => {
-      if (typeof window === 'undefined') return;
-
-      const hashParams = new URLSearchParams(window.location.hash.substring(1));
-      const accessToken = hashParams.get('access_token');
-      const refreshToken = hashParams.get('refresh_token');
-      const type = hashParams.get('type');
-
-      if (accessToken && type === 'recovery') {
-        console.log('[SET-PASSWORD] Recovery token detected, establishing session...');
-
-        try {
-          const { data, error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken || ''
-          });
-
-          if (error) {
-            console.error('[SET-PASSWORD] Error setting session:', error);
-            Alert.alert('Error', 'Invalid or expired reset link. Please request a new password reset.');
-            router.replace('/forgot-password');
-          } else {
-            console.log('[SET-PASSWORD] ✅ Session established:', data.session?.user?.email);
-            window.location.hash = '';
-          }
-        } catch (err) {
-          console.error('[SET-PASSWORD] Exception:', err);
-          Alert.alert('Error', 'Failed to initialize password reset. Please try again.');
-        }
-      }
-    };
-
-    exchangeRecoveryToken();
-  }, []);
-
-  const getPasswordStrength = (pwd: string) => {
-    if (pwd.length < 6) return { text: 'Too short', color: '#f44336' };
-    if (pwd.length < 8) return { text: 'Weak', color: '#ff9800' };
-    if (!/[A-Z]/.test(pwd) || !/[0-9]/.test(pwd)) return { text: 'Medium', color: '#ffc107' };
-    return { text: 'Strong', color: '#4caf50' };
-  };
 
   const handleSetPassword = async () => {
     if (!password || !confirmPassword) {
@@ -115,8 +71,6 @@ export default function SetPasswordScreen() {
     }
   };
 
-  const strength = getPasswordStrength(password);
-
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.header}>
@@ -133,31 +87,14 @@ export default function SetPasswordScreen() {
       <View style={styles.form}>
         <View style={styles.inputContainer}>
           <Text style={styles.label}>New Password</Text>
-          <View style={styles.passwordInputWrapper}>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your password"
-              secureTextEntry={!showPassword}
-              value={password}
-              onChangeText={setPassword}
-              autoCapitalize="none"
-            />
-            <TouchableOpacity
-              onPress={() => setShowPassword(!showPassword)}
-              style={styles.eyeButton}
-            >
-              <Text>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
-            </TouchableOpacity>
-          </View>
-          
-          {password.length > 0 && (
-            <View style={styles.strengthContainer}>
-              <View style={[styles.strengthBar, { backgroundColor: strength.color, width: `${Math.min((password.length / 12) * 100, 100)}%` }]} />
-              <Text style={[styles.strengthText, { color: strength.color }]}>
-                {strength.text}
-              </Text>
-            </View>
-          )}
+          <TextInput
+            style={styles.input}
+            placeholder="Enter your password"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+            autoCapitalize="none"
+          />
         </View>
 
         <View style={styles.inputContainer}>
@@ -165,7 +102,7 @@ export default function SetPasswordScreen() {
           <TextInput
             style={styles.input}
             placeholder="Re-enter your password"
-            secureTextEntry={!showPassword}
+            secureTextEntry
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             autoCapitalize="none"
@@ -210,12 +147,7 @@ const styles = StyleSheet.create({
   form: { backgroundColor: 'white', borderRadius: 12, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
   inputContainer: { marginBottom: 24 },
   label: { fontSize: 14, fontWeight: '600', color: '#2c3e50', marginBottom: 8 },
-  passwordInputWrapper: { flexDirection: 'row', alignItems: 'center' },
   input: { flex: 1, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, fontSize: 16 },
-  eyeButton: { position: 'absolute', right: 12, padding: 8 },
-  strengthContainer: { marginTop: 8 },
-  strengthBar: { height: 4, borderRadius: 2, marginBottom: 4 },
-  strengthText: { fontSize: 12, fontWeight: '600' },
   requirementsBox: { backgroundColor: '#e3f2fd', padding: 16, borderRadius: 8, marginBottom: 24, borderLeftWidth: 4, borderLeftColor: '#4A90E2' },
   requirementsTitle: { fontSize: 14, fontWeight: '600', color: '#2c3e50', marginBottom: 8 },
   requirement: { fontSize: 13, color: '#555', marginBottom: 4 },
