@@ -34,8 +34,7 @@ const splashImage = require('../assets/images/splash.png');
 function AppContent() {
   const router = useRouter();
   const pathname = usePathname();
-  const { refreshUser } = useAuth();
-  const { loading: authLoading, user } = useAuth();
+  const { refreshUser, loading: authLoading, user, needsPasswordSetup } = useAuth();
   const responseListener = useRef<any>(null);
   const { width } = useWindowDimensions();
   
@@ -54,6 +53,8 @@ function AppContent() {
   const isRegisterPage = sanitizedPathname === '/register';
   const shouldRedirectToLogin = !authLoading && !user && !isPublicRoute;
   const shouldRedirectToFeed = !authLoading && !!user && (isLoginPage || isRegisterPage);
+  const shouldRedirectToSetPassword =
+    !authLoading && !!user && needsPasswordSetup && sanitizedPathname !== '/set-password';
 
   useEffect(() => {
     if (!authLoading && SplashScreen) {
@@ -234,7 +235,8 @@ function AppContent() {
       <View style={showWebNav ? { paddingTop: 64, flex: 1 } : { flex: 1 }}>
         {shouldRedirectToLogin && <Redirect href="/login" />}
         {shouldRedirectToFeed && <Redirect href="/feed" />}
-        {!shouldRedirectToLogin && !shouldRedirectToFeed && (
+        {shouldRedirectToSetPassword && <Redirect href="/set-password" />}
+        {!shouldRedirectToLogin && !shouldRedirectToFeed && !shouldRedirectToSetPassword && (
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="login" />
             <Stack.Screen name="register" />

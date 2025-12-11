@@ -4,7 +4,6 @@
  */
 
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { useRouter } from 'expo-router';
 import { registerForFCMNotifications, setupFCMHandlers } from '../services/fcmNotifications';
 import { savePushToken, removePushToken } from '../services/pushNotifications';
 import { syncContactToHubSpot } from '../services/hubspotService';
@@ -16,6 +15,7 @@ import { cache, CacheKeys } from '../services/cache';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  needsPasswordSetup: boolean;
   signIn: (data: LoginFormData) => Promise<ApiResponse<User>>;
   signUp: (data: RegisterFormData) => Promise<ApiResponse<User>>;
   signOut: () => Promise<void>;
@@ -31,7 +31,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
+  const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
 
   // Initialize auth state on mount
   useEffect(() => {
@@ -60,21 +60,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.log('[AUTH] ✅ Active session found');
           console.log('[AUTH] User ID:', session.user.id);
           console.log('[AUTH] User email:', session.user.email);
-          if (session?.user?.user_metadata?.needs_password_setup === true) {
+          const needsSetup = session?.user?.user_metadata?.needs_password_setup === true;
+          setNeedsPasswordSetup(needsSetup);
+          if (needsSetup) {
             console.log('[AUTH] Session found but needs password setup');
-            router.replace('/set-password');
-            setLoading(false);
-            return;
           }
           await loadUserProfile(session.user.id);
         } else {
           console.log('[AUTH] ℹ️ No active session found');
+          setNeedsPasswordSetup(false);
           setLoading(false);
         }
       } catch (error) {
         console.error('[AUTH] ❌ Error initializing auth:', error);
         await supabase.auth.signOut().catch(() => {});
         setUser(null);
+        setNeedsPasswordSetup(false);
         setLoading(false);
       }
       
@@ -96,6 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (session) {
           console.log('[AUTH] Session active - User ID:', session.user.id);
+          setNeedsPasswordSetup(session?.user?.user_metadata?.needs_password_setup === true);
           await loadUserProfile(session.user.id);
           // Set up real-time subscription after session is confirmed
           setupRealtimeSubscription().catch((error) => {
@@ -104,6 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           console.log('[AUTH] Session ended - User logged out');
           setUser(null);
+          setNeedsPasswordSetup(false);
           setLoading(false);
           // Clean up real-time subscription on logout
           if (userChannel) {
@@ -315,10 +318,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AUTH] ✅ Authentication successful');
       console.log('[AUTH] User ID:', authData.user.id);
       const { data: { user } } = await supabase.auth.getUser();
-      if (user?.user_metadata?.needs_password_setup === true) {
-        console.log('[AUTH] User needs to set password - redirecting to set-password screen');
-        router.replace('/set-password');
-        return { success: true };
+      const needsSetup = user?.user_metadata?.needs_password_setup === true;
+      setNeedsPasswordSetup(needsSetup);
+      if (needsSetup) {
+        console.log('[AUTH] User needs to set password - redirecting via layout');
       }
 
       // Fetch user profile
@@ -738,6 +741,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       console.log('[AUTH] 🧹 Clearing user state...');
       setUser(null);
+      setNeedsPasswordSetup(false);
       console.log('[AUTH] ✅ Sign out process completed');
     } catch (error) {
       console.error('[AUTH] ❌ Error during sign out:', error);
@@ -905,6 +909,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         loading,
+        needsPasswordSetup,
         signIn,
         signUp,
         signOut,
