@@ -242,21 +242,30 @@ const handleDeleteAccount = async () => {
          return;
        }
 
-       // Delete user data from all tables
-       // Note: We rely on cascade deletes for related data
-       const { error: deleteError } = await supabase
-         .from('users')
-         .delete()
-         .eq('id', user.id);
+       // Get the current session token
+       const { data: { session } } = await supabase.auth.getSession();
+       if (!session?.access_token) {
+         showAlert('Error', 'You must be logged in to delete your account', 'error');
+         return;
+       }
 
-       if (deleteError) throw deleteError;
+       // Call the delete account API (handles auth + cascade cleanup server-side)
+       const response = await fetch('/api/auth/delete-account', {
+         method: 'DELETE',
+         headers: {
+           'Authorization': `Bearer ${session.access_token}`,
+           'Content-Type': 'application/json',
+         },
+       });
 
-       // Delete auth account
-       const { error: authError } = await supabase.auth.admin.deleteUser(user.id);
-       
-       if (authError) {
-         console.error('Auth delete error:', authError);
-         // Continue anyway as user data is deleted
+       const result = await response.json().catch(() => null);
+
+       if (!response.ok) {
+         throw new Error(result?.error || `Failed to delete account (${response.status})`);
+       }
+
+       if (!result?.success) {
+         throw new Error(result?.error || 'Failed to delete account');
        }
 
        // Sign out
