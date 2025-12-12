@@ -16,6 +16,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   needsPasswordSetup: boolean;
+  isPasswordRecovery: boolean;
   signIn: (data: LoginFormData) => Promise<ApiResponse<User>>;
   signUp: (data: RegisterFormData) => Promise<ApiResponse<User>>;
   signOut: () => Promise<void>;
@@ -32,6 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   // Initialize auth state on mount
   useEffect(() => {
@@ -41,6 +43,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const initializeAuth = async () => {
       console.log('[AUTH] 🔐 Starting auth initialization...');
+      
+      // Check for password recovery tokens in URL (web only)
+      if (typeof window !== 'undefined' && window.location.hash) {
+        const hash = window.location.hash;
+        if (hash.includes('type=recovery')) {
+          console.log('[AUTH] 🔐 Password recovery flow detected');
+          setIsPasswordRecovery(true);
+        }
+      }
+      
       try {
         // Get initial session with error handling for invalid tokens
         console.log('[AUTH] 📡 Fetching current session from Supabase...');
@@ -88,6 +100,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AUTH] 👂 Setting up auth state listener...');
       const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(async (event, session) => {
         console.log('[AUTH] 🔔 Auth state changed:', event);
+        
+        // Check for recovery flow
+        if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
+          if (typeof window !== 'undefined' && window.location.hash.includes('type=recovery')) {
+            console.log('[AUTH] 🔐 Password recovery session detected');
+            setIsPasswordRecovery(true);
+          }
+        }
 
         // Only ignore token refresh events - they don't change auth state
         if (event === 'TOKEN_REFRESHED') {
@@ -966,7 +986,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Get user's name from database for personalized email
-      const { data: userData, error: userError } = await supabase
+      const { data: userData } = await supabase
         .from('users')
         .select('full_name')
         .eq('email', email.toLowerCase())
@@ -974,21 +994,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const fullName = userData?.full_name || 'there';
 
-      // Generate password reset token via Supabase
+      // Determine redirect URL based on platform
+      const isWeb = typeof window !== 'undefined';
+      const redirectUrl = isWeb 
+        ? 'https://vibe.volunteersinc.org/reset-password'
+        : 'vibe://reset-password';
+      
+      console.log('[AUTH] 📧 Redirect URL:', redirectUrl);
+
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'vibe://reset-password',
+        redirectTo: redirectUrl,
       });
 
       if (error) {
-        console.error('[AUTH] ❌ Failed to generate reset token:', error.message);
+        console.error('[AUTH] ❌ Failed to send reset email:', error.message);
         return { success: false, error: error.message };
       }
 
-      // Note: Supabase will send their own email with the reset link
-      // For now, we'll let Supabase handle it
-      // TODO: In the future, we can use Supabase's email redirect URL to send our custom email
-      
-      console.log('[AUTH] ✅ Password reset email sent via Supabase');
+      console.log('[AUTH] ✅ Password reset email sent');
       return { success: true };
     } catch (error: any) {
       console.error('[AUTH] ❌ Exception during forgot password:', error);
@@ -1015,6 +1038,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       console.log('[AUTH] ✅ Password reset successfully');
+      
+      // Clear recovery flag
+      setIsPasswordRecovery(false);
+      
       return { success: true };
     } catch (error: any) {
       console.error('[AUTH] ❌ Exception during password reset:', error);
@@ -1045,6 +1072,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         loading,
         needsPasswordSetup,
+        isPasswordRecovery,
         signIn,
         signUp,
         signOut,

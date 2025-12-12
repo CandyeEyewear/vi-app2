@@ -35,7 +35,7 @@ function AppContent() {
   const router = useRouter();
   const pathname = usePathname();
   const rootNavigationState = useRootNavigationState();
-  const { refreshUser, loading: authLoading, user, needsPasswordSetup } = useAuth();
+  const { refreshUser, loading: authLoading, user, needsPasswordSetup, isPasswordRecovery } = useAuth();
   const responseListener = useRef<any>(null);
   const { width } = useWindowDimensions();
   
@@ -56,6 +56,7 @@ function AppContent() {
   const isLoginPage = sanitizedPathname === '/login';
   const isRegisterPage = sanitizedPathname === '/register';
   const isSetPasswordPage = sanitizedPathname === '/set-password';
+  const isResetPasswordPage = sanitizedPathname === '/reset-password';
 
   // Determine if we're still initializing (show splash)
   const isInitializing = authLoading || !navigationReady;
@@ -79,19 +80,27 @@ function AppContent() {
     console.log('[NAV] Checking redirects...', {
       user: !!user,
       needsPasswordSetup,
+      isPasswordRecovery,
       pathname: sanitizedPathname,
       isPublicRoute,
     });
 
-    // Redirect to set-password if needed (highest priority)
+    // Password recovery takes highest priority - redirect to reset-password
+    if (isPasswordRecovery && !isResetPasswordPage) {
+      console.log('[NAV] Password recovery flow - redirecting to reset-password');
+      router.replace('/reset-password');
+      return;
+    }
+
+    // Redirect to set-password if needed
     if (user && needsPasswordSetup && !isSetPasswordPage) {
       console.log('[NAV] Redirecting to set-password');
       router.replace('/set-password');
       return;
     }
 
-    // Redirect authenticated users away from login/register
-    if (user && !needsPasswordSetup && (isLoginPage || isRegisterPage)) {
+    // Redirect authenticated users away from login/register (but not if in recovery)
+    if (user && !needsPasswordSetup && !isPasswordRecovery && (isLoginPage || isRegisterPage)) {
       console.log('[NAV] Redirecting authenticated user to feed');
       router.replace('/feed');
       return;
@@ -107,11 +116,13 @@ function AppContent() {
     isInitializing,
     user,
     needsPasswordSetup,
+    isPasswordRecovery,
     sanitizedPathname,
     isPublicRoute,
     isLoginPage,
     isRegisterPage,
     isSetPasswordPage,
+    isResetPasswordPage,
     router,
   ]);
 
