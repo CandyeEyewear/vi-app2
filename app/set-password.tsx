@@ -58,7 +58,7 @@ export default function SetPasswordScreen() {
         
         // Manually set the session using the tokens
         console.log('[SET-PASSWORD] Calling setSession()...');
-        const { data, error } = await supabase.auth.setSession({
+        const { error } = await supabase.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken || '',
         });
@@ -73,25 +73,30 @@ export default function SetPasswordScreen() {
           setCheckingSession(false);
           return;
         }
-        
-        if (data.session) {
-          console.log('[SET-PASSWORD] ✅ Session established for:', data.session.user.email);
-          setUserEmail(data.session.user.email || null);
+
+        // Verify session was actually created by calling getSession()
+        console.log('[SET-PASSWORD] Verifying session was created...');
+        const { data: sessionData } = await supabase.auth.getSession();
+
+        if (sessionData?.session) {
+          console.log('[SET-PASSWORD] ✅ Session established for:', sessionData.session.user.email);
+          setUserEmail(sessionData.session.user.email || null);
           setSessionReady(true);
+          setCheckingSession(false);
           
           // Clean the URL (remove hash) to prevent issues on refresh
-          if (window.history.replaceState) {
+          if (typeof window !== 'undefined' && window.history.replaceState) {
             window.history.replaceState(null, '', window.location.pathname);
           }
         } else {
-          console.log('[SET-PASSWORD] ❌ No session returned from setSession');
-          setSessionError('Failed to establish session. Please request a new link.');
+          console.log('[SET-PASSWORD] ❌ No session after setSession - unexpected');
+          setSessionError('Failed to establish session. Please try again or request a new link.');
+          setCheckingSession(false);
         }
         
       } catch (error: any) {
         console.error('[SET-PASSWORD] ❌ Exception:', error);
         setSessionError('Something went wrong. Please try again or request a new link.');
-      } finally {
         setCheckingSession(false);
       }
     };
