@@ -5,7 +5,7 @@
 
 
 import React, { useEffect, useRef } from 'react';
-import { Stack, useRouter, usePathname, Redirect } from 'expo-router';
+import { Stack, useRouter, usePathname, useRootNavigationState } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import * as Linking from 'expo-linking';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -34,9 +34,13 @@ const splashImage = require('../assets/images/splash.png');
 function AppContent() {
   const router = useRouter();
   const pathname = usePathname();
+  const rootNavigationState = useRootNavigationState();
   const { refreshUser, loading: authLoading, user, needsPasswordSetup } = useAuth();
   const responseListener = useRef<any>(null);
   const { width } = useWindowDimensions();
+  
+  // Check if navigation is ready
+  const navigationReady = rootNavigationState?.key != null;
   
   // Show WebNavigation on desktop (>= 992px) when user is logged in
   const isDesktop = isWeb && width >= 992;
@@ -51,19 +55,65 @@ function AppContent() {
 
   const isLoginPage = sanitizedPathname === '/login';
   const isRegisterPage = sanitizedPathname === '/register';
-  const shouldRedirectToLogin = !authLoading && !user && !isPublicRoute;
-  const shouldRedirectToFeed = !authLoading && !!user && (isLoginPage || isRegisterPage);
-  const shouldRedirectToSetPassword =
-    !authLoading && !!user && needsPasswordSetup && sanitizedPathname !== '/set-password';
+  const isSetPasswordPage = sanitizedPathname === '/set-password';
+
+  // Determine if we're still initializing (show splash)
+  const isInitializing = authLoading || !navigationReady;
 
   useEffect(() => {
-    if (!authLoading && SplashScreen) {
+    if (!isInitializing && SplashScreen) {
       const timer = setTimeout(() => {
         SplashScreen.hideAsync().catch(() => {});
-      }, 500);
+      }, 300);
       return () => clearTimeout(timer);
     }
-  }, [authLoading]);
+  }, [isInitializing]);
+
+  // Handle auth redirects in useEffect (not render)
+  useEffect(() => {
+    if (isInitializing) {
+      console.log('[NAV] Still initializing, skipping redirects');
+      return;
+    }
+
+    console.log('[NAV] Checking redirects...', {
+      user: !!user,
+      needsPasswordSetup,
+      pathname: sanitizedPathname,
+      isPublicRoute,
+    });
+
+    // Redirect to set-password if needed (highest priority)
+    if (user && needsPasswordSetup && !isSetPasswordPage) {
+      console.log('[NAV] Redirecting to set-password');
+      router.replace('/set-password');
+      return;
+    }
+
+    // Redirect authenticated users away from login/register
+    if (user && !needsPasswordSetup && (isLoginPage || isRegisterPage)) {
+      console.log('[NAV] Redirecting authenticated user to feed');
+      router.replace('/feed');
+      return;
+    }
+
+    // Redirect unauthenticated users to login (except public routes)
+    if (!user && !isPublicRoute) {
+      console.log('[NAV] Redirecting to login (not authenticated)');
+      router.replace('/login');
+      return;
+    }
+  }, [
+    isInitializing,
+    user,
+    needsPasswordSetup,
+    sanitizedPathname,
+    isPublicRoute,
+    isLoginPage,
+    isRegisterPage,
+    isSetPasswordPage,
+    router,
+  ]);
 
   useEffect(() => {
     setupFCMHandlers((path: string) => {
@@ -217,9 +267,10 @@ function AppContent() {
         subscription.remove();
       }
     };
-  }, [router]);
+  }, [router, refreshUser]);
 
-  if (authLoading) {
+  // Show splash while initializing
+  if (isInitializing) {
     return (
       <View style={styles.splashContainer}>
         <Image source={splashImage} style={styles.splashImage} resizeMode="cover" />
@@ -233,33 +284,29 @@ function AppContent() {
       <NetworkStatusBanner />
       {showWebNav && <WebNavigation />}
       <View style={showWebNav ? { paddingTop: 64, flex: 1 } : { flex: 1 }}>
-        {shouldRedirectToLogin && <Redirect href="/login" />}
-        {shouldRedirectToFeed && <Redirect href="/feed" />}
-        {shouldRedirectToSetPassword && <Redirect href="/set-password" />}
-        {!shouldRedirectToLogin && !shouldRedirectToFeed && !shouldRedirectToSetPassword && (
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="login" />
-            <Stack.Screen name="register" />
-            <Stack.Screen name="forgot-password" />
-            <Stack.Screen name="reset-password" />
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="edit-profile" />
-            <Stack.Screen name="settings" />
-            <Stack.Screen name="conversation/[id]" />
-            <Stack.Screen name="opportunity/[slug]" />
-            <Stack.Screen name="profile/[slug]" />
-            <Stack.Screen name="post/[id]" />
-            <Stack.Screen name="propose-opportunity" />
-            <Stack.Screen name="membership-features" />
-            <Stack.Screen name="membership" />
-            <Stack.Screen name="membership/subscribe" />
-            <Stack.Screen name="causes/[slug]" />
-            <Stack.Screen name="causes/[slug]/donate" />
-            <Stack.Screen name="events/[slug]" />
-            <Stack.Screen name="events/[slug]/register" />
-            <Stack.Screen name="(admin)" />
-          </Stack>
-        )}
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="login" />
+          <Stack.Screen name="register" />
+          <Stack.Screen name="forgot-password" />
+          <Stack.Screen name="reset-password" />
+          <Stack.Screen name="set-password" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="edit-profile" />
+          <Stack.Screen name="settings" />
+          <Stack.Screen name="conversation/[id]" />
+          <Stack.Screen name="opportunity/[slug]" />
+          <Stack.Screen name="profile/[slug]" />
+          <Stack.Screen name="post/[id]" />
+          <Stack.Screen name="propose-opportunity" />
+          <Stack.Screen name="membership-features" />
+          <Stack.Screen name="membership" />
+          <Stack.Screen name="membership/subscribe" />
+          <Stack.Screen name="causes/[slug]" />
+          <Stack.Screen name="causes/[slug]/donate" />
+          <Stack.Screen name="events/[slug]" />
+          <Stack.Screen name="events/[slug]/register" />
+          <Stack.Screen name="(admin)" />
+        </Stack>
       </View>
     </>
   );
