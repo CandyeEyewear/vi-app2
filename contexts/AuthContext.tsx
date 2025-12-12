@@ -182,8 +182,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log('[AUTH] 👤 Loading user profile...');
     console.log('[AUTH] User ID:', userId);
     console.log('[AUTH] Force refresh:', forceRefresh);
-    
-    // Check cache first (unless forcing refresh)
+
     const cacheKey = CacheKeys.userProfile(userId);
     if (!forceRefresh) {
       const cachedUser = cache.get<User>(cacheKey);
@@ -194,23 +193,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
     } else {
-      // Clear cache if forcing refresh
       cache.delete(cacheKey);
       console.log('[AUTH] 🗑️ Cache cleared for forced refresh');
     }
-    
-    try {
-      const { data: profileData, error: profileError } = await supabase
+
+    const fetchProfileWithTimeout = async (timeoutMs: number = 10000): Promise<any> => {
+      console.log('[AUTH] 📊 Querying users table...');
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Database query timeout')), timeoutMs);
+      });
+      const queryPromise = supabase
         .from('users')
         .select('*')
         .eq('id', userId)
         .single();
+      return Promise.race([queryPromise, timeoutPromise]);
+    };
 
-      if (profileError) {
-        console.error('[AUTH] ❌ Error loading profile from database:', profileError);
-        console.error('[AUTH] Error code:', profileError.code);
-        console.error('[AUTH] Error message:', profileError.message);
+    const maxRetries = 5;
+    const retryDelayMs = 1000;
+
+    try {
+      let profileData: any = null;
+      let lastError: any = null;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`[AUTH] 📊 Attempt ${attempt}/${maxRetries} to fetch profile...`);
+          const { data, error }: any = await fetchProfileWithTimeout();
+          console.log('[AUTH] 📊 Query completed');
+
+          if (error) {
+            console.error('[AUTH] ❌ Query error:', error.message);
+            console.error('[AUTH] Error code:', error.code);
+            if (error.code === 'PGRST116' && attempt < maxRetries) {
+              console.log(`[AUTH] ⏳ Profile not found, waiting ${retryDelayMs}ms before retry...`);
+              await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+              continue;
+            }
+            lastError = error;
+            break;
+          }
+
+          if (data) {
+            profileData = data;
+            console.log('[AUTH] ✅ Profile found on attempt', attempt);
+            break;
+          }
+        } catch (err: any) {
+          console.error('[AUTH] ❌ Attempt', attempt, 'failed:', err.message);
+          lastError = err;
+          if (err.message === 'Database query timeout') {
+            console.log('[AUTH] ⚠️ Query timed out, will retry...');
+            if (attempt < maxRetries) {
+              await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+              continue;
+            }
+          }
+          break;
+        }
+      }
+
+      if (!profileData) {
+        console.error('[AUTH] ❌ Failed to load profile after', maxRetries, 'attempts');
+        console.error('[AUTH] Last error:', lastError?.message);
         setUser(null);
+        setLoading(false);
         return;
       }
 
@@ -219,7 +267,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AUTH] Full Name:', profileData.full_name);
       console.log('[AUTH] Role:', profileData.role);
 
-      // Transform to User type
       const userData: User = {
         id: profileData.id,
         email: profileData.email,
@@ -248,50 +295,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         organization_data: profileData.organization_data,
       };
 
-      // Cache the user data with shorter TTL for membership data (1 minute instead of 5)
-      // This ensures membership changes are reflected faster
-      const cacheTTL = 1 * 60 * 1000; // 1 minute for faster updates
+      const cacheTTL = 1 * 60 * 1000;
       cache.set(cacheKey, userData, cacheTTL);
       console.log('[AUTH] 💾 User profile cached (TTL: 1 minute)');
-      console.log('[AUTH] 📊 Membership status:', {
-        tier: userData.membershipTier,
-        status: userData.membershipStatus,
-      });
-
       console.log('[AUTH] 📦 User data transformed successfully');
       setUser(userData);
       console.log('[AUTH] ✅ User state updated');
-      
-      // Register for push notifications if we don't have a token yet
+
+      setLoading(false);
+      console.log('[AUTH] ✅ Loading complete');
+
       if (!profileData.push_token) {
-        try {
-          console.log('[AUTH] 🔔 No push token found, registering...');
-          const pushToken = await registerForFCMNotifications();
-          if (pushToken) {
-            console.log('[AUTH] 💾 Saving new push token...');
-            const saveResult = await savePushToken(userId, pushToken);
-            if (saveResult) {
-              console.log('[AUTH] ✅ Push token saved successfully');
+        console.log('[AUTH] 🔔 No push token found, registering in background...');
+        registerForFCMNotifications()
+          .then(async (pushToken) => {
+            if (pushToken) {
+              console.log('[AUTH] 💾 Saving new push token...');
+              const saveResult = await savePushToken(userId, pushToken);
+              if (saveResult) {
+                console.log('[AUTH] ✅ Push token saved successfully');
+              } else {
+                console.error('[AUTH] ❌ Failed to save push token to database');
+              }
             } else {
-              console.error('[AUTH] ❌ Failed to save push token to database');
+              console.log('[AUTH] ⚠️ No push token received');
             }
-          } else {
-            console.log('[AUTH] ⚠️ No push token received (may be running on simulator or permissions denied)');
-          }
-        } catch (error: any) {
-          console.error('[AUTH] ❌ Push notification registration error:', error);
-          console.error('[AUTH] ❌ Error message:', error?.message);
-          console.error('[AUTH] ❌ Error stack:', error?.stack);
-        }
+          })
+          .catch((error: any) => {
+            console.error('[AUTH] ❌ Push notification registration error:', error?.message);
+          });
       } else {
         console.log('[AUTH] ✅ Push token already exists');
       }
     } catch (error) {
       console.error('[AUTH] ❌ Exception while loading user:', error);
       setUser(null);
-    } finally {
       setLoading(false);
-      console.log('[AUTH] Loading complete');
+      console.log('[AUTH] ✅ Loading complete (after error)');
     }
   };
 
