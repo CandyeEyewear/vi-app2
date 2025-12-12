@@ -792,7 +792,8 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         overflow: 'auto' as any,
-        height: '100vh' as any,
+        // Use real visible viewport height (set by useMobileWebViewport in RootLayout)
+        height: 'var(--viewport-height)' as any,
       },
     }),
   },
