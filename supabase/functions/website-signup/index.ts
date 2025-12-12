@@ -61,6 +61,24 @@ serve(async (req) => {
 
     console.log('[WEBSITE-SIGNUP] ✅ Account created, user ID:', authData.user.id);
 
+    // Send password recovery email so user can set their password
+    console.log('[WEBSITE-SIGNUP] Sending password recovery email...');
+
+    const { error: recoveryError } = await supabase.auth.admin.generateLink({
+      type: 'recovery',
+      email: email,
+      options: {
+        redirectTo: 'https://vibe.volunteersinc.org/set-password'
+      }
+    });
+
+    if (recoveryError) {
+      console.error('[WEBSITE-SIGNUP] Failed to generate recovery link:', recoveryError);
+      // Don't fail the whole signup - account is created, they can request reset later
+    } else {
+      console.log('[WEBSITE-SIGNUP] ✅ Password recovery email sent');
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
