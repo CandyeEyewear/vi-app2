@@ -1,9 +1,8 @@
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs } from 'expo-router';
 import { Home, MessageCircle, Compass, User } from 'lucide-react-native';
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useColorScheme, View, Text, StyleSheet } from 'react-native';
 import { useMessaging } from '../../contexts/MessagingContext';
-import { useAuth } from '../../contexts/AuthContext';
 import { Colors } from '../../constants/colors';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,19 +13,12 @@ import WebNavigation from '../../components/WebNavigation';
 export default function TabsLayout() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
+
+  // Note: Auth redirects are handled by app/_layout.tsx
+  // This layout only handles tab-specific UI and functionality
   const { totalUnreadCount, refreshConversations } = useMessaging();
-  const { user, loading: authLoading } = useAuth();
-  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useResponsive();
-
-  // Redirect to login if not authenticated (extra safeguard)
-  useEffect(() => {
-    if (!authLoading && !user) {
-      console.log('[TABS LAYOUT] User not authenticated, redirecting to login');
-      router.replace('/login');
-    }
-  }, [authLoading, user, router]);
 
   // Refresh when the tab bar becomes focused/visible
   useFocusEffect(
