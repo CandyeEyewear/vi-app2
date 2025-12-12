@@ -2,109 +2,54 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ScrollView, Image, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../services/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function SetPasswordScreen() {
   const router = useRouter();
+  const { user, refreshUser } = useAuth();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  
-  // Session handling states
   const [checkingSession, setCheckingSession] = useState(true);
-  const [sessionReady, setSessionReady] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
 
-  // Process hash tokens on mount
+  // Simple session check on mount
   useEffect(() => {
-    const processHashTokens = async () => {
+    const checkSession = async () => {
       try {
-        console.log('[SET-PASSWORD] Processing hash tokens...');
+        console.log('[SET-PASSWORD] Checking session...');
         
-        // Get the full URL hash
-        const hash = window.location.hash;
-        
-        if (!hash || !hash.includes('access_token')) {
-          // No hash tokens - check if we already have a session
-          console.log('[SET-PASSWORD] No hash tokens, checking existing session...');
-          const { data: { session } } = await supabase.auth.getSession();
-          
-          if (session) {
-            console.log('[SET-PASSWORD] ✅ Existing session found');
-            setUserEmail(session.user.email || null);
-            setSessionReady(true);
-          } else {
-            console.log('[SET-PASSWORD] ❌ No session and no tokens');
-            setSessionError('No valid session found. Please use the link from your email or request a new one.');
-          }
-          setCheckingSession(false);
-          return;
-        }
-        
-        // Parse hash parameters
-        console.log('[SET-PASSWORD] Parsing hash tokens...');
-        const hashParams = new URLSearchParams(hash.substring(1));
-        const accessToken = hashParams.get('access_token');
-        const refreshToken = hashParams.get('refresh_token');
-        
-        console.log('[SET-PASSWORD] access_token present:', !!accessToken);
-        console.log('[SET-PASSWORD] refresh_token present:', !!refreshToken);
-        
-        if (!accessToken) {
-          setSessionError('Invalid link. Please request a new password reset email.');
-          setCheckingSession(false);
-          return;
-        }
-        
-        // Manually set the session using the tokens
-        console.log('[SET-PASSWORD] Calling setSession()...');
-        const { data, error } = await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken || '',
-        });
+        const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
-          console.error('[SET-PASSWORD] ❌ setSession error:', error.message);
-          if (error.message.includes('expired') || error.message.includes('invalid')) {
-            setSessionError('Your link has expired. Please request a new password reset email.');
-          } else {
-            setSessionError(`Failed to verify your link: ${error.message}`);
-          }
+          console.error('[SET-PASSWORD] Session error:', error.message);
+          setSessionError('Session error. Please try logging in again.');
           setCheckingSession(false);
           return;
         }
         
-        if (data.session) {
-          console.log('[SET-PASSWORD] ✅ Session established for:', data.session.user.email);
-          setUserEmail(data.session.user.email || null);
-          setSessionReady(true);
-          
-          // Clean the URL (remove hash) to prevent issues on refresh
-          if (window.history.replaceState) {
-            window.history.replaceState(null, '', window.location.pathname);
-          }
-        } else {
-          console.log('[SET-PASSWORD] ❌ No session returned from setSession');
-          setSessionError('Failed to establish session. Please request a new link.');
+        if (!session) {
+          console.log('[SET-PASSWORD] No session found');
+          setSessionError('No active session. Please use the link from your email or log in.');
+          setCheckingSession(false);
+          return;
         }
         
+        console.log('[SET-PASSWORD] ✅ Session found for:', session.user.email);
+        setCheckingSession(false);
+        
       } catch (error: any) {
-        console.error('[SET-PASSWORD] ❌ Exception:', error);
-        setSessionError('Something went wrong. Please try again or request a new link.');
-      } finally {
+        console.error('[SET-PASSWORD] Exception:', error);
+        setSessionError('Something went wrong. Please try again.');
         setCheckingSession(false);
       }
     };
     
-    processHashTokens();
+    checkSession();
   }, []);
 
   const handleSetPassword = async () => {
-    // Prevent double-submission
-    if (loading) {
-      console.log('[SET-PASSWORD] Already processing, ignoring click');
-      return;
-    }
+    if (loading) return;
 
     if (!password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
@@ -121,88 +66,68 @@ export default function SetPasswordScreen() {
       return;
     }
 
-    // Set loading immediately to disable button
     setLoading(true);
     console.log('[SET-PASSWORD] Starting password update...');
 
     try {
-      // Verify session still exists
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setLoading(false);
-        Alert.alert('Session Expired', 'Please use the link from your email again.');
-        setSessionReady(false);
-        setSessionError('Session expired. Please request a new link.');
-        return;
-      }
-
-      console.log('[SET-PASSWORD] Updating password...');
-      
+      // Update password
       const { error: passwordError } = await supabase.auth.updateUser({
         password: password
       });
 
       if (passwordError) {
-        // Handle "same password" error gracefully - it means password was already set
         if (passwordError.message.includes('different from the old password')) {
-          console.log('[SET-PASSWORD] Password already set, proceeding to app...');
-          router.replace('/feed' as any);
-          return;
+          console.log('[SET-PASSWORD] Password already set, proceeding...');
+        } else {
+          throw passwordError;
         }
-        throw passwordError;
       }
 
-      console.log('[SET-PASSWORD] ✅ Password updated successfully');
-      console.log('[SET-PASSWORD] Clearing needs_password_setup flag...');
+      console.log('[SET-PASSWORD] ✅ Password updated');
 
+      // Clear the needs_password_setup flag
       const { error: metadataError } = await supabase.auth.updateUser({
         data: { needs_password_setup: false }
       });
 
       if (metadataError) {
         console.warn('[SET-PASSWORD] Could not clear flag:', metadataError.message);
-        // Don't throw - password was set successfully, flag is secondary
       }
 
-      console.log('[SET-PASSWORD] ✅ All done! Redirecting to feed...');
+      console.log('[SET-PASSWORD] ✅ Flag cleared');
 
-      // Show success message and redirect
-      // Use a brief timeout to ensure the alert renders before navigation
+      // Refresh user to update auth context
+      if (refreshUser) {
+        await refreshUser();
+      }
+
+      // Show success and redirect
       Alert.alert(
         'Success! 🎉',
         'Your password has been set. Welcome to VIbe!',
         [
           {
             text: 'Get Started',
-            onPress: () => {
-              console.log('[SET-PASSWORD] User confirmed, navigating to feed...');
-              router.replace('/feed' as any);
-            }
+            onPress: () => router.replace('/feed' as any)
           }
         ],
-        { cancelable: false } // Prevent dismissing without pressing button
+        { cancelable: false }
       );
 
     } catch (error: any) {
       console.error('[SET-PASSWORD] Error:', error);
-      setLoading(false); // Re-enable button on error
+      setLoading(false);
       
-      // User-friendly error messages
       let errorMessage = 'Failed to set password. Please try again.';
-      
       if (error.message?.includes('expired')) {
         errorMessage = 'Your session has expired. Please request a new link.';
-        setSessionReady(false);
-        setSessionError('Session expired. Please request a new link.');
-      } else if (error.message?.includes('weak') || error.message?.includes('short')) {
-        errorMessage = 'Please choose a stronger password with at least 8 characters.';
+        setSessionError(errorMessage);
       } else if (error.message) {
         errorMessage = error.message;
       }
       
       Alert.alert('Error', errorMessage);
     }
-    // Note: Don't set loading=false on success - we want button to stay disabled until redirect
   };
 
   // Loading state
@@ -210,7 +135,7 @@ export default function SetPasswordScreen() {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#4A90E2" />
-        <Text style={styles.loadingText}>Verifying your link...</Text>
+        <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );
   }
@@ -221,22 +146,18 @@ export default function SetPasswordScreen() {
       <ScrollView style={styles.container} contentContainerStyle={styles.centerContentContainer}>
         <View style={styles.errorCard}>
           <Text style={styles.errorEmoji}>⚠️</Text>
-          <Text style={styles.errorTitle}>Link Problem</Text>
+          <Text style={styles.errorTitle}>Session Problem</Text>
           <Text style={styles.errorMessage}>{sessionError}</Text>
           
-          <TouchableOpacity style={styles.primaryButton} onPress={() => router.replace('/forgot-password' as any)}>
-            <Text style={styles.primaryButtonText}>Request New Link</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.secondaryButton} onPress={() => router.replace('/login' as any)}>
-            <Text style={styles.secondaryButtonText}>Back to Login</Text>
+          <TouchableOpacity style={styles.primaryButton} onPress={() => router.replace('/login' as any)}>
+            <Text style={styles.primaryButtonText}>Go to Login</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
     );
   }
 
-  // Password form (only shown when session is ready)
+  // Password form
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.header}>
@@ -246,8 +167,8 @@ export default function SetPasswordScreen() {
         />
         <Text style={styles.title}>Set Your Password</Text>
         <Text style={styles.subtitle}>
-          {userEmail 
-            ? `Secure your account for ${userEmail}`
+          {user?.email 
+            ? `Secure your account for ${user.email}`
             : 'Secure your VIbe account by creating a strong password'
           }
         </Text>
@@ -287,10 +208,7 @@ export default function SetPasswordScreen() {
         </View>
 
         <TouchableOpacity
-          style={[
-            styles.button, 
-            (loading || !password || !confirmPassword) && styles.buttonDisabled
-          ]}
+          style={[styles.button, (loading || !password || !confirmPassword) && styles.buttonDisabled]}
           onPress={handleSetPassword}
           disabled={loading || !password || !confirmPassword}
           activeOpacity={0.7}
@@ -330,6 +248,4 @@ const styles = StyleSheet.create({
   errorMessage: { fontSize: 16, color: '#666', textAlign: 'center', marginBottom: 24, lineHeight: 24 },
   primaryButton: { backgroundColor: '#4A90E2', paddingVertical: 14, paddingHorizontal: 32, borderRadius: 8, width: '100%', alignItems: 'center', marginBottom: 12 },
   primaryButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
-  secondaryButton: { paddingVertical: 14, paddingHorizontal: 32, width: '100%', alignItems: 'center' },
-  secondaryButtonText: { color: '#4A90E2', fontSize: 16, fontWeight: '600' },
 });
