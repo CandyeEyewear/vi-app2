@@ -169,13 +169,21 @@ const insets = useSafeAreaInsets();
      try {
        setChangingPassword(true);
 
-       // First, verify current password by trying to sign in
-       const { error: signInError } = await supabase.auth.signInWithPassword({
-         email: user?.email || '',
-         password: currentPassword,
+       // Verify current password via API (doesn't affect session)
+       const verifyResponse = await fetch('/api/auth/verify-password', {
+         method: 'POST',
+         headers: {
+           'Content-Type': 'application/json',
+         },
+         body: JSON.stringify({
+           email: user?.email || '',
+           password: currentPassword,
+         }),
        });
 
-       if (signInError) {
+       const verifyResult = await verifyResponse.json();
+
+       if (!verifyResult.success) {
          showAlert('Error', 'Current password is incorrect', 'error');
          return;
        }
