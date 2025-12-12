@@ -4,14 +4,12 @@
  */
 
 import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
-import { registerForFCMNotifications, setupFCMHandlers } from '../services/fcmNotifications';
-import { savePushToken, removePushToken } from '../services/pushNotifications';
-import { syncContactToHubSpot } from '../services/hubspotService';
-import { sendWelcomeEmail, sendPasswordResetEmail } from '../services/resendService';
+import { setupFCMHandlers } from '../services/fcmNotifications';
 import { User, RegisterFormData, LoginFormData, ApiResponse } from '../types';
 import { supabase } from '../services/supabase';
 import { cache, CacheKeys } from '../services/cache';
 import { mapDbUserToUser, mapUserToDbUser, type DbUser } from '../utils/userTransform';
+import { useAuthSideEffects } from '../hooks/useAuthSideEffects';
 
 interface AuthContextType {
   user: User | null;
@@ -36,6 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const profileLoadInProgress = useRef<string | null>(null); // Tracks which userId is being loaded
+  const { onSignIn, onSignUp, onSignOut } = useAuthSideEffects();
 
   // Initialize auth state on mount
   useEffect(() => {
@@ -411,24 +410,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AUTH] ✅ Loading complete');
 
       if (!profileData.push_token) {
-        console.log('[AUTH] 🔔 No push token found, registering in background...');
-        registerForFCMNotifications()
-          .then(async (pushToken) => {
-            if (pushToken) {
-              console.log('[AUTH] 💾 Saving new push token...');
-              const saveResult = await savePushToken(userId, pushToken);
-              if (saveResult) {
-                console.log('[AUTH] ✅ Push token saved successfully');
-              } else {
-                console.error('[AUTH] ❌ Failed to save push token to database');
-              }
-            } else {
-              console.log('[AUTH] ⚠️ No push token received');
-            }
-          })
-          .catch((error: any) => {
-            console.error('[AUTH] ❌ Push notification registration error:', error?.message);
-          });
+        console.log('[AUTH] 🔔 No push token found, running post sign-in side effects in background...');
+        void onSignIn(userData);
       } else {
         console.log('[AUTH] ✅ Push token already exists');
       }
@@ -494,27 +477,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(userData);
       console.log('[AUTH] ✅ User state updated');
       
-      // Register for push notifications
-      console.log('[AUTH] 🔔 Registering for push notifications...');
-      try {
-        const pushToken = await registerForFCMNotifications();
-        
-        if (pushToken) {
-          console.log('[AUTH] ✅ Push token received, saving to database...');
-          const saveResult = await savePushToken(authData.user.id, pushToken);
-          if (saveResult) {
-            console.log('[AUTH] ✅ Push token saved successfully');
-          } else {
-            console.error('[AUTH] ❌ Failed to save push token to database');
-          }
-        } else {
-          console.log('[AUTH] ⚠️ No push token received (may be running on simulator or permissions denied)');
-        }
-      } catch (pushError: any) {
-        console.error('[AUTH] ❌ Push notification registration error:', pushError);
-        console.error('[AUTH] ❌ Error message:', pushError?.message);
-        console.error('[AUTH] ❌ Error stack:', pushError?.stack);
-      }
+      // After successful sign in and user profile load
+      void onSignIn(userData);
 
       console.log('[AUTH] 🎉 Sign in process completed successfully');
       return { success: true, data: userData };
@@ -729,62 +693,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setUser(userData);
 
-      // Register for push notifications (non-blocking)
-      try {
-        const pushToken = await registerForFCMNotifications();
-        if (pushToken) {
-          await savePushToken(authData.user.id, pushToken);
-          console.log('[AUTH] ✅ Push notifications registered');
-        }
-      } catch (pushError) {
-        // Don't fail signup if push notification registration fails
-        console.warn('[AUTH] ⚠️ Push notification registration failed:', pushError);
-      }
-
-      // Sync contact to HubSpot and save Contact ID
-      console.log('[AUTH] 🔄 Syncing contact to HubSpot...');
-      const hubspotResult = await syncContactToHubSpot({
-        email: data.email,
-        fullName: data.fullName,
-        phone: data.phone,
-        location: data.location,
-        bio: data.bio,
-        areasOfExpertise: data.areasOfExpertise,
-        education: data.education,
-      });
-
-      if (hubspotResult.success && hubspotResult.contactId) {
-        console.log('[AUTH] ✅ HubSpot contact synced:', hubspotResult.contactId);
-        
-        // Save HubSpot Contact ID to database
-        const { error: updateError } = await supabase
-          .from('users')
-          .update({ hubspot_contact_id: hubspotResult.contactId })
-          .eq('id', authData.user.id);
-        
-        if (updateError) {
-          console.error('[AUTH] ⚠️ Failed to save HubSpot Contact ID:', updateError);
-        } else {
-          console.log('[AUTH] ✅ HubSpot Contact ID saved to database');
-        }
-      } else {
-        console.error('[AUTH] ⚠️ HubSpot sync failed:', hubspotResult.error);
-        // Don't fail signup if HubSpot fails - just log it
-      }
-
-      // Send welcome email (non-blocking)
-      console.log('[AUTH] 📧 Sending welcome email...');
-      sendWelcomeEmail(data.email, data.fullName)
-        .then((result) => {
-          if (result.success) {
-            console.log('[AUTH] ✅ Welcome email sent');
-          } else {
-            console.error('[AUTH] ⚠️ Welcome email failed:', result.error);
-          }
-        })
-        .catch((error) => {
-          console.error('[AUTH] ⚠️ Welcome email error:', error);
-        });
+      // After successful sign up and user profile creation
+      const accountType =
+        (userData as any)?.account_type ??
+        (profileData as any)?.account_type ??
+        (authData.user?.user_metadata as any)?.account_type ??
+        (data as any)?.account_type ??
+        (data as any)?.accountType;
+      const isOrganization = accountType === 'organization' || (data as any)?.isOrganization === true;
+      void onSignUp(userData, isOrganization);
 
       console.log('[AUTH] 🎉 Signup complete!');
       return { success: true, data: userData };
@@ -821,18 +738,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
 
-      // Remove push token before signing out
+      // Before clearing state
       if (user?.id) {
-        console.log('[AUTH] 🗑️ Removing push token...');
-        console.log('[AUTH] User ID:', user.id);
-        const removeResult = await removePushToken(user.id);
-        if (removeResult) {
-          console.log('[AUTH] ✅ Push token removed successfully');
-        } else {
-          console.log('[AUTH] ⚠️ Failed to remove push token');
-        }
-      } else {
-        console.log('[AUTH] ℹ️ No user ID found, skipping push token removal');
+        void onSignOut(user.id);
       }
 
       console.log('[AUTH] 🔑 Calling Supabase signOut...');
