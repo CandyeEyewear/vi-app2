@@ -11,6 +11,7 @@ import { sendWelcomeEmail, sendPasswordResetEmail } from '../services/resendServ
 import { User, RegisterFormData, LoginFormData, ApiResponse } from '../types';
 import { supabase } from '../services/supabase';
 import { cache, CacheKeys } from '../services/cache';
+import { mapDbUserToUser, mapUserToDbUser, type DbUser } from '../utils/userTransform';
 
 interface AuthContextType {
   user: User | null;
@@ -396,33 +397,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AUTH] Full Name:', profileData.full_name);
       console.log('[AUTH] Role:', profileData.role);
 
-      const userData: User = {
-        id: profileData.id,
-        email: profileData.email,
-        fullName: profileData.full_name,
-        phone: profileData.phone,
-        location: profileData.location,
-        country: profileData.country,
-        bio: profileData.bio,
-        areasOfExpertise: profileData.areas_of_expertise,
-        education: profileData.education,
-        avatarUrl: profileData.avatar_url,
-        dateOfBirth: profileData.date_of_birth,
-        role: profileData.role,
-        membershipTier: profileData.membership_tier || 'free',
-        membershipStatus: profileData.membership_status || 'inactive',
-        isPrivate: profileData.is_private,
-        totalHours: profileData.total_hours,
-        activitiesCompleted: profileData.activities_completed,
-        organizationsHelped: profileData.organizations_helped,
-        achievements: [],
-        createdAt: profileData.created_at,
-        updatedAt: profileData.updated_at,
-        account_type: profileData.account_type,
-        approval_status: profileData.approval_status,
-        is_partner_organization: profileData.is_partner_organization,
-        organization_data: profileData.organization_data,
-      };
+      const userData: User = mapDbUserToUser(profileData as DbUser);
 
       const cacheTTL = 1 * 60 * 1000;
       cache.set(cacheKey, userData, cacheTTL);
@@ -513,33 +488,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AUTH] Role:', profileData.role);
 
       // Transform database user to app User type
-      const userData: User = {
-        id: profileData.id,
-        email: profileData.email,
-        fullName: profileData.full_name,
-        phone: profileData.phone,
-        location: profileData.location,
-        country: profileData.country,
-        bio: profileData.bio,
-        areasOfExpertise: profileData.areas_of_expertise,
-        education: profileData.education,
-        avatarUrl: profileData.avatar_url,
-        dateOfBirth: profileData.date_of_birth,
-        role: profileData.role,
-        membershipTier: profileData.membership_tier || 'free',
-        membershipStatus: profileData.membership_status || 'inactive',
-        isPrivate: profileData.is_private,
-        totalHours: profileData.total_hours,
-        activitiesCompleted: profileData.activities_completed,
-        organizationsHelped: profileData.organizations_helped,
-        achievements: [],
-        createdAt: profileData.created_at,
-        updatedAt: profileData.updated_at,
-        account_type: profileData.account_type,
-        approval_status: profileData.approval_status,
-        is_partner_organization: profileData.is_partner_organization,
-        organization_data: profileData.organization_data,
-      };
+      const userData: User = mapDbUserToUser(profileData as DbUser);
 
       console.log('[AUTH] 📦 Setting user state...');
       setUser(userData);
@@ -776,29 +725,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Transform to User type
-      const userData: User = {
-        id: profileData.id,
-        email: profileData.email,
-        fullName: profileData.full_name,
-        phone: profileData.phone,
-        location: profileData.location,
-        bio: profileData.bio,
-        areasOfExpertise: profileData.areas_of_expertise,
-        education: profileData.education,
-        avatarUrl: profileData.avatar_url,
-        role: profileData.role,
-        isPrivate: profileData.is_private,
-        totalHours: profileData.total_hours,
-        activitiesCompleted: profileData.activities_completed,
-        organizationsHelped: profileData.organizations_helped,
-        achievements: [],
-        createdAt: profileData.created_at,
-        updatedAt: profileData.updated_at,
-        account_type: profileData.account_type,
-        approval_status: profileData.approval_status,
-        is_partner_organization: profileData.is_partner_organization,
-        organization_data: profileData.organization_data,
-      };
+      const userData: User = mapDbUserToUser(profileData as DbUser);
 
       setUser(userData);
 
@@ -940,21 +867,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       // Update in Supabase
       console.log('[AUTH] 💾 Updating profile in database...');
+      const dbUpdates = mapUserToDbUser(updates);
       const { data, error } = await supabase
         .from('users')
-        .update({
-          full_name: updates.fullName,
-          phone: updates.phone,
-          location: updates.location,
-          country: updates.country,
-          bio: updates.bio,
-          areas_of_expertise: updates.areasOfExpertise,
-          education: updates.education,
-          avatar_url: updates.avatarUrl,
-          date_of_birth: updates.dateOfBirth,
-          is_private: updates.isPrivate,
-          updated_at: new Date().toISOString(),
-        })
+        .update({ ...dbUpdates, updated_at: new Date().toISOString() })
         .eq('id', user.id)
         .select()
         .single();
@@ -967,19 +883,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log('[AUTH] ✅ Profile updated in database');
 
+      const mappedUpdatedUser = mapDbUserToUser(data as DbUser);
       const updatedUser: User = {
         ...user,
-        fullName: data.full_name,
-        phone: data.phone,
-        location: data.location,
-        country: data.country,
-        bio: data.bio,
-        areasOfExpertise: data.areas_of_expertise,
-        education: data.education,
-        avatarUrl: data.avatar_url,
-        dateOfBirth: data.date_of_birth,
-        isPrivate: data.is_private,
-        updatedAt: data.updated_at,
+        ...mappedUpdatedUser,
+        // Preserve achievements if they were hydrated elsewhere
+        achievements: user.achievements ?? mappedUpdatedUser.achievements,
       };
 
       console.log('[AUTH] 📦 Updating user state...');
