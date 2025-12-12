@@ -22,12 +22,13 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 import CustomAlert from '../components/CustomAlert';
-import { supabase } from '../services/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function RegisterOrganizationScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
+  const { signUp, signOut, updateProfile } = useAuth();
   
   const [loading, setLoading] = useState(false);
   const [alertVisible, setAlertVisible] = useState(false);
@@ -121,22 +122,26 @@ export default function RegisterOrganizationScreen() {
     setLoading(true);
 
     try {
-      // Step 1: Create the auth user
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      // Step 1: Create the auth user via AuthContext (handles side effects)
+      const signUpResponse = await signUp({
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
-        options: {
-          data: {
-            full_name: formData.organizationName.trim(),
-            account_type: 'organization',
-          },
-        },
-      });
+        fullName: formData.organizationName.trim(),
+        phone: formData.phone.trim(),
+        location: formData.location.trim(),
+        bio: formData.organizationDescription.trim() || undefined,
+        ...(formData.country && { country: formData.country }),
+      } as any);
 
-      if (authError) throw authError;
-      if (!authData.user) throw new Error('Failed to create user account');
+      if (!signUpResponse.success) {
+        throw new Error(signUpResponse.error || 'Failed to create user account');
+      }
 
-      // Step 2: Update the user profile with organization data
+      if ((signUpResponse as any).requiresEmailConfirmation || !signUpResponse.data) {
+        throw new Error('Please verify your email address to complete registration.');
+      }
+
+      // Step 2: Update the user profile with organization data (profile row already created by AuthContext)
       const organizationData = {
         organization_name: formData.organizationName.trim(),
         registration_number: formData.registrationNumber.trim(),
@@ -148,24 +153,23 @@ export default function RegisterOrganizationScreen() {
         industry_focus: selectedFocus,
       };
 
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({
-          phone: formData.phone.trim(),
-          location: formData.location.trim(),
-          country: formData.country,
-          account_type: 'organization',
-          organization_data: organizationData,
-          approval_status: 'pending',
-          is_partner_organization: false, // Will become true after admin approval + payment
-        })
-        .eq('id', authData.user.id);
+      const updateProfileResponse = await updateProfile({
+        phone: formData.phone.trim(),
+        location: formData.location.trim(),
+        country: formData.country,
+        account_type: 'organization',
+        organization_data: organizationData,
+        approval_status: 'pending',
+        is_partner_organization: false, // Will become true after admin approval + payment
+      });
 
-      if (updateError) throw updateError;
+      if (!updateProfileResponse.success) {
+        throw new Error(updateProfileResponse.error || 'Failed to save organization profile');
+      }
 
       // Step 3: Notify admins (you'll implement this in Phase 3)
       // For now, we'll just log it
-      console.log('New organization application:', authData.user.id);
+      console.log('New organization application submitted');
 
       // Success message
       setAlertConfig({
@@ -176,7 +180,7 @@ export default function RegisterOrganizationScreen() {
       setAlertVisible(true);
       
       // Sign out the user (they can't use the app until approved)
-      await supabase.auth.signOut();
+      await signOut();
       
       // Redirect to login after 3 seconds
       setTimeout(() => {
