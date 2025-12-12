@@ -12,6 +12,7 @@ export default function SetPasswordScreen() {
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
   // Simple session check on mount
   useEffect(() => {
@@ -101,18 +102,19 @@ export default function SetPasswordScreen() {
         await refreshUser();
       }
 
-      // Show success and redirect
-      Alert.alert(
-        'Success! 🎉',
-        'Your password has been set. Welcome to VIbe!',
-        [
-          {
-            text: 'Get Started',
-            onPress: () => router.replace('/feed' as any)
-          }
-        ],
-        { cancelable: false }
-      );
+      console.log('[SET-PASSWORD] ✅ Password set successfully, showing success state');
+
+      // Ensure we don't leave the button stuck in loading
+      setLoading(false);
+
+      // Set success state to show success UI
+      setSuccess(true);
+
+      // Auto-redirect after 2 seconds
+      setTimeout(() => {
+        console.log('[SET-PASSWORD] Redirecting to feed...');
+        router.replace('/feed' as any);
+      }, 2000);
 
     } catch (error: any) {
       console.error('[SET-PASSWORD] Error:', error);
@@ -152,6 +154,23 @@ export default function SetPasswordScreen() {
           <TouchableOpacity style={styles.primaryButton} onPress={() => router.replace('/login' as any)}>
             <Text style={styles.primaryButtonText}>Go to Login</Text>
           </TouchableOpacity>
+        </View>
+      </ScrollView>
+    );
+  }
+
+  // Success state
+  if (success) {
+    return (
+      <ScrollView style={styles.container} contentContainerStyle={styles.centerContentContainer}>
+        <View style={styles.successCard}>
+          <Text style={styles.successEmoji}>🎉</Text>
+          <Text style={styles.successTitle}>Password Set!</Text>
+          <Text style={styles.successMessage}>
+            Your password has been saved successfully.{'\n'}
+            Redirecting you to the app...
+          </Text>
+          <ActivityIndicator size="small" color="#4A90E2" style={{ marginTop: 16 }} />
         </View>
       </ScrollView>
     );
@@ -242,6 +261,10 @@ const styles = StyleSheet.create({
   button: { backgroundColor: '#4A90E2', paddingVertical: 16, borderRadius: 8, alignItems: 'center' },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: 'white', fontSize: 16, fontWeight: '600' },
+  successCard: { backgroundColor: 'white', borderRadius: 12, padding: 32, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  successEmoji: { fontSize: 64, marginBottom: 16 },
+  successTitle: { fontSize: 28, fontWeight: '700', color: '#27ae60', marginBottom: 12 },
+  successMessage: { fontSize: 16, color: '#666', textAlign: 'center', lineHeight: 24 },
   errorCard: { backgroundColor: 'white', borderRadius: 12, padding: 32, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
   errorEmoji: { fontSize: 48, marginBottom: 16 },
   errorTitle: { fontSize: 24, fontWeight: '700', color: '#2c3e50', marginBottom: 12 },
