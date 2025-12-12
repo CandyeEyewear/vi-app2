@@ -3,7 +3,7 @@
  * Manages user authentication state and provides auth functions
  */
 
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
 import { registerForFCMNotifications, setupFCMHandlers } from '../services/fcmNotifications';
 import { savePushToken, removePushToken } from '../services/pushNotifications';
 import { syncContactToHubSpot } from '../services/hubspotService';
@@ -34,6 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+  const profileLoadInProgress = useRef<string | null>(null); // Tracks which userId is being loaded
 
   // Initialize auth state on mount
   useEffect(() => {
@@ -209,6 +210,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const loadUserProfile = async (userId: string, forceRefresh: boolean = false) => {
+    // GUARD: Prevent concurrent calls for the same user
+    if (profileLoadInProgress.current === userId && !forceRefresh) {
+      console.log('[AUTH] ⏭️ Profile load already in progress for this user, skipping...');
+      return;
+    }
+
+    // Set the guard
+    profileLoadInProgress.current = userId;
     console.log('[AUTH] 👤 Loading user profile...');
     console.log('[AUTH] User ID:', userId);
     console.log('[AUTH] Force refresh:', forceRefresh);
@@ -219,6 +228,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (cachedUser) {
         console.log('[AUTH] ✅ Using cached user profile');
         setUser(cachedUser);
+        profileLoadInProgress.current = null;
         setLoading(false);
         return;
       }
@@ -293,6 +303,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (authUserError || !authUser) {
           console.error('[AUTH] ❌ Cannot get auth user:', authUserError?.message);
           setUser(null);
+          profileLoadInProgress.current = null;
           setLoading(false);
           return;
         }
@@ -357,11 +368,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               } else {
                 console.error('[AUTH] ❌ Still cannot fetch profile:', retryError?.message);
                 setUser(null);
+                profileLoadInProgress.current = null;
                 setLoading(false);
                 return;
               }
             } else {
               setUser(null);
+              profileLoadInProgress.current = null;
               setLoading(false);
               return;
             }
@@ -372,6 +385,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } catch (createException: any) {
           console.error('[AUTH] ❌ Exception creating profile:', createException.message);
           setUser(null);
+          profileLoadInProgress.current = null;
           setLoading(false);
           return;
         }
@@ -417,6 +431,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(userData);
       console.log('[AUTH] ✅ User state updated');
 
+      profileLoadInProgress.current = null;
       setLoading(false);
       console.log('[AUTH] ✅ Loading complete');
 
@@ -445,6 +460,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('[AUTH] ❌ Exception while loading user:', error);
       setUser(null);
+      profileLoadInProgress.current = null;
       setLoading(false);
       console.log('[AUTH] ✅ Loading complete (after error)');
     }
@@ -876,6 +892,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log('[AUTH] 🚪 Starting sign out process...');
     
     try {
+      setLoading(true);
+
       // Remove push token before signing out
       if (user?.id) {
         console.log('[AUTH] 🗑️ Removing push token...');
@@ -889,18 +907,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         console.log('[AUTH] ℹ️ No user ID found, skipping push token removal');
       }
-      
-      console.log('[AUTH] 🔓 Signing out from Supabase...');
-      await supabase.auth.signOut();
-      console.log('[AUTH] ✅ Signed out from Supabase');
-      
-      console.log('[AUTH] 🧹 Clearing user state...');
-      setUser(null);
-      setNeedsPasswordSetup(false);
-      console.log('[AUTH] ✅ Sign out process completed');
+
+      console.log('[AUTH] 🔑 Calling Supabase signOut...');
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('[AUTH] ❌ Sign out error:', error);
+      }
     } catch (error) {
       console.error('[AUTH] ❌ Error during sign out:', error);
     }
+
+    // Clear all state
+    setUser(null);
+    setNeedsPasswordSetup(false);
+    setIsPasswordRecovery(false);
+    profileLoadInProgress.current = null;
+    setLoading(false);
+    console.log('[AUTH] ✅ Sign out complete');
   };
 
   const updateProfile = async (updates: Partial<User>): Promise<ApiResponse<User>> => {
