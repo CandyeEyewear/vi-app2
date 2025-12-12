@@ -265,11 +265,96 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (!profileData) {
-        console.error('[AUTH] ❌ Failed to load profile after', maxRetries, 'attempts');
-        console.error('[AUTH] Last error:', lastError?.message);
-        setUser(null);
-        setLoading(false);
-        return;
+        console.log('[AUTH] ⚠️ Profile not found after', maxRetries, 'attempts, attempting to create from auth metadata...');
+        
+        // Get the current auth user to access their metadata
+        const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser();
+        
+        if (authUserError || !authUser) {
+          console.error('[AUTH] ❌ Cannot get auth user:', authUserError?.message);
+          setUser(null);
+          setLoading(false);
+          return;
+        }
+        
+        console.log('[AUTH] 📧 Auth user email:', authUser.email);
+        console.log('[AUTH] 📋 Auth user metadata:', JSON.stringify(authUser.user_metadata, null, 2));
+        
+        const metadata = authUser.user_metadata || {};
+        
+        // Prepare profile data from metadata
+        const newProfileData = {
+          id: userId,
+          email: authUser.email,
+          full_name: metadata.full_name || metadata.fullName || authUser.email?.split('@')[0] || 'User',
+          phone: metadata.phone || null,
+          location: metadata.location || null,
+          country: metadata.country || 'Jamaica',
+          bio: metadata.bio || null,
+          areas_of_expertise: metadata.areas_of_expertise || [],
+          education: metadata.education || null,
+          date_of_birth: metadata.date_of_birth || null,
+          role: 'volunteer',
+          membership_tier: 'free',
+          membership_status: 'inactive',
+          is_private: false,
+          total_hours: 0,
+          activities_completed: 0,
+          organizations_helped: 0,
+          account_type: 'individual',
+          approval_status: 'approved',
+          is_partner_organization: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        
+        console.log('[AUTH] 📝 Creating profile with data:', JSON.stringify(newProfileData, null, 2));
+        
+        try {
+          const { data: createdProfile, error: createError } = await supabase
+            .from('users')
+            .insert(newProfileData)
+            .select()
+            .single();
+          
+          if (createError) {
+            console.error('[AUTH] ❌ Failed to create profile:', createError.message);
+            console.error('[AUTH] Error code:', createError.code);
+            console.error('[AUTH] Error details:', createError.details);
+            
+            // If it's a duplicate key error, try to fetch again (race condition)
+            if (createError.code === '23505') {
+              console.log('[AUTH] 🔄 Duplicate key - profile may have been created, retrying fetch...');
+              const { data: retryData, error: retryError } = await supabase
+                .from('users')
+                .select('*')
+                .eq('id', userId)
+                .single();
+              
+              if (retryData) {
+                profileData = retryData;
+                console.log('[AUTH] ✅ Profile found on retry after duplicate key error');
+              } else {
+                console.error('[AUTH] ❌ Still cannot fetch profile:', retryError?.message);
+                setUser(null);
+                setLoading(false);
+                return;
+              }
+            } else {
+              setUser(null);
+              setLoading(false);
+              return;
+            }
+          } else {
+            profileData = createdProfile;
+            console.log('[AUTH] ✅ Profile created successfully');
+          }
+        } catch (createException: any) {
+          console.error('[AUTH] ❌ Exception creating profile:', createException.message);
+          setUser(null);
+          setLoading(false);
+          return;
+        }
       }
 
       console.log('[AUTH] ✅ Profile data retrieved from database');
