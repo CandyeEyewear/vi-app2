@@ -240,6 +240,35 @@ async function fetchWithTimeout(
 }
 
 // ============================================
+// AUTH HELPERS
+// ============================================
+
+/**
+ * Get authentication headers for API requests
+ * Includes the user's JWT token and app identifier
+ */
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-App-Identifier': 'org.volunteersinc.vibe',
+  };
+
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+  } catch (error) {
+    // If we can't get the session, continue without auth header
+    // The API will reject if auth is required
+    console.warn('Could not get auth session for API request:', error);
+  }
+
+  return headers;
+}
+
+// ============================================
 // ONE-TIME PAYMENTS
 // ============================================
 
@@ -255,14 +284,14 @@ export async function createPayment(params: CreatePaymentParams): Promise<Paymen
       platform: detectedPlatform,
     };
 
+    const authHeaders = await getAuthHeaders();
+
     const response = await fetchWithTimeout(
       `${API_BASE_URL}/api/ezee/create-token`,
       {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify(requestBody),
       },
       30000 // 30 second timeout
     );
@@ -447,14 +476,14 @@ export async function createSubscription(params: CreateSubscriptionParams): Prom
       platform: detectedPlatform,
     };
 
+    const authHeaders = await getAuthHeaders();
+
     const response = await fetchWithTimeout(
       `${API_BASE_URL}/api/ezee/create-subscription`,
       {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify(requestBody),
       },
       30000 // 30 second timeout
     );
@@ -554,13 +583,13 @@ export async function getSubscriptionStatus(subscriptionId: string): Promise<{
   }
 
   try {
+    const authHeaders = await getAuthHeaders();
+
     const response = await fetchWithTimeout(
       `${API_BASE_URL}/api/ezee/subscription?action=status&subscriptionId=${subscriptionId}`,
       {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: authHeaders,
       },
       30000 // 30 second timeout
     );
@@ -609,14 +638,14 @@ export async function cancelSubscription(
   }
 
   try {
+    const authHeaders = await getAuthHeaders();
+
     const response = await fetchWithTimeout(
       `${API_BASE_URL}/api/ezee/subscription?action=cancel`,
       {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ subscriptionId, userId }),
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({ subscriptionId, userId }),
       },
       30000 // 30 second timeout
     );
