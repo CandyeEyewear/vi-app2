@@ -16,9 +16,17 @@ import { MessagingProvider } from '../contexts/MessagingContext';
 import { NetworkProvider } from '../contexts/NetworkContext';
 import NetworkStatusBanner from '../components/NetworkStatusBanner';
 import WebNavigation from '../components/WebNavigation';
+import { MobileWebSafeContainer } from '../components/MobileWebSafeContainer';
 import { logger } from '../utils/logger';
 import { setupFCMHandlers } from '../services/fcmNotifications';
 import { isWeb } from '../utils/platform';
+
+// Load global CSS fixes on web (safe no-op on native)
+if (isWeb) {
+  try {
+    require('../global.css');
+  } catch {}
+}
 
 // Import splash screen with error handling
 let SplashScreen: any = null;
@@ -330,9 +338,15 @@ export default function RootLayout() {
         <AuthProvider>
           <FeedProvider>
             <MessagingProvider>
-              <View style={isWeb ? webStyles.webContainer : styles.container}>
-                <AppContent />
-              </View>
+              {isWeb ? (
+                <MobileWebSafeContainer>
+                  <AppContent />
+                </MobileWebSafeContainer>
+              ) : (
+                <View style={styles.container}>
+                  <AppContent />
+                </View>
+              )}
             </MessagingProvider>
           </FeedProvider>
         </AuthProvider>
@@ -356,14 +370,5 @@ const styles = StyleSheet.create({
   splashSpinner: {
     position: 'absolute',
     bottom: 80,
-  },
-});
-
-const webStyles = StyleSheet.create({
-  webContainer: {
-    flex: 1,
-    minHeight: '100vh' as any,
-    width: '100%',
-    backgroundColor: '#FFFFFF',
   },
 });

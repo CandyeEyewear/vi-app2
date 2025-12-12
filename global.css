@@ -1,0 +1,8 @@
+/* Fix for mobile web viewport */
+
+/* Prevent pull-to-refresh and bounce effects */
+body {
+  overscroll-behavior: none;
+  position: fixed;
+  width: 100%;
+}
