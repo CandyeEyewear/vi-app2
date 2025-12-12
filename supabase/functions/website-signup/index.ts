@@ -64,7 +64,7 @@ serve(async (req) => {
     // Send password recovery email so user can set their password
     console.log('[WEBSITE-SIGNUP] Sending password recovery email...');
 
-    const { error: recoveryError } = await supabase.auth.admin.generateLink({
+    const { data: linkData, error: recoveryError } = await supabase.auth.admin.generateLink({
       type: 'recovery',
       email: email,
       options: {
@@ -72,11 +72,69 @@ serve(async (req) => {
       }
     });
 
-    if (recoveryError) {
+    if (recoveryError || !linkData?.properties?.action_link) {
       console.error('[WEBSITE-SIGNUP] Failed to generate recovery link:', recoveryError);
       // Don't fail the whole signup - account is created, they can request reset later
     } else {
-      console.log('[WEBSITE-SIGNUP] ✅ Password recovery email sent');
+      const recoveryLink = linkData.properties.action_link;
+      console.log('[WEBSITE-SIGNUP] ✅ Recovery link generated');
+
+      // Actually send the email via Resend
+      console.log('[WEBSITE-SIGNUP] Sending email via Resend...');
+
+      const resendApiKey = Deno.env.get('RESEND_API_KEY');
+      if (!resendApiKey) {
+        console.error('[WEBSITE-SIGNUP] RESEND_API_KEY not configured!');
+      } else {
+        try {
+          const emailResponse = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${resendApiKey}`,
+            },
+            body: JSON.stringify({
+              from: 'VIbe <noreply@volunteersinc.org>',
+              to: [email],
+              subject: 'Set Your VIbe Password',
+              html: `
+                <!DOCTYPE html>
+                <html>
+                <body style="font-family: Arial, sans-serif;">
+                  <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <div style="text-align: center; margin-bottom: 30px;">
+                      <img src="https://46485094.fs1.hubspotusercontent-na1.net/hubfs/46485094/icon%2022a.png" alt="VIbe" style="width: 80px;">
+                    </div>
+
+                    <h1 style="color: #4A90E2;">Welcome to VIbe!</h1>
+
+                    <p>Hi ${fullName},</p>
+                    <p>Your VIbe account has been created! Click the button below to set your password:</p>
+
+                    <div style="text-align: center; margin: 30px 0;">
+                      <a href="${recoveryLink}" style="background: #4A90E2; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; display: inline-block;">Set Your Password</a>
+                    </div>
+
+                    <p style="font-size: 14px; color: #666;">Or copy this link:</p>
+                    <p style="font-size: 12px; word-break: break-all;">${recoveryLink}</p>
+                  </div>
+                </body>
+                </html>
+              `
+            })
+          });
+
+          if (emailResponse.ok) {
+            const emailData = await emailResponse.json();
+            console.log('[WEBSITE-SIGNUP] ✅ Email sent successfully via Resend:', emailData.id);
+          } else {
+            const errorText = await emailResponse.text();
+            console.error('[WEBSITE-SIGNUP] Resend API error:', errorText);
+          }
+        } catch (emailError) {
+          console.error('[WEBSITE-SIGNUP] Failed to send email:', emailError);
+        }
+      }
     }
 
     return new Response(
