@@ -56,21 +56,37 @@ export default function ResetPasswordScreen() {
       try {
         console.log('[RESET-PASSWORD] Processing tokens...');
 
+        // First, try Supabase's built-in session detection
+        // Newer versions auto-detect hash tokens
+        const {
+          data: { session: existingSession },
+          error: sessionError,
+        } = await supabase.auth.getSession();
+
+        if (existingSession && !sessionError) {
+          console.log('[RESET-PASSWORD] ✅ Session found via getSession():', existingSession.user.email);
+          setSessionReady(true);
+          setCheckingSession(false);
+
+          // Clean the URL if there's a hash
+          if (isWeb && typeof window !== 'undefined' && window.location.hash) {
+            window.history.replaceState(null, '', window.location.pathname);
+          }
+          return;
+        }
+
+        // Fallback: Manual hash parsing for web (if Supabase didn't auto-detect)
         if (isWeb && typeof window !== 'undefined') {
           const hash = window.location.hash;
 
-          console.log('[RESET-PASSWORD] URL hash present:', !!hash);
-
           if (hash && hash.includes('access_token')) {
-            console.log('[RESET-PASSWORD] Parsing hash tokens...');
+            console.log('[RESET-PASSWORD] Parsing hash tokens manually...');
             const hashParams = new URLSearchParams(hash.substring(1));
             const accessToken = hashParams.get('access_token');
             const refreshToken = hashParams.get('refresh_token');
             const type = hashParams.get('type');
 
             console.log('[RESET-PASSWORD] Token type:', type);
-            console.log('[RESET-PASSWORD] access_token present:', !!accessToken);
-            console.log('[RESET-PASSWORD] refresh_token present:', !!refreshToken);
 
             if (!accessToken) {
               setSessionError('Invalid reset link. Please request a new password reset email.');
@@ -79,7 +95,6 @@ export default function ResetPasswordScreen() {
             }
 
             // Establish session from tokens
-            console.log('[RESET-PASSWORD] Calling setSession()...');
             const { data, error } = await supabase.auth.setSession({
               access_token: accessToken,
               refresh_token: refreshToken || '',
@@ -101,9 +116,7 @@ export default function ResetPasswordScreen() {
               setSessionReady(true);
 
               // Clean the URL
-              if (window.history.replaceState) {
-                window.history.replaceState(null, '', window.location.pathname);
-              }
+              window.history.replaceState(null, '', window.location.pathname);
             } else {
               setSessionError('Failed to establish session. Please request a new link.');
             }
@@ -113,28 +126,9 @@ export default function ResetPasswordScreen() {
           }
         }
 
-        // No hash tokens - check for existing session
-        console.log('[RESET-PASSWORD] No hash tokens, checking existing session...');
-        const {
-          data: { session },
-          error,
-        } = await supabase.auth.getSession();
-
-        if (error) {
-          console.error('[RESET-PASSWORD] Session error:', error.message);
-          setSessionError('Session error. Please request a new password reset link.');
-          setCheckingSession(false);
-          return;
-        }
-
-        if (session) {
-          console.log('[RESET-PASSWORD] ✅ Existing session found for:', session.user.email);
-          setSessionReady(true);
-        } else {
-          console.log('[RESET-PASSWORD] No session found');
-          setSessionError('No valid session. Please use the link from your password reset email.');
-        }
-
+        // No session and no hash tokens
+        console.log('[RESET-PASSWORD] No session or tokens found');
+        setSessionError('No valid session. Please use the link from your password reset email.');
         setCheckingSession(false);
       } catch (error: any) {
         console.error('[RESET-PASSWORD] Exception:', error);
