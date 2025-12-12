@@ -100,6 +100,12 @@ export default function SetPasswordScreen() {
   }, []);
 
   const handleSetPassword = async () => {
+    // Prevent double-submission
+    if (loading) {
+      console.log('[SET-PASSWORD] Already processing, ignoring click');
+      return;
+    }
+
     if (!password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
@@ -115,51 +121,88 @@ export default function SetPasswordScreen() {
       return;
     }
 
+    // Set loading immediately to disable button
     setLoading(true);
+    console.log('[SET-PASSWORD] Starting password update...');
 
     try {
       // Verify session still exists
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
+        setLoading(false);
         Alert.alert('Session Expired', 'Please use the link from your email again.');
         setSessionReady(false);
         setSessionError('Session expired. Please request a new link.');
         return;
       }
-      
+
       console.log('[SET-PASSWORD] Updating password...');
       
       const { error: passwordError } = await supabase.auth.updateUser({
         password: password
       });
 
-      if (passwordError) throw passwordError;
+      if (passwordError) {
+        // Handle "same password" error gracefully - it means password was already set
+        if (passwordError.message.includes('different from the old password')) {
+          console.log('[SET-PASSWORD] Password already set, proceeding to app...');
+          router.replace('/feed' as any);
+          return;
+        }
+        throw passwordError;
+      }
 
+      console.log('[SET-PASSWORD] ✅ Password updated successfully');
       console.log('[SET-PASSWORD] Clearing needs_password_setup flag...');
-      
+
       const { error: metadataError } = await supabase.auth.updateUser({
         data: { needs_password_setup: false }
       });
 
       if (metadataError) {
-        console.warn('[SET-PASSWORD] Could not clear flag:', metadataError);
-        // Don't throw - password was set successfully
+        console.warn('[SET-PASSWORD] Could not clear flag:', metadataError.message);
+        // Don't throw - password was set successfully, flag is secondary
       }
 
-      console.log('[SET-PASSWORD] ✅ Password set successfully!');
+      console.log('[SET-PASSWORD] ✅ All done! Redirecting to feed...');
 
+      // Show success message and redirect
+      // Use a brief timeout to ensure the alert renders before navigation
       Alert.alert(
         'Success! 🎉',
         'Your password has been set. Welcome to VIbe!',
-        [{ text: 'Get Started', onPress: () => router.replace('/feed' as any) }]
+        [
+          {
+            text: 'Get Started',
+            onPress: () => {
+              console.log('[SET-PASSWORD] User confirmed, navigating to feed...');
+              router.replace('/feed' as any);
+            }
+          }
+        ],
+        { cancelable: false } // Prevent dismissing without pressing button
       );
 
     } catch (error: any) {
       console.error('[SET-PASSWORD] Error:', error);
-      Alert.alert('Error', error.message || 'Failed to set password. Please try again.');
-    } finally {
-      setLoading(false);
+      setLoading(false); // Re-enable button on error
+      
+      // User-friendly error messages
+      let errorMessage = 'Failed to set password. Please try again.';
+      
+      if (error.message?.includes('expired')) {
+        errorMessage = 'Your session has expired. Please request a new link.';
+        setSessionReady(false);
+        setSessionError('Session expired. Please request a new link.');
+      } else if (error.message?.includes('weak') || error.message?.includes('short')) {
+        errorMessage = 'Please choose a stronger password with at least 8 characters.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert('Error', errorMessage);
     }
+    // Note: Don't set loading=false on success - we want button to stay disabled until redirect
   };
 
   // Loading state
@@ -244,9 +287,13 @@ export default function SetPasswordScreen() {
         </View>
 
         <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
+          style={[
+            styles.button, 
+            (loading || !password || !confirmPassword) && styles.buttonDisabled
+          ]}
           onPress={handleSetPassword}
-          disabled={loading}
+          disabled={loading || !password || !confirmPassword}
+          activeOpacity={0.7}
         >
           <Text style={styles.buttonText}>
             {loading ? 'Setting Password...' : 'Set Password & Continue'}
