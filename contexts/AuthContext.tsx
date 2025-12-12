@@ -89,10 +89,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(async (event, session) => {
         console.log('[AUTH] 🔔 Auth state changed:', event);
 
-        // Ignore token refresh and initial session events (handled separately)
-        if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
-          console.log('[AUTH] ⏭️ Ignoring', event, 'event (handled separately)');
+        // Only ignore token refresh events - they don't change auth state
+        if (event === 'TOKEN_REFRESHED') {
+          console.log('[AUTH] ⏭️ Ignoring TOKEN_REFRESHED event');
           return;
+        }
+
+        // For INITIAL_SESSION, only process if we don't already have a user loaded
+        // This prevents duplicate processing but allows email confirmation flow to work
+        if (event === 'INITIAL_SESSION') {
+          if (user) {
+            console.log('[AUTH] ⏭️ Ignoring INITIAL_SESSION - user already loaded');
+            return;
+          }
+          console.log('[AUTH] 📧 Processing INITIAL_SESSION (likely from email confirmation)');
         }
 
         if (session) {
