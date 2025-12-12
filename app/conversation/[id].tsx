@@ -61,7 +61,6 @@ export default function ConversationScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [oldestMessageId, setOldestMessageId] = useState<string | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [visualViewportHeight, setVisualViewportHeight] = useState(0);
   const [otherUserOnline, setOtherUserOnline] = useState(false); // Track if other user is in chat
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [imagePreview, setImagePreview] = useState<{ uri: string; type: string } | null>(null); // For sending new images
@@ -173,38 +172,6 @@ export default function ConversationScreen() {
       hideSubscription.remove();
     };
   }, [keyboardAnim]);
-
-  // Handle mobile web keyboard using Visual Viewport API
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-
-    const handleResize = () => {
-      if (typeof window !== 'undefined' && (window as any).visualViewport) {
-        const viewportHeight = (window as any).visualViewport.height as number;
-        const windowHeight = window.innerHeight;
-        const keyboardHeight = windowHeight - viewportHeight;
-
-        setVisualViewportHeight(keyboardHeight > 50 ? keyboardHeight : 0);
-
-        // Scroll to bottom when keyboard appears
-        if (keyboardHeight > 50) {
-          setTimeout(() => {
-            flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
-          }, 100);
-        }
-      }
-    };
-
-    if (typeof window !== 'undefined' && (window as any).visualViewport) {
-      (window as any).visualViewport.addEventListener('resize', handleResize);
-      (window as any).visualViewport.addEventListener('scroll', handleResize);
-
-      return () => {
-        (window as any).visualViewport?.removeEventListener('resize', handleResize);
-        (window as any).visualViewport?.removeEventListener('scroll', handleResize);
-      };
-    }
-  }, []);
 
   useEffect(() => {
     if (!id || !user) return;
@@ -1051,7 +1018,7 @@ export default function ConversationScreen() {
               styles.messagesList,
                 {
                   paddingTop: headerHeight, // Space for fixed header
-                  paddingBottom: Platform.OS === 'web' ? 80 : 16, // Extra padding for fixed input on web
+                  paddingBottom: 16,
                 },
             ]}
             inverted={true}
@@ -1119,14 +1086,6 @@ export default function ConversationScreen() {
               extrapolate: 'clamp',
             }),
               marginBottom: Platform.OS === 'android' ? keyboardHeight : 0,
-          },
-          // Mobile web: use fixed positioning with visual viewport offset
-          Platform.OS === 'web' && {
-            position: 'fixed' as any,
-            bottom: visualViewportHeight,
-            left: 0,
-            right: 0,
-            zIndex: 1000,
           },
         ]}
       >
