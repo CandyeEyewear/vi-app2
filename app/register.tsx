@@ -22,15 +22,13 @@ import { Colors } from '../constants/colors';
 import CrossPlatformDateTimePicker from '../components/CrossPlatformDateTimePicker';
 import CustomAlert from '../components/CustomAlert';
 import { supabase } from '../services/supabase';
-import { syncContactToHubSpot } from '../services/hubspotService';
-import { sendWelcomeEmail } from '../services/resendService';
 
 type AccountType = 'individual' | 'organization';
 
 export default function RegisterScreen() {
   const router = useRouter();
   const { invite, code } = useLocalSearchParams<{ invite?: string; code?: string }>();
-  const { signUp, user, loading: authLoading } = useAuth();
+  const { signUp, signOut, user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [alertVisible, setAlertVisible] = useState(false);
@@ -265,19 +263,31 @@ export default function RegisterScreen() {
     setLoading(true);
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      // Route signup through AuthContext so side effects run (profile creation, push token, HubSpot, welcome email)
+      const authResponse = await signUp({
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
-        options: {
-          data: {
-            full_name: formData.organizationName.trim(),
-            account_type: 'organization',
-          },
-        },
-      });
+        fullName: formData.organizationName.trim(),
+        phone: formData.phone.trim(),
+        location: formData.location.trim(),
+        ...(formData.country && { country: formData.country }),
+        ...(inviteCode && { inviteCode }),
+      } as any);
 
-      if (authError) throw authError;
-      if (!authData.user) throw new Error('Failed to create user account');
+      if (!authResponse.success) {
+        showAlert('Registration Failed', authResponse.error || 'An error occurred during registration. Please try again.');
+        return;
+      }
+
+      // If email confirmation is required, show existing verification UI and redirect to login
+      if ((authResponse as any).requiresEmailConfirmation || !authResponse.data) {
+        setVerificationEmail(formData.email);
+        setShowVerificationMessage(true);
+        setTimeout(() => {
+          router.replace('/login?needsVerification=true&email=' + encodeURIComponent(formData.email));
+        }, 5000);
+        return;
+      }
 
       const organizationData = {
         organization_name: formData.organizationName.trim(),
@@ -301,52 +311,9 @@ export default function RegisterScreen() {
           approval_status: 'pending',
           is_partner_organization: false,
         })
-        .eq('id', authData.user.id);
+        .eq('id', authResponse.data.id);
 
       if (updateError) throw updateError;
-
-      // Sync contact to HubSpot and save Contact ID
-      console.log('[ORG_REGISTER] 🔄 Syncing contact to HubSpot...');
-      const hubspotResult = await syncContactToHubSpot({
-        email: formData.email,
-        fullName: formData.organizationName,
-        phone: formData.phone,
-        location: formData.location,
-        bio: formData.organizationDescription,
-      });
-
-      if (hubspotResult.success && hubspotResult.contactId) {
-        console.log('[ORG_REGISTER] ✅ HubSpot contact synced:', hubspotResult.contactId);
-        
-        // Save HubSpot Contact ID to database
-        const { error: hubspotUpdateError } = await supabase
-          .from('users')
-          .update({ hubspot_contact_id: hubspotResult.contactId })
-          .eq('id', authData.user.id);
-        
-        if (hubspotUpdateError) {
-          console.error('[ORG_REGISTER] ⚠️ Failed to save HubSpot Contact ID:', hubspotUpdateError);
-        } else {
-          console.log('[ORG_REGISTER] ✅ HubSpot Contact ID saved to database');
-        }
-      } else {
-        console.error('[ORG_REGISTER] ⚠️ HubSpot sync failed:', hubspotResult.error);
-        // Don't fail signup if HubSpot fails - just log it
-      }
-
-      // Send welcome email (non-blocking)
-      console.log('[ORG_REGISTER] 📧 Sending welcome email...');
-      sendWelcomeEmail(formData.email, formData.organizationName)
-        .then((result) => {
-          if (result.success) {
-            console.log('[ORG_REGISTER] ✅ Welcome email sent');
-          } else {
-            console.error('[ORG_REGISTER] ⚠️ Welcome email failed:', result.error);
-          }
-        })
-        .catch((error) => {
-          console.error('[ORG_REGISTER] ⚠️ Welcome email error:', error);
-        });
 
       showAlert(
         'Application Submitted Successfully! 🎉',
@@ -354,7 +321,7 @@ export default function RegisterScreen() {
         'success'
       );
       
-      await supabase.auth.signOut();
+      await signOut();
       
       setTimeout(() => {
         router.replace('/login');
