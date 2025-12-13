@@ -20,15 +20,18 @@ export function MobileWebSafeContainer({ children, style }: MobileWebSafeContain
     return <View style={[styles.container, style]}>{children}</View>;
   }
 
-  // On web, use the real viewport height
+  // On web, only apply fixed height when we have a valid viewport height
+  // Otherwise fall back to flex: 1 behavior
+  const hasValidHeight = height && height > 0;
+
   return (
     <View
       style={[
         styles.container,
-        {
-          height: height || '100%',
-          minHeight: height || '100%',
-          maxHeight: height || '100%',
+        hasValidHeight && {
+          height: height,
+          minHeight: height,
+          maxHeight: height,
         },
         style,
       ]}
