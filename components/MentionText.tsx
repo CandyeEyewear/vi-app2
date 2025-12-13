@@ -1,12 +1,13 @@
 /**
  * MentionText Component
- * Renders text with @mentions and #hashtags as tappable links
+ * Renders text with @mentions, #hashtags, and URLs as tappable links
  * - Tapping @mention navigates to user profile
  * - Tapping #hashtag navigates to event/cause/opportunity detail
+ * - Tapping a URL opens it in the browser
  */
 
 import React from 'react';
-import { Text, StyleSheet, useColorScheme } from 'react-native';
+import { Linking, Text, StyleSheet, useColorScheme } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '../constants/colors';
 
@@ -25,25 +26,84 @@ interface TextSegment {
   userId?: string;
   hashtagType?: HashtagType;
   hashtagId?: string;
+  url?: string;
 }
 
-// Parse text into segments (plain text, mentions, and hashtags)
-const parseText = (text: string): TextSegment[] => {
-  const segments: TextSegment[] = [];
-  
+type ExtendedSegmentType = SegmentType | 'link';
+type ExtendedTextSegment = Omit<TextSegment, 'type'> & { type: ExtendedSegmentType };
+
+// Match http(s), www, or bare domains like example.com/path
+const URL_PATTERN = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9-]+\.[a-zA-Z]{2,}[^\s]*)/gi;
+const TRAILING_PUNCTUATION = /[)\].,!?;:]+$/;
+
+const normalizeUrl = (rawUrl: string): string => {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return trimmed;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  // Add https:// if it starts with www. or doesn't have a protocol
+  if (/^www\./i.test(trimmed)) return `https://${trimmed}`;
+  // Avoid mangling other schemes like mailto:
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+};
+
+const linkifyPlainText = (plain: string): ExtendedTextSegment[] => {
+  const segments: ExtendedTextSegment[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  URL_PATTERN.lastIndex = 0;
+  while ((match = URL_PATTERN.exec(plain)) !== null) {
+    const matchStart = match.index;
+    let raw = match[0];
+
+    if (matchStart > lastIndex) {
+      segments.push({ type: 'text', content: plain.slice(lastIndex, matchStart) });
+    }
+
+    // Strip trailing punctuation commonly attached in prose.
+    let trailing = '';
+    while (raw.length > 0 && TRAILING_PUNCTUATION.test(raw)) {
+      const lastChar = raw.slice(-1);
+      trailing = lastChar + trailing;
+      raw = raw.slice(0, -1);
+    }
+
+    if (raw) {
+      segments.push({
+        type: 'link',
+        content: raw,
+        url: normalizeUrl(raw),
+      });
+    }
+    if (trailing) {
+      segments.push({ type: 'text', content: trailing });
+    }
+
+    lastIndex = matchStart + match[0].length;
+  }
+
+  if (lastIndex < plain.length) {
+    segments.push({ type: 'text', content: plain.slice(lastIndex) });
+  }
+
+  return segments;
+};
+
+// Parse text into segments (plain text, mentions, hashtags), then linkify remaining plain text
+const parseText = (text: string): ExtendedTextSegment[] => {
+  const segments: ExtendedTextSegment[] = [];
+
   // Combined regex for both mentions and hashtags
   const combinedPattern = /@\[([^\]]+)\]\(([^)]+)\)|#\[([^\]]+)\]\((event|cause|opportunity):([^)]+)\)/g;
-  
+
   let lastIndex = 0;
-  let match;
+  let match: RegExpExecArray | null;
 
   while ((match = combinedPattern.exec(text)) !== null) {
-    // Add text before this match
+    // Add text before this match (linkified)
     if (match.index > lastIndex) {
-      segments.push({
-        type: 'text',
-        content: text.slice(lastIndex, match.index),
-      });
+      segments.push(...linkifyPlainText(text.slice(lastIndex, match.index)));
     }
 
     if (match[1] !== undefined) {
@@ -66,12 +126,9 @@ const parseText = (text: string): TextSegment[] => {
     lastIndex = match.index + match[0].length;
   }
 
-  // Add remaining text
+  // Add remaining text (linkified)
   if (lastIndex < text.length) {
-    segments.push({
-      type: 'text',
-      content: text.slice(lastIndex),
-    });
+    segments.push(...linkifyPlainText(text.slice(lastIndex)));
   }
 
   return segments;
@@ -110,16 +167,15 @@ export default function MentionText({ text, style, numberOfLines }: MentionTextP
     router.push(getHashtagRoute(type, id) as any);
   };
 
-  const segments = parseText(text);
+  const handleLinkPress = async (url: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch (e) {
+      // Swallow open failures (invalid URL or no handler)
+    }
+  };
 
-  // If no mentions or hashtags, just render plain text
-  if (segments.length === 1 && segments[0].type === 'text') {
-    return (
-      <Text style={style} numberOfLines={numberOfLines}>
-        {text}
-      </Text>
-    );
-  }
+  const segments = parseText(text);
 
   return (
     <Text style={style} numberOfLines={numberOfLines}>
@@ -147,6 +203,21 @@ export default function MentionText({ text, style, numberOfLines }: MentionTextP
             </Text>
           );
         }
+
+        if (segment.type === 'link' && segment.url) {
+          return (
+            <Text
+              key={`link-${index}`}
+              style={[styles.link, { color: colors.primary }]}
+              onPress={(e: any) => {
+                e?.stopPropagation?.();
+                handleLinkPress(segment.url!);
+              }}
+            >
+              {segment.content}
+            </Text>
+          );
+        }
         
         return (
           <Text key={`text-${index}`}>
@@ -164,5 +235,9 @@ const styles = StyleSheet.create({
   },
   hashtag: {
     fontWeight: '600',
+  },
+  link: {
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
 });
