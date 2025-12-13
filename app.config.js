@@ -124,7 +124,17 @@ export default {
       "expo-web-browser",
       "expo-updates",
       // Sentry plugin is native-only, exclude from web builds
-      ...(process.env.VERCEL ? [] : ["@sentry/react-native/expo"])
+      ...(process.env.VERCEL
+        ? []
+        : [
+            [
+              "@sentry/react-native/expo",
+              {
+                organization: "volunteers-incorporated",
+                project: "react-native",
+              },
+            ],
+          ])
     ],
     extra: {
       router: {
