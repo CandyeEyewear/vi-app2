@@ -12,6 +12,7 @@ import { User, RegisterFormData, LoginFormData, ApiResponse } from '../types';
 import { supabase } from '../services/supabase';
 import { cache, CacheKeys } from '../services/cache';
 import { mapDbUserToUser, mapUserToDbUser, type DbUser } from '../utils/userTransform';
+import { isWeb } from '../utils/platform';
 
 interface AuthContextType {
   user: User | null;
@@ -47,7 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AUTH] 🔐 Starting auth initialization...');
       
       // Check for password recovery tokens in URL (web only)
-      if (typeof window !== 'undefined' && window.location.hash) {
+      if (isWeb && typeof window !== 'undefined' && window.location && window.location.hash) {
         const hash = window.location.hash;
         if (hash.includes('type=recovery')) {
           console.log('[AUTH] 🔐 Password recovery flow detected');
@@ -105,9 +106,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         // Check for recovery flow
         if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
-          if (typeof window !== 'undefined' && window.location.hash.includes('type=recovery')) {
-            console.log('[AUTH] 🔐 Password recovery session detected');
-            setIsPasswordRecovery(true);
+          if (isWeb && typeof window !== 'undefined' && window.location) {
+            const hash = window.location.hash || '';
+            if (hash.includes('type=recovery')) {
+              console.log('[AUTH] 🔐 Password recovery session detected');
+              setIsPasswordRecovery(true);
+            }
           }
         }
 
@@ -927,7 +931,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const fullName = userData?.full_name || 'there';
 
       // Determine redirect URL based on platform
-      const isWeb = typeof window !== 'undefined';
       const redirectUrl = isWeb 
         ? 'https://vibe.volunteersinc.org/reset-password'
         : 'vibe://reset-password';
