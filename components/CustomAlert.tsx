@@ -44,7 +44,10 @@ export default function CustomAlert({
   onConfirm, // NEW
   showCancel = false, // NEW
 }: CustomAlertProps) {
-  console.log('[CUSTOM ALERT] Rendering:', { visible, title, message });
+  // Avoid noisy logs on every render (especially when hidden)
+  if (__DEV__ && visible) {
+    console.log('[CUSTOM ALERT] Rendering:', { visible, title, message });
+  }
 
   // NEW: Build buttons based on props
   const finalButtons: AlertButton[] = buttons || (
