@@ -3,7 +3,7 @@
  * Beautiful login interface with VIbe branding
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -35,6 +35,7 @@ export default function LoginScreen() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const pendingErrorRef = useRef<{ title: string; message: string } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertConfig, setAlertConfig] = useState({
@@ -51,15 +52,27 @@ export default function LoginScreen() {
     }
   }, [user, loading, router]);
 
-  // Don't render login form if user is already authenticated
-  if (!loading && user) {
-    return null; // Will redirect via useEffect
-  }
-
   const showAlert = (title: string, message: string, type: 'success' | 'error' | 'warning' = 'error') => {
     setAlertConfig({ title, message, type });
     setAlertVisible(true);
   };
+
+  // Show pending auth errors after re-renders stabilize (mobile web can remount on auth state changes)
+  useEffect(() => {
+    if (pendingErrorRef.current && !loading) {
+      const { title, message } = pendingErrorRef.current;
+      pendingErrorRef.current = null;
+      // Small delay to ensure component is stable
+      setTimeout(() => {
+        showAlert(title, message, 'error');
+      }, 100);
+    }
+  }, [loading]);
+
+  // Don't render login form if user is already authenticated
+  if (!loading && user) {
+    return null; // Will redirect via useEffect
+  }
 
   const handleTerms = () => {
     Linking.openURL('https://volunteersinc.org/terms-and-conditions');
@@ -124,7 +137,8 @@ export default function LoginScreen() {
         }
       }
       
-      showAlert('Login Failed', errorMessage, 'error');
+      // Use ref to persist error across re-renders
+      pendingErrorRef.current = { title: 'Login Failed', message: errorMessage };
     }
   };
 
