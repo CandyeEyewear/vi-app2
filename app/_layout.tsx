@@ -10,6 +10,7 @@ import * as Notifications from 'expo-notifications';
 import * as Linking from 'expo-linking';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { View, StyleSheet, useWindowDimensions, Image, ActivityIndicator } from 'react-native';
+import * as Sentry from '@sentry/react-native';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { FeedProvider } from '../contexts/FeedContext';
 import { MessagingProvider } from '../contexts/MessagingContext';
@@ -20,6 +21,12 @@ import { MobileWebSafeContainer } from '../components/MobileWebSafeContainer';
 import { logger } from '../utils/logger';
 import { setupFCMHandlers } from '../services/fcmNotifications';
 import { isWeb } from '../utils/platform';
+
+Sentry.init({
+  dsn: 'https://e3cd7fd70496e616a2ed41f8085eaee3@o4510512782180352.ingest.us.sentry.io/4510512792600576',
+  enableInExpoDevelopment: false,
+  debug: __DEV__,
+});
 
 // Load global CSS fixes on web (safe no-op on native)
 if (isWeb) {
