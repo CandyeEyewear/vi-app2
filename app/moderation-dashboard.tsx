@@ -37,6 +37,7 @@ import {
 } from 'lucide-react-native';
 import { supabase } from '../services/supabase';
 import CustomAlert from '../components/CustomAlert';
+import MentionText from '../components/MentionText';
 import { PostReport, Post, User, ModerationStats } from '../types';
 
 type TabType = 'reports' | 'posts' | 'banned' | 'stats';
@@ -584,9 +585,11 @@ export default function ModerationDashboardScreen() {
               </View>
             )}
           </View>
-          <Text style={[styles.postText, { color: colors.text }]} numberOfLines={3}>
-            {report.post.text}
-          </Text>
+          <MentionText
+            text={report.post.text || ''}
+            style={[styles.postText, { color: colors.text }]}
+            numberOfLines={3}
+          />
         </View>
 
         {/* Actions */}
@@ -675,9 +678,10 @@ export default function ModerationDashboardScreen() {
             </View>
           )}
         </View>
-        <Text style={[styles.postText, { color: colors.text }]}>
-          {post.text}
-        </Text>
+        <MentionText
+          text={post.text || ''}
+          style={[styles.postText, { color: colors.text }]}
+        />
         
         <View style={styles.actions}>
           {!post.isHidden ? (
