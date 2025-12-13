@@ -19,6 +19,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
 import CustomAlert from './CustomAlert';
 import { UserAvatar, UserNameWithBadge } from './index';
+import LinkText from './LinkText';
 import type { OpportunityChatMessage, TypingIndicator } from '../types';
 
 interface OpportunityGroupChatProps {
@@ -354,14 +355,14 @@ export default function OpportunityGroupChat({ opportunityId, onMessageCountChan
               isOwnMessage ? styles.ownMessageBubble : styles.otherMessageBubble,
             ]}
           >
-            <Text
+            <LinkText
+              text={item.message}
               style={[
                 styles.messageText,
                 isOwnMessage ? styles.ownMessageText : styles.otherMessageText,
               ]}
-            >
-              {item.message}
-            </Text>
+              linkStyle={isOwnMessage ? { color: '#FFFFFF', textDecorationLine: 'underline' } : undefined}
+            />
           </View>
           <Text style={styles.messageTime}>
             {new Date(item.createdAt).toLocaleTimeString('en-US', {
