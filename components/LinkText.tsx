@@ -12,12 +12,28 @@ interface LinkTextProps {
   text: string;
   style?: any;
   linkStyle?: any;
+  numberOfLines?: number;
 }
 
 // URL regex pattern - matches http, https, www, and common domains
 const URL_REGEX = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9-]+\.[a-zA-Z]{2,}[^\s]*)/gi;
 
-export default function LinkText({ text, style, linkStyle }: LinkTextProps) {
+const splitTrailingPunctuation = (raw: string): { linkText: string; trailingText: string } => {
+  // Common case: sentence punctuation is attached to the URL.
+  // Keep punctuation in the message, but exclude it from the actual link target.
+  const match = raw.match(/^(.+?)([),.!?;:]+)$/);
+  if (!match) return { linkText: raw, trailingText: '' };
+  return { linkText: match[1], trailingText: match[2] };
+};
+
+const normalizeUrl = (rawUrl: string): string => {
+  // Add https:// if it starts with www. or doesn't have a protocol
+  if (rawUrl.startsWith('www.')) return `https://${rawUrl}`;
+  if (!rawUrl.match(/^https?:\/\//i)) return `https://${rawUrl}`;
+  return rawUrl;
+};
+
+export default function LinkText({ text, style, linkStyle, numberOfLines }: LinkTextProps) {
   const parts: Array<{ text: string; isLink: boolean; url?: string }> = [];
   let lastIndex = 0;
   let match;
@@ -35,20 +51,22 @@ export default function LinkText({ text, style, linkStyle }: LinkTextProps) {
       });
     }
 
-    // Add the URL
-    let url = match[0];
-    // Add https:// if it starts with www. or doesn't have a protocol
-    if (url.startsWith('www.')) {
-      url = 'https://' + url;
-    } else if (!url.match(/^https?:\/\//i)) {
-      url = 'https://' + url;
-    }
+    const { linkText, trailingText } = splitTrailingPunctuation(match[0]);
+    const url = normalizeUrl(linkText);
 
     parts.push({
-      text: match[0],
+      text: linkText,
       isLink: true,
       url: url,
     });
+
+    // Preserve punctuation after the URL as normal text
+    if (trailingText) {
+      parts.push({
+        text: trailingText,
+        isLink: false,
+      });
+    }
 
     lastIndex = match.index + match[0].length;
   }
@@ -80,14 +98,19 @@ export default function LinkText({ text, style, linkStyle }: LinkTextProps) {
   };
 
   return (
-    <Text style={style}>
+    <Text style={style} numberOfLines={numberOfLines}>
       {parts.map((part, index) => {
         if (part.isLink && part.url) {
           return (
             <Text
               key={index}
               style={[styles.link, linkStyle]}
-              onPress={() => handleLinkPress(part.url!)}
+              onPress={(e: any) => {
+                // Prevent parent press handlers (e.g., message long-press wrappers)
+                // from interfering with link taps.
+                e?.stopPropagation?.();
+                handleLinkPress(part.url!);
+              }}
               suppressHighlighting={false}
             >
               {part.text}

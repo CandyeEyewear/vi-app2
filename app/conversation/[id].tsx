@@ -12,6 +12,7 @@ import {
   FlatList,
   TextInput,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
@@ -40,6 +41,7 @@ import MessageStatus from '../../components/MessageStatus';
 import TypingIndicator from '../../components/TypingIndicator';
 import OnlineStatusDot from '../../components/OnlineStatusDot';
 import SwipeableMessage from '../../components/SwipeableMessage';
+import LinkText from '../../components/LinkText';
 import { UserAvatar, UserNameWithBadge } from '../../components/index';
 import { goBack } from '../../utils/navigation';
 
@@ -842,11 +844,10 @@ export default function ConversationScreen() {
         onSwipeRight={() => handleSwipeToReply(item)}
         disabled={isDeleted}
       >
-        <TouchableOpacity
+        <Pressable
           style={[styles.messageContainer, isMe && styles.messageContainerMe]}
           onLongPress={() => handleLongPressToDelete(item)}
           delayLongPress={500}
-          activeOpacity={0.9}
           disabled={!isMe || isDeleted}
         >
           <View style={[
@@ -862,12 +863,12 @@ export default function ConversationScreen() {
                 <Text style={[styles.replyQuoteName, isMe && styles.replyQuoteNameMe]}>
                   {replySenderName}
                 </Text>
-                <Text 
+                <LinkText
+                  text={item.replyTo.text}
                   style={[styles.replyQuoteText, isMe && styles.replyQuoteTextMe]}
                   numberOfLines={2}
-                >
-                  {item.replyTo.text}
-                </Text>
+                  linkStyle={isMe ? { color: '#FFFFFF', textDecorationLine: 'underline' } : undefined}
+                />
               </View>
             </View>
           )}
@@ -920,13 +921,15 @@ export default function ConversationScreen() {
           {/* Message Text - Only show if there's text */}
           {hasText && (
             <>
-              <Text style={[
-                styles.messageText, 
-                isMe && styles.messageTextMe,
-                isDeleted && styles.messageTextDeleted
-              ]}>
-                {isDeleted ? '🚫 This message was deleted' : item.text}
-              </Text>
+              <LinkText
+                text={isDeleted ? '🚫 This message was deleted' : item.text}
+                style={[
+                  styles.messageText,
+                  isMe && styles.messageTextMe,
+                  isDeleted && styles.messageTextDeleted,
+                ]}
+                linkStyle={isMe ? { color: '#FFFFFF', textDecorationLine: 'underline' } : undefined}
+              />
               <View style={styles.messageFooter}>
                 <Text style={[styles.messageTime, isMe && styles.messageTimeMe]}>
                   {formatTime(item.createdAt)}
@@ -938,7 +941,7 @@ export default function ConversationScreen() {
           
           {/* If only image (no text), no additional footer needed - timestamp is on image */}
         </View>
-      </TouchableOpacity>
+      </Pressable>
     </SwipeableMessage>
     );
   };
@@ -1060,9 +1063,11 @@ export default function ConversationScreen() {
               <Text style={styles.replyName}>
                 Replying to {replyingTo.senderId === user?.id ? 'yourself' : otherUser?.fullName || 'User'}
               </Text>
-              <Text style={styles.replyText} numberOfLines={1}>
-                {replyingTo.text}
-              </Text>
+              <LinkText
+                text={replyingTo.text}
+                style={styles.replyText}
+                numberOfLines={1}
+              />
             </View>
           </View>
           <TouchableOpacity 
