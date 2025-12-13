@@ -42,6 +42,7 @@ import TypingIndicator from '../../components/TypingIndicator';
 import OnlineStatusDot from '../../components/OnlineStatusDot';
 import SwipeableMessage from '../../components/SwipeableMessage';
 import LinkText from '../../components/LinkText';
+import * as Clipboard from 'expo-clipboard';
 import { UserAvatar, UserNameWithBadge } from '../../components/index';
 import { goBack } from '../../utils/navigation';
 
@@ -789,44 +790,85 @@ export default function ConversationScreen() {
     Keyboard.dismiss(); // Dismiss keyboard to show reply bar
   };
 
-  const handleLongPressToDelete = (message: Message) => {
+  const canDeleteMessage = (message: Message) => {
     const isMyMessage = message.senderId === user?.id;
     const isDeleted = !!message.deletedAt;
-    
-    // Can't delete if not yours or already deleted
-    if (!isMyMessage || isDeleted) return;
+    if (!isMyMessage || isDeleted) return false;
 
-    // Check if within time limit
     const messageAge = Date.now() - new Date(message.createdAt).getTime();
     const oneHour = 60 * 60 * 1000;
-    
-    if (messageAge > oneHour) {
-      Alert.alert(
-        'Cannot Delete',
-        'You can only delete messages within 1 hour of sending.'
+    return messageAge <= oneHour;
+  };
+
+  const performDeleteMessage = (message: Message) => {
+    if (!canDeleteMessage(message)) {
+      Alert.alert('Cannot Delete', 'You can only delete messages within 1 hour of sending.');
+      return;
+    }
+
+    Alert.alert('Delete Message', 'Delete this message for everyone? This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          const result = await deleteMessage(message.id);
+          if (!result.success) {
+            Alert.alert('Error', result.error || 'Failed to delete message');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleMessageLongPress = (message: Message) => {
+    const isDeleted = !!message.deletedAt;
+    const hasCopyableText = !!message.text && message.text.trim().length > 0 && !isDeleted;
+    const canDelete = canDeleteMessage(message);
+
+    const options: string[] = [];
+    const actions: Array<() => void | Promise<void>> = [];
+
+    if (hasCopyableText) {
+      options.push('Copy');
+      actions.push(async () => {
+        await Clipboard.setStringAsync(message.text);
+      });
+    }
+
+    let destructiveButtonIndex: number | undefined;
+    if (canDelete) {
+      options.push('Delete');
+      destructiveButtonIndex = options.length - 1;
+      actions.push(() => performDeleteMessage(message));
+    }
+
+    options.push('Cancel');
+    const cancelButtonIndex = options.length - 1;
+
+    // Nothing to do (e.g. image-only message from someone else)
+    if (actions.length === 0) return;
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options, cancelButtonIndex, destructiveButtonIndex },
+        (buttonIndex) => {
+          if (buttonIndex == null || buttonIndex === cancelButtonIndex) return;
+          actions[buttonIndex]?.();
+        }
       );
       return;
     }
 
-    // Show confirmation
-    Alert.alert(
-      'Delete Message',
-      'Delete this message for everyone? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const result = await deleteMessage(message.id);
-            
-            if (!result.success) {
-              Alert.alert('Error', result.error || 'Failed to delete message');
-            }
-          },
-        },
-      ]
-    );
+    const buttons = options.map((label, idx) => {
+      if (idx === cancelButtonIndex) return { text: label, style: 'cancel' as const };
+      if (destructiveButtonIndex != null && idx === destructiveButtonIndex) {
+        return { text: label, style: 'destructive' as const, onPress: () => actions[idx]?.() };
+      }
+      return { text: label, onPress: () => actions[idx]?.() };
+    });
+
+    Alert.alert('Message', '', buttons);
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
@@ -846,9 +888,9 @@ export default function ConversationScreen() {
       >
         <Pressable
           style={[styles.messageContainer, isMe && styles.messageContainerMe]}
-          onLongPress={() => handleLongPressToDelete(item)}
+          onLongPress={() => handleMessageLongPress(item)}
           delayLongPress={500}
-          disabled={!isMe || isDeleted}
+          disabled={!(hasText && !isDeleted) && !canDeleteMessage(item)}
         >
           <View style={[
             styles.messageBubble, 
@@ -867,6 +909,7 @@ export default function ConversationScreen() {
                   text={item.replyTo.text}
                   style={[styles.replyQuoteText, isMe && styles.replyQuoteTextMe]}
                   numberOfLines={2}
+                  selectable
                   linkStyle={isMe ? { color: '#FFFFFF', textDecorationLine: 'underline' } : undefined}
                 />
               </View>
@@ -928,6 +971,7 @@ export default function ConversationScreen() {
                   isMe && styles.messageTextMe,
                   isDeleted && styles.messageTextDeleted,
                 ]}
+                selectable
                 linkStyle={isMe ? { color: '#FFFFFF', textDecorationLine: 'underline' } : undefined}
               />
               <View style={styles.messageFooter}>
@@ -1067,6 +1111,7 @@ export default function ConversationScreen() {
                 text={replyingTo.text}
                 style={styles.replyText}
                 numberOfLines={1}
+                selectable
               />
             </View>
           </View>

@@ -11,6 +11,8 @@ import {
   ActivityIndicator,
   Keyboard,
   Animated,
+  Alert,
+  ActionSheetIOS,
 } from 'react-native';
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { Send, User } from 'lucide-react-native';
@@ -20,6 +22,7 @@ import { Colors } from '../constants/colors';
 import CustomAlert from './CustomAlert';
 import { UserAvatar, UserNameWithBadge } from './index';
 import LinkText from './LinkText';
+import * as Clipboard from 'expo-clipboard';
 import type { OpportunityChatMessage, TypingIndicator } from '../types';
 
 interface OpportunityGroupChatProps {
@@ -66,6 +69,30 @@ export default function OpportunityGroupChat({ opportunityId, onMessageCountChan
   ) => {
     setAlertConfig({ title, message, type });
     setAlertVisible(true);
+  };
+
+  const copyToClipboard = async (text: string) => {
+    if (!text?.trim()) return;
+    await Clipboard.setStringAsync(text);
+  };
+
+  const handleMessageLongPress = (text: string) => {
+    if (!text?.trim()) return;
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options: ['Copy', 'Cancel'], cancelButtonIndex: 1 },
+        (buttonIndex) => {
+          if (buttonIndex === 0) copyToClipboard(text);
+        }
+      );
+      return;
+    }
+
+    Alert.alert('Message', '', [
+      { text: 'Copy', onPress: () => copyToClipboard(text) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   // Smooth keyboard animations for both iOS and Android
@@ -355,14 +382,21 @@ export default function OpportunityGroupChat({ opportunityId, onMessageCountChan
               isOwnMessage ? styles.ownMessageBubble : styles.otherMessageBubble,
             ]}
           >
-            <LinkText
-              text={item.message}
-              style={[
-                styles.messageText,
-                isOwnMessage ? styles.ownMessageText : styles.otherMessageText,
-              ]}
-              linkStyle={isOwnMessage ? { color: '#FFFFFF', textDecorationLine: 'underline' } : undefined}
-            />
+            <TouchableOpacity
+              activeOpacity={1}
+              onLongPress={() => handleMessageLongPress(item.message)}
+              delayLongPress={450}
+            >
+              <LinkText
+                text={item.message}
+                style={[
+                  styles.messageText,
+                  isOwnMessage ? styles.ownMessageText : styles.otherMessageText,
+                ]}
+                selectable
+                linkStyle={isOwnMessage ? { color: '#FFFFFF', textDecorationLine: 'underline' } : undefined}
+              />
+            </TouchableOpacity>
           </View>
           <Text style={styles.messageTime}>
             {new Date(item.createdAt).toLocaleTimeString('en-US', {
