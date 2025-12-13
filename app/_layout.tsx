@@ -9,7 +9,7 @@ import { Stack, useRouter, usePathname, useRootNavigationState } from 'expo-rout
 import * as Notifications from 'expo-notifications';
 import * as Linking from 'expo-linking';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { View, StyleSheet, useWindowDimensions, Image, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, useWindowDimensions, Image, ActivityIndicator, Platform } from 'react-native';
 import * as Sentry from '@sentry/react-native';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { FeedProvider } from '../contexts/FeedContext';
@@ -369,6 +369,16 @@ const styles = StyleSheet.create({
   splashContainer: {
     flex: 1,
     backgroundColor: '#38B6FF',
+    ...(Platform.OS === 'web'
+      ? {
+          position: 'fixed' as any,
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 9999,
+        }
+      : {}),
   },
   splashImage: {
     width: '100%',
