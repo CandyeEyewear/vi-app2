@@ -1,8 +1,9 @@
 /* Fix for mobile web viewport */
 
-/* Prevent pull-to-refresh and bounce effects */
-body {
-  overscroll-behavior: none;
-  position: fixed;
-  width: 100%;
+:root {
+  --viewport-height: 100vh;
+}
+
+html, body, #root {
+  height: 100%;
 }
