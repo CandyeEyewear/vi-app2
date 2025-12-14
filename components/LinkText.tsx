@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { Text, StyleSheet, Linking } from 'react-native';
+import { Text, StyleSheet, Linking, type TextProps } from 'react-native';
 import { Colors } from '../constants/colors';
 
 interface LinkTextProps {
@@ -13,6 +13,8 @@ interface LinkTextProps {
   style?: any;
   linkStyle?: any;
   numberOfLines?: number;
+  selectable?: boolean;
+  onLongPress?: TextProps['onLongPress'];
 }
 
 // URL regex pattern - matches http, https, www, and common domains
@@ -33,7 +35,14 @@ const normalizeUrl = (rawUrl: string): string => {
   return rawUrl;
 };
 
-export default function LinkText({ text, style, linkStyle, numberOfLines }: LinkTextProps) {
+export default function LinkText({
+  text,
+  style,
+  linkStyle,
+  numberOfLines,
+  selectable = false,
+  onLongPress,
+}: LinkTextProps) {
   const parts: Array<{ text: string; isLink: boolean; url?: string }> = [];
   let lastIndex = 0;
   let match;
@@ -81,7 +90,11 @@ export default function LinkText({ text, style, linkStyle, numberOfLines }: Link
 
   // If no URLs found, return plain text
   if (parts.length === 0) {
-    return <Text style={style}>{text}</Text>;
+    return (
+      <Text style={style} numberOfLines={numberOfLines} selectable={selectable} onLongPress={onLongPress}>
+        {text}
+      </Text>
+    );
   }
 
   const handleLinkPress = async (url: string) => {
@@ -98,7 +111,7 @@ export default function LinkText({ text, style, linkStyle, numberOfLines }: Link
   };
 
   return (
-    <Text style={style} numberOfLines={numberOfLines}>
+    <Text style={style} numberOfLines={numberOfLines} selectable={selectable} onLongPress={onLongPress}>
       {parts.map((part, index) => {
         if (part.isLink && part.url) {
           return (
@@ -112,12 +125,17 @@ export default function LinkText({ text, style, linkStyle, numberOfLines }: Link
                 handleLinkPress(part.url!);
               }}
               suppressHighlighting={false}
+              selectable={selectable}
             >
               {part.text}
             </Text>
           );
         }
-        return <Text key={index}>{part.text}</Text>;
+        return (
+          <Text key={index} selectable={selectable}>
+            {part.text}
+          </Text>
+        );
       })}
     </Text>
   );
