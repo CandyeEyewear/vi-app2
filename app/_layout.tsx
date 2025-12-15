@@ -376,7 +376,7 @@ const styles = StyleSheet.create({
   },
   splashContainer: {
     flex: 1,
-    backgroundColor: '#38B6FF',
+    backgroundColor: '#0944a2',
     ...(Platform.OS === 'web'
       ? {
           position: 'fixed' as any,
