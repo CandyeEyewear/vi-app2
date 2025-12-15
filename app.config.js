@@ -9,7 +9,7 @@ export default {
     splash: {
       image: "./assets/splash.png",
       resizeMode: "cover",
-      backgroundColor: "#38B6FF"
+      backgroundColor: "#0944a2"
     },
     runtimeVersion: {
       policy: "appVersion" // Uses app version (1.0.1) as runtime version
