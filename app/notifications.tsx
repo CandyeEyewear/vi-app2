@@ -25,6 +25,7 @@ import CustomAlert from '../components/CustomAlert';
 import { NotificationsSkeleton } from '../components/SkeletonLayouts';
 import { cache, CacheKeys } from '../services/cache';
 import { UserAvatar } from '../components/index';
+import { goBack } from '../utils/navigation';
 
 interface Notification {
   id: string;
@@ -463,7 +464,7 @@ export default function NotificationsScreen() {
             if (selectedNotifications.length > 0) {
               clearSelection();
             } else {
-              router.back();
+              goBack('/(tabs)/feed');
             }
           }} 
           style={({ pressed }) => [
