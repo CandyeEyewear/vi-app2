@@ -33,6 +33,16 @@ const corsHeaders = {
 };
 
 export default async function handler(req: any, res: any) {
+  // Debug logging to diagnose environment variable issues
+  console.log('🐛 ='.repeat(50));
+  console.log('🐛 CREATE TOKEN DEBUG START');
+  console.log('🐛 Environment Variables:');
+  console.log('🐛   EZEE_SITE:', process.env.EZEE_SITE);
+  console.log('🐛   EZEE_LICENCE_KEY exists:', !!process.env.EZEE_LICENCE_KEY);
+  console.log('🐛   Computed EZEE_SITE:', EZEE_SITE);
+  console.log('🐛   Computed EZEE_LICENCE_KEY exists:', !!EZEE_LICENCE_KEY);
+  console.log('🐛 ='.repeat(50));
+
  // Handle CORS preflight
  if (req.method === 'OPTIONS') {
     res.setHeader('Access-Control-Allow-Origin', '*');
