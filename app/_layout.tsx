@@ -16,10 +16,14 @@ import { FeedProvider } from '../contexts/FeedContext';
 import { MessagingProvider } from '../contexts/MessagingContext';
 import { NetworkProvider } from '../contexts/NetworkContext';
 import NetworkStatusBanner from '../components/NetworkStatusBanner';
+import AppDownloadBanner from '../components/AppDownloadBanner';
 import WebNavigation from '../components/WebNavigation';
 import { MobileWebSafeContainer } from '../components/MobileWebSafeContainer';
 import { logger } from '../utils/logger';
 import { setupFCMHandlers } from '../services/fcmNotifications';
+import { setupWebNotificationHandler, setWebNotificationHandler } from '../services/webNotifications';
+import { useAlert } from '../hooks/useAlert';
+import CustomAlert from '../components/CustomAlert';
 import { isWeb } from '../utils/platform';
 
 Sentry.init({
@@ -50,10 +54,11 @@ function AppContent() {
   const router = useRouter();
   const pathname = usePathname();
   const rootNavigationState = useRootNavigationState();
-  const { refreshUser, loading: authLoading, user, needsPasswordSetup, isPasswordRecovery } = useAuth();
+  const { refreshUser, loading: authLoading, initialAuthComplete, user, needsPasswordSetup, isPasswordRecovery } = useAuth();
   const responseListener = useRef<any>(null);
-  const hasResolvedInitialAuth = useRef(false);
+  const webNotificationCleanup = useRef<(() => void) | null>(null);
   const { width } = useWindowDimensions();
+  const { alertProps, showAlert } = useAlert();
   
   // Check if navigation is ready
   const navigationReady = rootNavigationState?.key != null;
@@ -74,15 +79,10 @@ function AppContent() {
   const isSetPasswordPage = sanitizedPathname === '/set-password';
   const isResetPasswordPage = sanitizedPathname === '/reset-password';
 
-  // Mark initial auth resolution complete (prevents splash during sign-in/out)
-  useEffect(() => {
-    if (navigationReady && !authLoading) {
-      hasResolvedInitialAuth.current = true;
-    }
-  }, [navigationReady, authLoading]);
-
   // Determine if we're still initializing (show splash only during initial boot)
-  const isInitializing = !navigationReady || (!hasResolvedInitialAuth.current && authLoading);
+  // CRITICAL: Wait for both navigation AND initial auth check to complete
+  // This prevents race condition where routing happens before session is loaded
+  const isInitializing = !navigationReady || !initialAuthComplete || authLoading;
 
   useEffect(() => {
     if (!isInitializing && SplashScreen) {
@@ -150,6 +150,39 @@ function AppContent() {
   ]);
 
   useEffect(() => {
+    // Setup web notification handler if on web
+    if (isWeb) {
+      // Register callback to show custom alerts
+      setWebNotificationHandler((config) => {
+        showAlert({
+          type: config.type,
+          title: config.title,
+          message: config.message,
+          buttons: config.onPress
+            ? [
+                { text: 'View', style: 'default', onPress: config.onPress },
+                { text: 'Dismiss', style: 'cancel' },
+              ]
+            : [{ text: 'OK', style: 'default' }],
+        });
+      });
+
+      // Setup web notification handler
+      const cleanup = setupWebNotificationHandler((path: string) => {
+        if (path.startsWith('/conversation/')) {
+          const conversationId = path.replace('/conversation/', '');
+          router.push({
+            pathname: '/conversation/[id]',
+            params: { id: conversationId }
+          } as any);
+        } else {
+          router.push(path as any);
+        }
+      });
+
+      webNotificationCleanup.current = cleanup;
+    }
+
     setupFCMHandlers((path: string) => {
       if (path.startsWith('/conversation/')) {
         const conversationId = path.replace('/conversation/', '');
@@ -300,8 +333,13 @@ function AppContent() {
       if (subscription?.remove) {
         subscription.remove();
       }
+      // Clean up web notification handler
+      if (webNotificationCleanup.current) {
+        webNotificationCleanup.current();
+        webNotificationCleanup.current = null;
+      }
     };
-  }, [router, refreshUser]);
+  }, [router, refreshUser, showAlert]);
 
   // Show splash while initializing
   if (isInitializing) {
@@ -316,6 +354,7 @@ function AppContent() {
   return (
     <>
       <NetworkStatusBanner />
+      <AppDownloadBanner />
       {showWebNav && <WebNavigation />}
       <View style={showWebNav ? { paddingTop: 64, flex: 1 } : { flex: 1 }}>
         <Stack screenOptions={{ headerShown: false }}>
@@ -342,6 +381,7 @@ function AppContent() {
           <Stack.Screen name="(admin)" />
         </Stack>
       </View>
+      <CustomAlert {...alertProps} />
     </>
   );
 }

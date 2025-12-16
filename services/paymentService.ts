@@ -68,7 +68,35 @@ if (Platform.OS !== 'web') {
 }
 
 // API Base URL - Update this to your Vercel deployment URL
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://vibe.volunteersinc.org';
+// Trim and validate the URL to prevent typos
+const getApiBaseUrl = (): string => {
+  const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  if (envUrl) {
+    // Trim whitespace
+    let cleaned = envUrl.trim();
+    
+    // Remove any trailing characters that aren't valid URL characters
+    // This fixes cases where env vars get concatenated (e.g., "https://example.comEXPO_PUBLIC_...")
+    // Match: ends with valid URL chars (letters, numbers, /, ., -, :) followed by invalid chars
+    cleaned = cleaned.replace(/(https?:\/\/[a-z0-9.\-:]+)([^a-z0-9.\-\/:].*)$/i, '$1');
+    
+    // Also remove any trailing letters that might be from concatenated variable names
+    // If it ends with uppercase letters (likely a variable name), remove them
+    cleaned = cleaned.replace(/(https?:\/\/[a-z0-9.\-:]+)([A-Z_]+)$/i, '$1');
+    
+    // Validate it's a proper URL format
+    if (cleaned.startsWith('http://') || cleaned.startsWith('https://')) {
+      // Ensure it doesn't end with a slash (we'll add paths later)
+      cleaned = cleaned.replace(/\/+$/, '');
+      console.log('✅ [PAYMENT] Cleaned API URL:', cleaned);
+      return cleaned;
+    }
+    console.warn('⚠️ [PAYMENT] Invalid EXPO_PUBLIC_API_URL format, using default. Raw value:', JSON.stringify(envUrl));
+  }
+  return 'https://vibe.volunteersinc.org';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 // Types
 export type OrderType = 'donation' | 'event_registration' | 'membership' | 'other';
@@ -255,8 +283,18 @@ export async function createPayment(params: CreatePaymentParams): Promise<Paymen
       platform: detectedPlatform,
     };
 
+    // Debug: Log the API URL being used
+    const apiUrl = `${API_BASE_URL}/api/ezee/create-token`;
+    const rawEnvValue = process.env.EXPO_PUBLIC_API_URL;
+    console.log('🔵 [PAYMENT] Raw EXPO_PUBLIC_API_URL env var:', JSON.stringify(rawEnvValue));
+    console.log('🔵 [PAYMENT] Raw env var length:', rawEnvValue?.length);
+    console.log('🔵 [PAYMENT] Raw env var char codes:', rawEnvValue ? Array.from(rawEnvValue).map(c => c.charCodeAt(0)).join(',') : 'null');
+    console.log('🔵 [PAYMENT] Cleaned API Base URL:', API_BASE_URL);
+    console.log('🔵 [PAYMENT] Full API URL:', apiUrl);
+    console.log('🔵 [PAYMENT] Request body:', JSON.stringify(requestBody, null, 2));
+
     const response = await fetchWithTimeout(
-      `${API_BASE_URL}/api/ezee/create-token`,
+      apiUrl,
       {
       method: 'POST',
       headers: {
@@ -267,9 +305,25 @@ export async function createPayment(params: CreatePaymentParams): Promise<Paymen
       30000 // 30 second timeout
     );
 
-    const data = await response.json();
+    console.log('🔵 [PAYMENT] Response status:', response.status);
+    console.log('🔵 [PAYMENT] Response ok:', response.ok);
+
+    // Try to parse JSON, but handle errors gracefully
+    let data;
+    try {
+      const responseText = await response.text();
+      console.log('🔵 [PAYMENT] Response text:', responseText);
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('🔵 [PAYMENT] Failed to parse response as JSON:', parseError);
+      return {
+        success: false,
+        error: `Invalid response from server (status: ${response.status}). Please check your API configuration.`,
+      };
+    }
 
     if (!response.ok) {
+      console.error('🔵 [PAYMENT] API error response:', data);
       return {
         success: false,
         error: data.error || data.message || `Failed to create payment (status: ${response.status})`,
@@ -284,10 +338,26 @@ export async function createPayment(params: CreatePaymentParams): Promise<Paymen
       paymentData: data.paymentData,
     };
   } catch (error) {
-    console.error('Create payment error:', error);
+    console.error('🔵 [PAYMENT] Create payment error:', error);
+    console.error('🔵 [PAYMENT] Error type:', error instanceof Error ? error.constructor.name : typeof error);
+    console.error('🔵 [PAYMENT] Error message:', error instanceof Error ? error.message : String(error));
+    console.error('🔵 [PAYMENT] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    
+    // Provide more specific error messages
+    let errorMessage = 'Network error. Please check your connection and try again.';
+    if (error instanceof Error) {
+      if (error.message.includes('Network request failed') || error.message.includes('fetch')) {
+        errorMessage = `Cannot reach payment server. Please check:\n1. Your internet connection\n2. API URL: ${API_BASE_URL}\n3. That the server is running and accessible`;
+      } else if (error.message.includes('timeout')) {
+        errorMessage = 'Payment request timed out. Please try again.';
+      } else {
+        errorMessage = error.message;
+      }
+    }
+    
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Network error. Please check your connection and try again.',
+      error: errorMessage,
     };
   }
 }

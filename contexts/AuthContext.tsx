@@ -17,6 +17,7 @@ import { isWeb } from '../utils/platform';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  initialAuthComplete: boolean;
   needsPasswordSetup: boolean;
   isPasswordRecovery: boolean;
   signIn: (data: LoginFormData) => Promise<ApiResponse<User>>;
@@ -34,10 +35,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initialAuthComplete, setInitialAuthComplete] = useState(false); // Prevents race condition during initial boot
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const profileLoadInProgress = useRef<string | null>(null); // Tracks which userId is being loaded
-  const initialAuthComplete = useRef(false); // Prevents race condition during initial boot
 
   // Initialize auth state on mount
   useEffect(() => {
@@ -59,8 +60,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       try {
         // Get initial session with error handling for invalid tokens
+        // Add a small delay to ensure SecureStore is ready (especially in Expo Dev Client)
+        console.log('[AUTH] ⏳ Waiting for SecureStore to initialize...');
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         console.log('[AUTH] 📡 Fetching current session from Supabase...');
-        const { data: { session }, error } = await supabase.auth.getSession();
+        let { data: { session }, error } = await supabase.auth.getSession();
+
+        // If no session found, retry multiple times with increasing delays
+        // SecureStore might need more time in Expo Dev Client
+        if (!session && !error) {
+          console.log('[AUTH] ⏳ No session on first attempt, retrying with delays...');
+          const retryDelays = [150, 300, 500];
+          for (let i = 0; i < retryDelays.length; i++) {
+            await new Promise(resolve => setTimeout(resolve, retryDelays[i]));
+            const retryResult = await supabase.auth.getSession();
+            session = retryResult.data.session;
+            error = retryResult.error;
+            if (session) {
+              console.log(`[AUTH] ✅ Session found on retry ${i + 1}`);
+              break;
+            } else {
+              console.log(`[AUTH] ⏳ No session on retry ${i + 1}, trying again...`);
+            }
+          }
+        }
 
         if (error) {
           // Handle invalid refresh token or any auth errors
@@ -95,7 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       } finally {
         // Mark initial auth as complete to prevent race conditions
-        initialAuthComplete.current = true;
+        setInitialAuthComplete(true);
         console.log('[AUTH] ✅ Initial auth check complete');
       }
 
@@ -126,14 +150,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        // For INITIAL_SESSION, only process if we don't already have a user loaded
-        // This prevents duplicate processing but allows email confirmation flow to work
+        // For INITIAL_SESSION, handle it carefully during initialization
         if (event === 'INITIAL_SESSION') {
           if (user) {
             console.log('[AUTH] ⏭️ Ignoring INITIAL_SESSION - user already loaded');
             return;
           }
-          console.log('[AUTH] 📧 Processing INITIAL_SESSION (likely from email confirmation)');
+          
+        // If INITIAL_SESSION fires with null session during initialization,
+        // it might mean SecureStore hasn't loaded yet. Wait and retry getSession()
+        if (!session && !initialAuthComplete) {
+          console.log('[AUTH] ⚠️ INITIAL_SESSION fired with null session during initialization');
+          console.log('[AUTH] 🔄 Retrying getSession() multiple times with increasing delays...');
+          
+          // Try multiple times with increasing delays
+          const retryDelays = [100, 200, 500];
+          for (let i = 0; i < retryDelays.length; i++) {
+            await new Promise(resolve => setTimeout(resolve, retryDelays[i]));
+            const { data: { session: retrySession }, error: retryError } = await supabase.auth.getSession();
+            if (retryError) {
+              console.log(`[AUTH] ⚠️ Retry ${i + 1} getSession() error:`, retryError.message);
+              continue;
+            }
+            if (retrySession) {
+              console.log(`[AUTH] ✅ Session found on retry ${i + 1} - User ID:`, retrySession.user.id);
+              setNeedsPasswordSetup(retrySession?.user?.user_metadata?.needs_password_setup === true);
+              await loadUserProfile(retrySession.user.id);
+              setupRealtimeSubscription().catch((error) => {
+                console.error('[AUTH] ❌ Error setting up real-time subscription:', error);
+              });
+              return; // Success, exit early
+            } else {
+              console.log(`[AUTH] ℹ️ No session on retry ${i + 1}, will try again...`);
+            }
+          }
+          console.log('[AUTH] ❌ No session found after all retries - user needs to sign in');
+          return; // Don't process this INITIAL_SESSION event further
+        }
+          
+          console.log('[AUTH] 📧 Processing INITIAL_SESSION');
         }
 
         if (session) {
@@ -149,7 +204,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           // RACE CONDITION FIX: Don't set loading=false during initial boot
           // Let initializeAuth handle it to prevent premature routing
-          if (!initialAuthComplete.current) {
+          // Also ignore INITIAL_SESSION with null during initialization - it might be a timing issue
+          if (!initialAuthComplete && event === 'INITIAL_SESSION') {
+            console.log('[AUTH] ⏭️ Ignoring INITIAL_SESSION with null session during initialization (timing issue)');
+            return;
+          }
+          
+          if (!initialAuthComplete) {
             console.log('[AUTH] ⏭️ Skipping loading state update - initial auth still in progress');
             return;
           }
@@ -480,6 +541,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log('[AUTH] ✅ Authentication successful');
       console.log('[AUTH] User ID:', authData.user.id);
+      
+      // Verify session is saved to SecureStore
+      console.log('[AUTH] 🔍 Verifying session persistence...');
+      await new Promise(resolve => setTimeout(resolve, 100)); // Give SecureStore time to save
+      const { data: { session: verifySession } } = await supabase.auth.getSession();
+      if (verifySession) {
+        console.log('[AUTH] ✅ Session verified and persisted to SecureStore');
+      } else {
+        console.error('[AUTH] ⚠️ WARNING: Session not found in SecureStore after sign-in!');
+      }
+      
       const { data: { user } } = await supabase.auth.getUser();
       const needsSetup = user?.user_metadata?.needs_password_setup === true;
       setNeedsPasswordSetup(needsSetup);
@@ -866,7 +938,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setNeedsPasswordSetup(false);
     setIsPasswordRecovery(false);
     profileLoadInProgress.current = null;
-    initialAuthComplete.current = false; // Reset for next login
+    setInitialAuthComplete(false); // Reset for next login
     setLoading(false);
     console.log('[AUTH] ✅ Sign out complete');
   };
@@ -1020,6 +1092,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         loading,
+        initialAuthComplete,
         needsPasswordSetup,
         isPasswordRecovery,
         signIn,

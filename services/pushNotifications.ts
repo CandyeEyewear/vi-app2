@@ -5,13 +5,16 @@ import { Platform } from 'react-native';
 import { supabase } from './supabase';
 
 // Configure how notifications are handled when app is in foreground
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+// On web, this will be overridden by webNotifications.ts to show CustomAlert instead
+if (Platform.OS !== 'web') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+}
 
 export interface PushNotificationData {
   type: 'circle_request' | 'announcement' | 'opportunity' | 'message' | 'cause' | 'event';

@@ -108,19 +108,48 @@ export default async function handler(req: any, res: any) {
 
    // Determine redirect URLs based on platform
    const isApp = platform === 'app';
-   const postBackUrl = `${APP_URL}/api/ezee/webhook`;
+   
+   // Ensure APP_URL is HTTPS (eZeePayments requirement)
+   // Remove any trailing slashes and ensure it starts with https://
+   let baseUrl = APP_URL.trim();
+   if (!baseUrl.startsWith('https://') && !baseUrl.startsWith('http://')) {
+     baseUrl = `https://${baseUrl}`;
+   } else if (baseUrl.startsWith('http://')) {
+     baseUrl = baseUrl.replace('http://', 'https://');
+   }
+   baseUrl = baseUrl.replace(/\/+$/, ''); // Remove trailing slashes
+   
+   const postBackUrl = `${baseUrl}/api/ezee/webhook`;
    
    // Build return URL with returnPath if provided
+   // NOTE: eZeePayments requires HTTPS URLs, so we always use HTTPS baseUrl even for app platform
+   // The app can handle deep link redirects on the success page itself
    const returnParams = new URLSearchParams({ orderId: uniqueOrderId });
    if (returnPath) {
      returnParams.append('returnPath', returnPath);
    }
-   const returnUrl = isApp 
-     ? `vibe://payment/success?${returnParams.toString()}`
-     : `${APP_URL}/payment/success?${returnParams.toString()}`;
-   const cancelUrl = isApp 
-     ? `vibe://payment/cancel?orderId=${uniqueOrderId}`
-     : `${APP_URL}/payment/cancel?orderId=${uniqueOrderId}`;
+   if (isApp) {
+     returnParams.append('platform', 'app'); // Add platform flag for app-specific handling
+   }
+   const returnUrl = `${baseUrl}/payment/success?${returnParams.toString()}`;
+   const cancelParams = new URLSearchParams({ orderId: uniqueOrderId });
+   if (isApp) {
+     cancelParams.append('platform', 'app');
+   }
+   const cancelUrl = `${baseUrl}/payment/cancel?${cancelParams.toString()}`;
+
+   // Debug logging - log the URLs being sent
+   console.log('🔵 [CREATE-TOKEN] URL Debug:', {
+     APP_URL,
+     baseUrl,
+     returnUrl,
+     cancelUrl,
+     postBackUrl,
+     isApp,
+     returnUrlStartsWithHttps: returnUrl.startsWith('https://'),
+     cancelUrlStartsWithHttps: cancelUrl.startsWith('https://'),
+     postBackUrlStartsWithHttps: postBackUrl.startsWith('https://'),
+   });
 
     // Create form data (NOT JSON) - eZeePayments requires form data
     const formData = new URLSearchParams();
@@ -130,6 +159,16 @@ export default async function handler(req: any, res: any) {
     formData.append('post_back_url', postBackUrl);
     formData.append('return_url', returnUrl);
     formData.append('cancel_url', cancelUrl);
+    
+    // Log the form data being sent
+    console.log('🔵 [CREATE-TOKEN] Form data being sent to eZeePayments:', {
+      amount: amount.toString(),
+      currency: 'JMD',
+      order_id: uniqueOrderId,
+      post_back_url: postBackUrl,
+      return_url: returnUrl,
+      cancel_url: cancelUrl,
+    });
 
    // Create token with eZeePayments
     // licence_key and site MUST be in headers, not body
