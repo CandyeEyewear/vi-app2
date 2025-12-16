@@ -17,6 +17,7 @@ import { isWeb } from '../utils/platform';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  initialAuthComplete: boolean;
   needsPasswordSetup: boolean;
   isPasswordRecovery: boolean;
   signIn: (data: LoginFormData) => Promise<ApiResponse<User>>;
@@ -34,6 +35,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initialAuthCompleteState, setInitialAuthCompleteState] = useState(false);
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const profileLoadInProgress = useRef<string | null>(null); // Tracks which userId is being loaded
@@ -96,6 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } finally {
         // Mark initial auth as complete to prevent race conditions
         initialAuthComplete.current = true;
+        setInitialAuthCompleteState(true);
         console.log('[AUTH] ✅ Initial auth check complete');
       }
 
@@ -867,6 +870,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsPasswordRecovery(false);
     profileLoadInProgress.current = null;
     initialAuthComplete.current = false; // Reset for next login
+    setInitialAuthCompleteState(false); // Reset state flag
     setLoading(false);
     console.log('[AUTH] ✅ Sign out complete');
   };
@@ -1020,6 +1024,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         loading,
+        initialAuthComplete: initialAuthCompleteState,
         needsPasswordSetup,
         isPasswordRecovery,
         signIn,

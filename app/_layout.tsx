@@ -50,9 +50,8 @@ function AppContent() {
   const router = useRouter();
   const pathname = usePathname();
   const rootNavigationState = useRootNavigationState();
-  const { refreshUser, loading: authLoading, user, needsPasswordSetup, isPasswordRecovery } = useAuth();
+  const { refreshUser, loading: authLoading, initialAuthComplete, user, needsPasswordSetup, isPasswordRecovery } = useAuth();
   const responseListener = useRef<any>(null);
-  const hasResolvedInitialAuth = useRef(false);
   const { width } = useWindowDimensions();
   
   // Check if navigation is ready
@@ -74,15 +73,9 @@ function AppContent() {
   const isSetPasswordPage = sanitizedPathname === '/set-password';
   const isResetPasswordPage = sanitizedPathname === '/reset-password';
 
-  // Mark initial auth resolution complete (prevents splash during sign-in/out)
-  useEffect(() => {
-    if (navigationReady && !authLoading) {
-      hasResolvedInitialAuth.current = true;
-    }
-  }, [navigationReady, authLoading]);
-
   // Determine if we're still initializing (show splash only during initial boot)
-  const isInitializing = !navigationReady || (!hasResolvedInitialAuth.current && authLoading);
+  // Wait for both navigation AND initial auth check to complete (critical for mobile SecureStore reads)
+  const isInitializing = !navigationReady || !initialAuthComplete;
 
   useEffect(() => {
     if (!isInitializing && SplashScreen) {
