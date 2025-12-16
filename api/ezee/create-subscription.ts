@@ -8,8 +8,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 const EZEE_API_URL = process.env.EZEE_API_URL || 'https://api-test.ezeepayments.com';
-const EZEE_LICENCE_KEY = process.env.EZEE_LICENCE_KEY!;
-const EZEE_SITE = process.env.EZEE_SITE || 'https://test.com';
+const EZEE_LICENCE_KEY = process.env.EZEE_LICENCE_KEY;
+const EZEE_SITE = process.env.EZEE_SITE;
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://vibe.volunteersinc.org';
 
 const supabase = createClient(
@@ -76,6 +76,24 @@ export default async function handler(req: any, res: any) {
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  // Validate required environment variables
+  if (!EZEE_SITE || !EZEE_LICENCE_KEY) {
+    console.error('CRITICAL: Missing eZeePayments environment variables:', {
+      EZEE_SITE: !!EZEE_SITE,
+      EZEE_LICENCE_KEY: !!EZEE_LICENCE_KEY,
+      EZEE_API_URL: EZEE_API_URL,
+    });
+    return res.status(500).json({
+      error: 'Payment configuration error. Please contact support.',
+      debug: process.env.NODE_ENV === 'development' ? {
+        missing: {
+          EZEE_SITE: !EZEE_SITE,
+          EZEE_LICENCE_KEY: !EZEE_LICENCE_KEY,
+        }
+      } : undefined
+    });
   }
 
   try {
