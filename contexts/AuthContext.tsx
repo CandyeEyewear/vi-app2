@@ -37,6 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const profileLoadInProgress = useRef<string | null>(null); // Tracks which userId is being loaded
+  const initialAuthComplete = useRef(false); // Prevents race condition during initial boot
 
   // Initialize auth state on mount
   useEffect(() => {
@@ -92,8 +93,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
         setNeedsPasswordSetup(false);
         setLoading(false);
+      } finally {
+        // Mark initial auth as complete to prevent race conditions
+        initialAuthComplete.current = true;
+        console.log('[AUTH] ✅ Initial auth check complete');
       }
-      
+
       // Return promise so we can chain operations after initialization
       return Promise.resolve();
     };
@@ -141,6 +146,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           });
         } else {
           console.log('[AUTH] Session ended - User logged out');
+
+          // RACE CONDITION FIX: Don't set loading=false during initial boot
+          // Let initializeAuth handle it to prevent premature routing
+          if (!initialAuthComplete.current) {
+            console.log('[AUTH] ⏭️ Skipping loading state update - initial auth still in progress');
+            return;
+          }
+
           setUser(null);
           setNeedsPasswordSetup(false);
           setLoading(false);
@@ -853,6 +866,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setNeedsPasswordSetup(false);
     setIsPasswordRecovery(false);
     profileLoadInProgress.current = null;
+    initialAuthComplete.current = false; // Reset for next login
     setLoading(false);
     console.log('[AUTH] ✅ Sign out complete');
   };
