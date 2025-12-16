@@ -3,49 +3,51 @@ import { createClient, type SupportedStorage } from '@supabase/supabase-js';
 // Detect if we're running in Node.js (server) or React Native (mobile)
 const isServer = typeof window === 'undefined' || typeof document === 'undefined';
 
-let AsyncStorage: any;
+let SecureStore: any;
 let Platform: any;
 
 if (!isServer) {
   // We're in React Native - import mobile modules
-  AsyncStorage = require('@react-native-async-storage/async-storage').default;
+  SecureStore = require('expo-secure-store');
   Platform = require('react-native').Platform;
 } else {
   // We're in Node.js - create mocks
-  AsyncStorage = {
-    getItem: async () => null,
-    setItem: async () => {},
-    removeItem: async () => {},
+  SecureStore = {
+    getItemAsync: async () => null,
+    setItemAsync: async () => {},
+    deleteItemAsync: async () => {},
   };
   Platform = { OS: 'web' };
 }
 
 import { supabaseConfig } from '../config/supabase.config';
 
-// Create AsyncStorage adapter for React Native
+// Create SecureStore adapter for React Native
 // Supabase expects a storage interface with getItem, setItem, removeItem methods
-const createAsyncStorageAdapter = (): SupportedStorage => {
+// SecureStore is more secure than AsyncStorage and works better with PKCE flow
+const createSecureStoreAdapter = (): SupportedStorage => {
   return {
     getItem: async (key: string): Promise<string | null> => {
       try {
-        return await AsyncStorage.getItem(key);
+        const value = await SecureStore.getItemAsync(key);
+        return value;
       } catch (error) {
-        console.error('[SUPABASE] Error getting item from AsyncStorage:', error);
+        console.error('[SUPABASE] Error getting item from SecureStore:', error);
         return null;
       }
     },
     setItem: async (key: string, value: string): Promise<void> => {
       try {
-        await AsyncStorage.setItem(key, value);
+        await SecureStore.setItemAsync(key, value);
       } catch (error) {
-        console.error('[SUPABASE] Error setting item in AsyncStorage:', error);
+        console.error('[SUPABASE] Error setting item in SecureStore:', error);
       }
     },
     removeItem: async (key: string): Promise<void> => {
       try {
-        await AsyncStorage.removeItem(key);
+        await SecureStore.deleteItemAsync(key);
       } catch (error) {
-        console.error('[SUPABASE] Error removing item from AsyncStorage:', error);
+        console.error('[SUPABASE] Error removing item from SecureStore:', error);
       }
     },
   };
@@ -53,7 +55,7 @@ const createAsyncStorageAdapter = (): SupportedStorage => {
 
 // Determine storage based on platform
 // - Web: undefined (Supabase uses localStorage automatically)
-// - React Native: AsyncStorage adapter
+// - React Native: SecureStore adapter (required for PKCE flow with Expo SDK 54)
 // - Server: undefined (no storage needed, but undefined is acceptable)
 const getStorage = (): SupportedStorage | undefined => {
   // Server environment - no storage needed
@@ -61,10 +63,11 @@ const getStorage = (): SupportedStorage | undefined => {
     return undefined;
   }
 
-  // React Native (iOS/Android) - use AsyncStorage for session persistence
+  // React Native (iOS/Android) - use SecureStore for session persistence
+  // SecureStore is required for proper PKCE flow support in Expo SDK 54+
   if (Platform.OS === 'ios' || Platform.OS === 'android') {
-    console.log('[SUPABASE] Using AsyncStorage for session persistence');
-    return createAsyncStorageAdapter();
+    console.log('[SUPABASE] Using SecureStore for session persistence (PKCE-compatible)');
+    return createSecureStoreAdapter();
   }
 
   // Web environment - Supabase uses localStorage automatically
