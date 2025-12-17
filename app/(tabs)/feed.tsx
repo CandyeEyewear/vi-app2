@@ -87,6 +87,46 @@ export default function FeedScreen() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [notificationCount, setNotificationCount] = useState(0);
 
+  // Keyboard visibility detection for mobile web
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    if (typeof window === 'undefined') return;
+
+    const viewport = window.visualViewport;
+
+    const computeKeyboardOpen = () => {
+      try {
+        // If visual viewport height is significantly less than window height, keyboard is open
+        if (viewport) {
+          const keyboardOpen = viewport.height < window.innerHeight * 0.75;
+          setIsKeyboardVisible(keyboardOpen);
+          return;
+        }
+
+        // Fallback: window resize heuristic (less reliable on mobile browsers)
+        setIsKeyboardVisible(false);
+      } catch {
+        setIsKeyboardVisible(false);
+      }
+    };
+
+    computeKeyboardOpen();
+
+    if (viewport) {
+      viewport.addEventListener('resize', computeKeyboardOpen);
+      viewport.addEventListener('scroll', computeKeyboardOpen);
+      return () => {
+        viewport.removeEventListener('resize', computeKeyboardOpen);
+        viewport.removeEventListener('scroll', computeKeyboardOpen);
+      };
+    }
+
+    window.addEventListener('resize', computeKeyboardOpen);
+    return () => window.removeEventListener('resize', computeKeyboardOpen);
+  }, []);
+
   // Load notification count on mount and refresh periodically
    useEffect(() => {
      if (user) {
@@ -665,108 +705,153 @@ const renderTabs = () => (
               </TouchableOpacity>
             </View>
 
-            <View style={styles.modalBody}>
-              <ScrollView
-                contentContainerStyle={styles.modalScrollContent}
-                keyboardShouldPersistTaps="handled"
-              >
-                <View style={styles.modalUserInfo}>
-                  {user?.avatarUrl ? (
-                    <Image source={{ uri: user.avatarUrl }} style={styles.modalAvatar} />
-                  ) : (
-                    <View style={[styles.modalAvatar, styles.modalAvatarPlaceholder]}>
-                      <Text style={styles.modalAvatarText}>
-                        {user?.fullName.charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
-                  )}
-                  <Text style={styles.modalUserName}>{user?.fullName}</Text>
-                </View>
-
-                {/* Visibility Indicator */}
-                <View style={styles.visibilityIndicator}>
-                  <Text style={styles.visibilityText}>
-                    Posting to: {activeTab === 'forYou' ? '🌍 For You' : '👥 My Circle'}
-                  </Text>
-                </View>
-
-                {/* Give Shoutout Option */}
-                <TouchableOpacity
-                  style={[styles.shoutoutOption, { backgroundColor: colors.primarySoft, borderColor: colors.primary }]}
-                  onPress={() => {
-                    setShowCreateModal(false);
-                    setTimeout(() => setShowShoutoutModal(true), 300);
-                  }}
-                >
-                  <Text style={styles.shoutoutOptionIcon}>🌟</Text>
-                  <View style={styles.shoutoutOptionText}>
-                    <Text style={[styles.shoutoutOptionTitle, { color: colors.primary }]}>Give a Shoutout</Text>
-                    <Text style={[styles.shoutoutOptionSubtitle, { color: colors.textSecondary }]}>
-                      Recognize a volunteer who made a difference
+            <ScrollView
+              style={styles.modalBody}
+              contentContainerStyle={[
+                styles.modalScrollContent,
+                {
+                  paddingBottom: 24 + Math.max(insets.bottom, 12),
+                },
+                isMobileWeb && isKeyboardVisible && { paddingBottom: 120 + Math.max(insets.bottom, 12) },
+              ]}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {/* User Info */}
+              <View style={styles.modalUserInfo}>
+                {user?.avatarUrl ? (
+                  <Image source={{ uri: user.avatarUrl }} style={styles.modalAvatar} />
+                ) : (
+                  <View style={[styles.modalAvatar, styles.modalAvatarPlaceholder]}>
+                    <Text style={styles.modalAvatarText}>
+                      {user?.fullName?.charAt(0)?.toUpperCase() || '?'}
                     </Text>
                   </View>
-                </TouchableOpacity>
-
-                <MentionInput
-                  style={styles.modalInput}
-                  placeholder="What's happening in your volunteer journey? Use @ to mention someone"
-                  value={postText}
-                  onChangeText={setPostText}
-                  autoFocus
-                  editable={!submitting}
-                />
-
-              {selectedMedia.length > 0 && (
-                  <View style={styles.mediaPreview}>
-                  {selectedMedia.map((item, index) => (
-                      <View key={index} style={styles.mediaItem}>
-                      <Image source={{ uri: item.uri }} style={styles.mediaImage} />
-                        <TouchableOpacity
-                          style={styles.mediaRemove}
-                          onPress={() =>
-                            setSelectedMedia(prev => prev.filter((_, i) => i !== index))
-                          }
-                        >
-                          <Text style={styles.mediaRemoveText}>×</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </View>
                 )}
-
-                {/* Upload Progress */}
-                {submitting && uploadProgress > 0 && (
-                  <View style={styles.progressContainer}>
-                    <View style={styles.progressBar}>
-                      <View style={[styles.progressFill, { width: `${uploadProgress}%` }]} />
-                    </View>
-                    <Text style={styles.progressText}>{uploadProgress}% uploaded</Text>
-                  </View>
-                )}
-              </ScrollView>
-
-              {/* Footer stays visible even with long captions (and above the bottom safe area) */}
-              <View style={[styles.modalFooter, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-                <View style={styles.mediaButtonsContainer}>
-                  <TouchableOpacity
-                    style={styles.mediaButtonHalf}
-                    onPress={() => pickImage(true)}
-                    disabled={submitting}
-                  >
-                    <Camera size={20} color={Colors.light.primary} />
-                    <Text style={styles.mediaButtonText}>Camera</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.mediaButtonHalf}
-                    onPress={() => pickImage(false)}
-                    disabled={submitting}
-                  >
-                    <ImageIcon size={20} color={Colors.light.primary} />
-                    <Text style={styles.mediaButtonText}>Library</Text>
-                  </TouchableOpacity>
-                </View>
+                <Text style={[styles.modalUserName, { color: colors.text }]}>
+                  {user?.fullName || 'Anonymous'}
+                </Text>
               </View>
-            </View>
+
+              {/* Visibility indicator */}
+              <View
+                style={[
+                  styles.visibilityIndicator,
+                  { backgroundColor: colors.card, borderColor: colors.border },
+                ]}
+              >
+                <Text style={[styles.visibilityText, { color: colors.textSecondary }]}>
+                  📢 Posting to: {activeTab === 'forYou' ? '🌍 For You (Public)' : '👥 My Circle'}
+                </Text>
+              </View>
+
+              {/* Give Shoutout Option */}
+              <TouchableOpacity
+                style={[
+                  styles.shoutoutOption,
+                  { backgroundColor: colors.primarySoft, borderColor: colors.primary },
+                ]}
+                onPress={() => {
+                  setShowCreateModal(false);
+                  setTimeout(() => setShowShoutoutModal(true), 300);
+                }}
+              >
+                <Text style={styles.shoutoutOptionIcon}>🌟</Text>
+                <View style={styles.shoutoutOptionText}>
+                  <Text style={[styles.shoutoutOptionTitle, { color: colors.primary }]}>
+                    Give a Shoutout
+                  </Text>
+                  <Text style={[styles.shoutoutOptionSubtitle, { color: colors.textSecondary }]}>
+                    Recognize a volunteer who made a difference
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Media Buttons - moved up so they're always visible */}
+              <View style={styles.mediaButtonsContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.mediaButtonHalf,
+                    { backgroundColor: colors.card, borderColor: colors.border },
+                  ]}
+                  onPress={() => pickImage(true)}
+                  disabled={submitting}
+                >
+                  <Camera size={20} color={colors.primary} />
+                  <Text style={[styles.mediaButtonText, { color: colors.primary }]}>Camera</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.mediaButtonHalf,
+                    { backgroundColor: colors.card, borderColor: colors.border },
+                  ]}
+                  onPress={() => pickImage(false)}
+                  disabled={submitting}
+                >
+                  <ImageIcon size={20} color={colors.primary} />
+                  <Text style={[styles.mediaButtonText, { color: colors.primary }]}>Library</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Media Preview */}
+              {selectedMedia.length > 0 && (
+                <View style={styles.mediaPreview}>
+                  {selectedMedia.map((item, index) => (
+                    <View key={index} style={styles.mediaItem}>
+                      <Image source={{ uri: item.uri }} style={styles.mediaImage} />
+                      <TouchableOpacity
+                        style={styles.mediaRemove}
+                        onPress={() => setSelectedMedia(prev => prev.filter((_, i) => i !== index))}
+                      >
+                        <Text style={styles.mediaRemoveText}>×</Text>
+                      </TouchableOpacity>
+                      {item.type === 'video' && (
+                        <View style={styles.videoIndicator}>
+                          <Text style={styles.videoIndicatorText}>▶</Text>
+                        </View>
+                      )}
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* Upload Progress */}
+              {submitting && uploadProgress > 0 && (
+                <View style={[styles.progressContainer, { backgroundColor: colors.card }]}>
+                  <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        { width: `${uploadProgress}%`, backgroundColor: colors.primary },
+                      ]}
+                    />
+                  </View>
+                  <Text style={[styles.progressText, { color: colors.textSecondary }]}>
+                    Uploading... {uploadProgress}%
+                  </Text>
+                </View>
+              )}
+
+              {/* Text Input - larger */}
+              <MentionInput
+                value={postText}
+                onChangeText={setPostText}
+                placeholder="What's happening in your volunteer journey? Use @ to mention someone"
+                style={[
+                  styles.modalInput,
+                  styles.modalInputLarge,
+                  {
+                    color: colors.text,
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                  },
+                ]}
+                placeholderTextColor={colors.textSecondary}
+                multiline
+                autoFocus={!isMobileWeb}
+                editable={!submitting}
+              />
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -879,9 +964,10 @@ headerRight: {
   modalContent: {
     flex: 1,
     backgroundColor: Colors.light.background,
-    marginTop: 60,
+    marginTop: Platform.OS === 'web' ? 40 : 60,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
+    maxHeight: Platform.OS === 'web' ? ('95vh' as any) : undefined,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -913,13 +999,7 @@ headerRight: {
     padding: 16,
   },
   modalScrollContent: {
-    paddingBottom: 12,
-  },
-  modalFooter: {
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: Colors.light.border,
-    backgroundColor: Colors.light.background,
+    paddingBottom: 24,
   },
   modalUserInfo: {
     flexDirection: 'row',
@@ -949,14 +1029,19 @@ headerRight: {
   },
   modalInput: {
     fontSize: 16,
-    color: Colors.light.text,
-    minHeight: 120,
     textAlignVertical: 'top',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  modalInputLarge: {
+    minHeight: 150,
+    maxHeight: 300,
   },
   mediaPreview: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginTop: 16,
+    marginBottom: 16,
   },
   mediaItem: {
     position: 'relative',
@@ -992,7 +1077,7 @@ headerRight: {
   },
   mediaButtonsContainer: {
     flexDirection: 'row',
-    marginTop: 16,
+    marginBottom: 16,
     gap: 8,
   },
   mediaButtonHalf: {
@@ -1001,16 +1086,31 @@ headerRight: {
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    padding: 12,
+    padding: 14,
     backgroundColor: Colors.light.card,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.light.border,
   },
   mediaButtonText: {
-    fontSize: 16,
-    color: Colors.light.primary,
+    fontSize: 15,
     fontWeight: '600',
+  },
+  videoIndicator: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -15 }, { translateY: -15 }],
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  videoIndicatorText: {
+    color: '#FFFFFF',
+    fontSize: 12,
   },
 visibilityIndicator: {
      backgroundColor: Colors.light.card,
