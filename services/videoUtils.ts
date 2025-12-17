@@ -5,9 +5,9 @@
 
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
-import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { Upload as TusUpload, DetailedError as TusDetailedError } from 'tus-js-client';
+import { Platform } from 'react-native';
 import { supabase } from './supabase';
 import { supabaseConfig } from '../config/supabase.config';
 
@@ -15,11 +15,25 @@ export const MAX_VIDEO_SIZE_BYTES = 150 * 1024 * 1024; // 150MB (Facebook-like, 
 export const MAX_VIDEO_DURATION_MINUTES = 15;
 export const MAX_VIDEO_DURATION_SECONDS = MAX_VIDEO_DURATION_MINUTES * 60;
 
+// Expo SDK 54: `copyAsync` is now on the legacy API for some runtimes.
+// On web we don't need FileSystem for uploads (we use Blob), and legacy may not exist.
+let FileSystem: any;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  FileSystem = require('expo-file-system/legacy');
+} catch {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  FileSystem = require('expo-file-system');
+}
+
 /**
  * Ensure URI is a readable file:// path
  * Handles content:// (Android) and ph:// (iOS) URIs by copying to cache
  */
 async function ensureFileUri(uri: string, fileExtension: string = 'mp4'): Promise<string> {
+  // Web: keep as-is (likely blob: or https:)
+  if (Platform.OS === 'web') return uri;
+
   // Already a file:// URI - return as-is
   if (uri.startsWith('file://')) {
     console.log('📁 [VIDEO] URI already file://, using directly');
@@ -32,7 +46,10 @@ async function ensureFileUri(uri: string, fileExtension: string = 'mp4'): Promis
   // Need to copy to a file:// path we can read
   console.log('📁 [VIDEO] Converting URI to file:// path...');
   const fileName = `video_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-  const destUri = `${FileSystem.cacheDirectory}${fileName}`;
+  const destUri = `${FileSystem.cacheDirectory || ''}${fileName}`;
+  if (!destUri.startsWith('file://')) {
+    throw new Error('Cannot access cache directory for file copy');
+  }
 
   try {
     await FileSystem.copyAsync({
@@ -78,6 +95,13 @@ class ExpoTusFileReader {
   }
 }
 
+async function fetchBlobSize(uri: string): Promise<number> {
+  const res = await fetch(uri);
+  if (!res.ok) return 0;
+  const blob = await res.blob();
+  return blob.size || 0;
+}
+
 async function uploadResumableToSupabase(params: {
   bucket: string;
   objectName: string; // storage path inside bucket
@@ -103,35 +127,48 @@ async function uploadResumableToSupabase(params: {
   if (token) headers.Authorization = `Bearer ${token}`;
 
   await new Promise<void>((resolve, reject) => {
-    const upload = new TusUpload(
-      { uri: fileUri, size } satisfies TusFileInput,
-      {
-        endpoint,
-        uploadSize: size,
-        chunkSize: 6 * 1024 * 1024, // 6MB
-        retryDelays: [0, 1000, 3000, 5000, 10000],
-        headers,
-        metadata: {
-          bucketName: bucket,
-          objectName,
-          contentType,
-          cacheControl: '3600',
-        },
-        // Use our chunked reader to avoid loading whole video into memory
-        fileReader: new ExpoTusFileReader() as any,
-        onProgress: (bytesSent, bytesTotal) => {
-          if (bytesTotal > 0) {
-            onProgress?.(Math.round((bytesSent / bytesTotal) * 100));
-          }
-        },
-        onError: (err: Error | TusDetailedError) => {
-          reject(err);
-        },
-        onSuccess: () => {
-          resolve();
-        },
-      }
-    );
+    const options: any = {
+      endpoint,
+      uploadSize: size,
+      chunkSize: 6 * 1024 * 1024, // 6MB
+      retryDelays: [0, 1000, 3000, 5000, 10000],
+      headers,
+      metadata: {
+        bucketName: bucket,
+        objectName,
+        contentType,
+        cacheControl: '3600',
+      },
+      onProgress: (bytesSent: number, bytesTotal: number) => {
+        if (bytesTotal > 0) {
+          onProgress?.(Math.round((bytesSent / bytesTotal) * 100));
+        }
+      },
+      onError: (err: Error | TusDetailedError) => reject(err),
+      onSuccess: () => resolve(),
+    };
+
+    // Web: upload a Blob directly (no expo-file-system)
+    if (Platform.OS === 'web') {
+      void (async () => {
+        try {
+          const blobRes = await fetch(fileUri);
+          if (!blobRes.ok) throw new Error(`Cannot read video blob (${blobRes.status})`);
+          const blob = await blobRes.blob();
+          const upload = new TusUpload(blob, options);
+          upload.start();
+        } catch (e) {
+          reject(e);
+        }
+      })();
+      return;
+    }
+
+    // Native: use our chunked reader to avoid loading the whole video into memory.
+    const upload = new TusUpload({ uri: fileUri, size } satisfies TusFileInput, {
+      ...options,
+      fileReader: new ExpoTusFileReader() as any,
+    });
 
     upload.start();
   });
@@ -276,9 +313,14 @@ export async function uploadVideo(
     const localVideoUri = await ensureFileUri(videoUri, fileExt);
     
     // Check file size
-    const info = await FileSystem.getInfoAsync(localVideoUri, { size: true });
-    // @ts-expect-error: size is available when { size: true } is passed
-    const fileSize = info.exists && typeof info.size === 'number' ? info.size : 0;
+    let fileSize = 0;
+    if (Platform.OS === 'web') {
+      fileSize = await fetchBlobSize(localVideoUri);
+    } else {
+      const info = await FileSystem.getInfoAsync(localVideoUri, { size: true });
+      // @ts-expect-error: size is available when { size: true } is passed
+      fileSize = info.exists && typeof info.size === 'number' ? info.size : 0;
+    }
     console.log('📊 [VIDEO] File size:', formatFileSize(fileSize));
     
     if (isVideoTooLarge(fileSize)) {
