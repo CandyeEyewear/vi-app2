@@ -278,6 +278,7 @@ export interface Post {
   // Announcement fields
   isAnnouncement?: boolean;
   isPinned?: boolean;
+  announcementScope?: 'general' | 'targeted';
   
   // Moderation fields
   isHidden?: boolean;

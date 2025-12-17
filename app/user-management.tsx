@@ -8,12 +8,12 @@ import {
   View,
   Text,
   ScrollView,
-  TouchableOpacity,
   StyleSheet,
   useColorScheme,
   RefreshControl,
   TextInput,
   Image,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -35,6 +35,8 @@ import {
 import { supabase } from '../services/supabase';
 import CustomAlert from '../components/CustomAlert';
 import { User } from '../types';
+import { LinearGradient } from 'expo-linear-gradient';
+import { AnimatedPressable } from '../components/AnimatedPressable';
 
 interface UserStats {
   totalUsers: number;
@@ -48,7 +50,24 @@ export default function UserManagementScreen() {
   const colors = Colors[colorScheme];
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, refreshSession } = useAuth();
+
+  const surfaceShadow = Platform.select({
+    ios: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.12,
+      shadowRadius: 18,
+    },
+    android: { elevation: 6 },
+    web: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.12,
+      shadowRadius: 18,
+    },
+    default: {},
+  });
 
   // Data state
   const [users, setUsers] = useState<User[]>([]);
@@ -161,12 +180,14 @@ export default function UserManagementScreen() {
       'warning',
       async () => {
         try {
-          const { error } = await supabase
-            .from('users')
-            .update({ role: 'admin' })
-            .eq('id', userId);
-
-          if (error) throw error;
+          const { data: result, error } = await supabase.functions.invoke('admin-set-user-role', {
+            body: { userId, role: 'admin' },
+          });
+          if (error) {
+            const details = (error as any)?.context?.body ? `\n\n${(error as any).context.body}` : '';
+            throw new Error(`${error.message || 'Role update failed'}${details}`);
+          }
+          if (result?.success === false) throw new Error(result?.error || 'Failed to assign admin role');
 
           // Log moderation action
           await supabase.from('moderation_actions').insert({
@@ -176,11 +197,74 @@ export default function UserManagementScreen() {
             target_id: userId,
           });
 
-          showAlert('Success', `${userName} is now an admin`, 'success');
+          if (userId === currentUser?.id) {
+            const ok = await refreshSession();
+            showAlert(
+              'Success',
+              ok
+                ? `You're now an admin. Your session was refreshed.`
+                : `You're now an admin. Please sign out/in to refresh permissions.`,
+              'success'
+            );
+          } else {
+            showAlert(
+              'Success',
+              `${userName} is now an admin. They may need to sign out/in to refresh permissions.`,
+              'success'
+            );
+          }
           loadUsers();
-        } catch (error) {
+        } catch (error: any) {
           console.error('Error assigning admin role:', error);
-          showAlert('Error', 'Failed to assign admin role', 'error');
+          showAlert('Error', error?.message || 'Failed to assign admin role', 'error');
+        }
+      }
+    );
+  };
+
+  const assignSupRole = async (userId: string, userName: string) => {
+    showAlert(
+      'Assign Sup Role',
+      `Make ${userName} a Sup? They can view participants and approve check-ins for opportunities.`,
+      'warning',
+      async () => {
+        try {
+          const { data: result, error } = await supabase.functions.invoke('admin-set-user-role', {
+            body: { userId, role: 'sup' },
+          });
+          if (error) {
+            const details = (error as any)?.context?.body ? `\n\n${(error as any).context.body}` : '';
+            throw new Error(`${error.message || 'Role update failed'}${details}`);
+          }
+          if (result?.success === false) throw new Error(result?.error || 'Failed to assign Sup role');
+
+          await supabase.from('moderation_actions').insert({
+            admin_id: currentUser?.id,
+            action_type: 'assign_sup',
+            target_type: 'user',
+            target_id: userId,
+          });
+
+          if (userId === currentUser?.id) {
+            const ok = await refreshSession();
+            showAlert(
+              'Success',
+              ok
+                ? `You're now a Sup. Your session was refreshed.`
+                : `You're now a Sup. Please sign out/in to refresh permissions.`,
+              'success'
+            );
+          } else {
+            showAlert(
+              'Success',
+              `${userName} is now a Sup. They may need to sign out/in to refresh permissions.`,
+              'success'
+            );
+          }
+          loadUsers();
+        } catch (error: any) {
+          console.error('Error assigning Sup role:', error);
+          showAlert('Error', error?.message || 'Failed to assign Sup role', 'error');
         }
       }
     );
@@ -199,12 +283,14 @@ export default function UserManagementScreen() {
       'warning',
       async () => {
         try {
-          const { error } = await supabase
-            .from('users')
-            .update({ role: 'volunteer' })
-            .eq('id', userId);
-
-          if (error) throw error;
+          const { data: result, error } = await supabase.functions.invoke('admin-set-user-role', {
+            body: { userId, role: 'volunteer' },
+          });
+          if (error) {
+            const details = (error as any)?.context?.body ? `\n\n${(error as any).context.body}` : '';
+            throw new Error(`${error.message || 'Role update failed'}${details}`);
+          }
+          if (result?.success === false) throw new Error(result?.error || 'Failed to remove admin role');
 
           // Log moderation action
           await supabase.from('moderation_actions').insert({
@@ -216,9 +302,42 @@ export default function UserManagementScreen() {
 
           showAlert('Success', `${userName} is now a volunteer`, 'success');
           loadUsers();
-        } catch (error) {
+        } catch (error: any) {
           console.error('Error removing admin role:', error);
-          showAlert('Error', 'Failed to remove admin role', 'error');
+          showAlert('Error', error?.message || 'Failed to remove admin role', 'error');
+        }
+      }
+    );
+  };
+
+  const removeSupRole = async (userId: string, userName: string) => {
+    showAlert(
+      'Remove Sup Role',
+      `Remove Sup access from ${userName}? They will become a regular volunteer.`,
+      'warning',
+      async () => {
+        try {
+          const { data: result, error } = await supabase.functions.invoke('admin-set-user-role', {
+            body: { userId, role: 'volunteer' },
+          });
+          if (error) {
+            const details = (error as any)?.context?.body ? `\n\n${(error as any).context.body}` : '';
+            throw new Error(`${error.message || 'Role update failed'}${details}`);
+          }
+          if (result?.success === false) throw new Error(result?.error || 'Failed to remove Sup role');
+
+          await supabase.from('moderation_actions').insert({
+            admin_id: currentUser?.id,
+            action_type: 'remove_sup',
+            target_type: 'user',
+            target_id: userId,
+          });
+
+          showAlert('Success', `${userName} is now a volunteer`, 'success');
+          loadUsers();
+        } catch (error: any) {
+          console.error('Error removing Sup role:', error);
+          showAlert('Error', error?.message || 'Failed to remove Sup role', 'error');
         }
       }
     );
@@ -235,10 +354,17 @@ export default function UserManagementScreen() {
 
   const renderUserCard = (user: User) => {
     const isAdmin = user.role === 'admin';
+    const isSup = user.role === 'sup';
     const isCurrentUser = user.id === currentUser?.id;
 
     return (
-      <View key={user.id} style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <LinearGradient
+        key={user.id}
+        colors={[colors.card, colors.background]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.card, surfaceShadow, { borderColor: colors.border }]}
+      >
         {/* User Header */}
         <View style={styles.userHeader}>
           {user.avatarUrl ? (
@@ -253,11 +379,11 @@ export default function UserManagementScreen() {
           
           <View style={styles.userInfo}>
   <View style={styles.nameRow}>
-    <TouchableOpacity onPress={() => router.push(`/profile/${user.slug || user.id}`)}>
+    <AnimatedPressable onPress={() => router.push(`/profile/${user.slug || user.id}`)}>
       <Text style={[styles.userName, { color: colors.text }]}>
         {user.fullName}
       </Text>
-    </TouchableOpacity>
+    </AnimatedPressable>
               {isCurrentUser && (
                 <View style={[styles.youBadge, { backgroundColor: colors.primary + '20' }]}>
                   <Text style={[styles.youBadgeText, { color: colors.primary }]}>You</Text>
@@ -285,6 +411,11 @@ export default function UserManagementScreen() {
             <View style={[styles.adminBadge, { backgroundColor: colors.primary + '20' }]}>
               <Crown size={14} color={colors.primary} />
               <Text style={[styles.adminBadgeText, { color: colors.primary }]}>Admin</Text>
+            </View>
+          ) : isSup ? (
+            <View style={[styles.adminBadge, { backgroundColor: colors.success + '20' }]}>
+              <ShieldCheck size={14} color={colors.success} />
+              <Text style={[styles.adminBadgeText, { color: colors.success }]}>Sup</Text>
             </View>
           ) : user.isBanned ? (
             <View style={[styles.bannedBadge, { backgroundColor: colors.error + '20' }]}>
@@ -333,26 +464,46 @@ export default function UserManagementScreen() {
         {/* Actions */}
         {!isCurrentUser && !user.isBanned && (
           <View style={styles.actions}>
-            {!isAdmin ? (
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: colors.primary }]}
-                onPress={() => assignAdminRole(user.id, user.fullName)}
-              >
-                <ShieldCheck size={18} color="#FFFFFF" />
-                <Text style={styles.actionButtonText}>Make Admin</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: colors.textSecondary }]}
+            {isAdmin ? (
+              <AnimatedPressable
+                style={[styles.actionButton, surfaceShadow, { backgroundColor: colors.textSecondary }]}
                 onPress={() => removeAdminRole(user.id, user.fullName)}
               >
                 <Shield size={18} color="#FFFFFF" />
                 <Text style={styles.actionButtonText}>Remove Admin</Text>
-              </TouchableOpacity>
+              </AnimatedPressable>
+            ) : (
+              <>
+                <AnimatedPressable
+                  style={[styles.actionButton, surfaceShadow, { backgroundColor: colors.primary }]}
+                  onPress={() => assignAdminRole(user.id, user.fullName)}
+                >
+                  <ShieldCheck size={18} color="#FFFFFF" />
+                  <Text style={styles.actionButtonText}>Make Admin</Text>
+                </AnimatedPressable>
+
+                {!isSup ? (
+                  <AnimatedPressable
+                    style={[styles.actionButton, surfaceShadow, { backgroundColor: colors.success }]}
+                    onPress={() => assignSupRole(user.id, user.fullName)}
+                  >
+                    <ShieldCheck size={18} color="#FFFFFF" />
+                    <Text style={styles.actionButtonText}>Make Sup</Text>
+                  </AnimatedPressable>
+                ) : (
+                  <AnimatedPressable
+                    style={[styles.actionButton, surfaceShadow, { backgroundColor: colors.textSecondary }]}
+                    onPress={() => removeSupRole(user.id, user.fullName)}
+                  >
+                    <Shield size={18} color="#FFFFFF" />
+                    <Text style={styles.actionButtonText}>Remove Sup</Text>
+                  </AnimatedPressable>
+                )}
+              </>
             )}
           </View>
         )}
-      </View>
+      </LinearGradient>
     );
   };
 
@@ -360,9 +511,9 @@ export default function UserManagementScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <AnimatedPressable onPress={() => router.back()} style={styles.backButton}>
           <ChevronLeft size={24} color={colors.text} />
-        </TouchableOpacity>
+        </AnimatedPressable>
         <View style={styles.headerTitleContainer}>
           <Users size={24} color={colors.primary} />
           <Text style={[styles.headerTitle, { color: colors.text }]}>
@@ -374,26 +525,46 @@ export default function UserManagementScreen() {
 
       {/* Stats Overview */}
       <View style={styles.statsOverview}>
-        <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <LinearGradient
+          colors={[colors.card, colors.background]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+        >
           <Users size={20} color={colors.primary} />
           <Text style={[styles.statCardValue, { color: colors.text }]}>{stats.totalUsers}</Text>
           <Text style={[styles.statCardLabel, { color: colors.textSecondary }]}>Total Users</Text>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        </LinearGradient>
+        <LinearGradient
+          colors={[colors.card, colors.background]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+        >
           <Award size={20} color={colors.success} />
           <Text style={[styles.statCardValue, { color: colors.text }]}>{stats.activeUsers}</Text>
           <Text style={[styles.statCardLabel, { color: colors.textSecondary }]}>Active</Text>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        </LinearGradient>
+        <LinearGradient
+          colors={[colors.card, colors.background]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+        >
           <Crown size={20} color={colors.primary} />
           <Text style={[styles.statCardValue, { color: colors.text }]}>{stats.admins}</Text>
           <Text style={[styles.statCardLabel, { color: colors.textSecondary }]}>Admins</Text>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        </LinearGradient>
+        <LinearGradient
+          colors={[colors.card, colors.background]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+        >
           <Ban size={20} color={colors.error} />
           <Text style={[styles.statCardValue, { color: colors.text }]}>{stats.bannedUsers}</Text>
           <Text style={[styles.statCardLabel, { color: colors.textSecondary }]}>Banned</Text>
-        </View>
+        </LinearGradient>
       </View>
 
       {/* Search Bar */}
@@ -638,13 +809,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    minHeight: 44,
+    borderRadius: 10,
   },
   actionButtonText: {
     fontSize: 14,
     fontWeight: 'bold',
     color: '#FFFFFF',
+    flexShrink: 1,
   },
   emptyState: {
     alignItems: 'center',

@@ -10,6 +10,9 @@ import { File } from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from './supabase';
 
+export const MAX_VIDEO_SIZE_BYTES = 150 * 1024 * 1024; // 150MB (Facebook-like, but still reasonable for mobile)
+export const MAX_VIDEO_DURATION_SECONDS = 180; // 3 minutes (adjust as desired)
+
 interface VideoUploadResult {
   success: boolean;
   videoUrl?: string;
@@ -47,7 +50,14 @@ export async function generateVideoThumbnail(videoUri: string): Promise<string |
  */
 export async function getVideoSize(uri: string): Promise<number> {
   try {
-    // SDK 54: Use fetch + blob to get size
+    // Prefer filesystem size (fast, low-memory) when it's a local file:// URI
+    if (uri.startsWith('file://')) {
+      const info = await FileSystem.getInfoAsync(uri, { size: true });
+      // @ts-expect-error: size is available when { size: true } is passed
+      return typeof info.size === 'number' ? info.size : 0;
+    }
+
+    // Fallback: fetch -> blob (may be memory-heavy; avoid for large files if possible)
     const response = await fetch(uri);
     if (!response.ok) return 0;
     const blob = await response.blob();
@@ -61,8 +71,7 @@ export async function getVideoSize(uri: string): Promise<number> {
  * Check if video is too large
  */
 export function isVideoTooLarge(sizeInBytes: number): boolean {
-  const maxSize = 50 * 1024 * 1024; // 50MB
-  return sizeInBytes > maxSize;
+  return sizeInBytes > MAX_VIDEO_SIZE_BYTES;
 }
 
 /**
@@ -95,7 +104,7 @@ export async function uploadVideo(
     if (isVideoTooLarge(fileSize)) {
       return {
         success: false,
-        error: `Video too large (${formatFileSize(fileSize)}). Maximum 50MB.`
+        error: `Video too large (${formatFileSize(fileSize)}). Maximum ${formatFileSize(MAX_VIDEO_SIZE_BYTES)}.`
       };
     }
 

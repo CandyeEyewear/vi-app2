@@ -25,6 +25,7 @@ import * as FileSystem from 'expo-file-system';
 import { File } from 'expo-file-system';
 import { supabase } from '../services/supabase';
 import CustomAlert from '../components/CustomAlert';
+import Button from '../components/Button';
 import CrossPlatformDateTimePicker from '../components/CrossPlatformDateTimePicker';
 import WebContainer from '../components/WebContainer';
 
@@ -379,17 +380,16 @@ export default function EditProfileScreen() {
 
         {/* Save Button */}
         <View style={styles.footer}>
-          <TouchableOpacity
-            style={[styles.saveButton, (saving || uploadingImage) && styles.saveButtonDisabled]}
+          <Button
+            variant="primary"
+            size="lg"
             onPress={handleSave}
             disabled={saving || uploadingImage}
+            loading={saving}
+            style={styles.saveButton}
           >
-            {saving ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.saveButtonText}>Save Changes</Text>
-            )}
-          </TouchableOpacity>
+            Save Changes
+          </Button>
 
           <TouchableOpacity
             style={styles.cancelButton}
@@ -537,19 +537,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.background,
   },
   saveButton: {
-    backgroundColor: Colors.light.primary,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
     marginBottom: 12,
-  },
-  saveButtonDisabled: {
-    opacity: 0.6,
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
   },
   cancelButton: {
     padding: 16,

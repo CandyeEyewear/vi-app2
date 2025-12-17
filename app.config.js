@@ -4,7 +4,9 @@ export default {
     slug: "vibe-volunteer-app",
     scheme: "vibe",
     version: "1.0.1",
-    orientation: "portrait",
+    // Allow rotation & resizing for large-screen devices (tablets/foldables/Chromebooks)
+    // per Google Play large-screen requirements.
+    orientation: "default",
     icon: "./assets/images/icon.png",
     splash: {
       image: "./assets/splash.png",
@@ -61,6 +63,29 @@ export default {
       },
       softwareKeyboardLayoutMode: "pan",
       intentFilters: [
+        // Share sheet (Android Sharesheet). Without SEND/SEND_MULTIPLE, the app will not
+        // appear in "Share to" app lists for content like text/images/files.
+        {
+          action: "SEND",
+          category: ["DEFAULT"],
+          data: [
+            { mimeType: "text/plain" },
+            { mimeType: "image/*" },
+            { mimeType: "video/*" },
+            { mimeType: "application/pdf" },
+            { mimeType: "*/*" }
+          ]
+        },
+        {
+          action: "SEND_MULTIPLE",
+          category: ["DEFAULT"],
+          data: [
+            { mimeType: "image/*" },
+            { mimeType: "video/*" },
+            { mimeType: "application/pdf" },
+            { mimeType: "*/*" }
+          ]
+        },
         {
           action: "VIEW",
           autoVerify: true,

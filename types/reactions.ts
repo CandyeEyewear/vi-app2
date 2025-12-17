@@ -2,7 +2,7 @@
  * Reaction Types for Posts
  */
 
-export type ReactionType = 'heart' | 'thumbsup' | 'clap' | 'fire' | 'star' | 'cosign';
+export type ReactionType = 'heart' | 'thumbsup' | 'clap' | 'fire' | 'star';
 
 export interface PostReaction {
   id: string;
@@ -19,7 +19,6 @@ export interface ReactionSummary {
   clap: number;
   fire: number;
   star: number;
-  cosign: number;
   total: number;
   userReaction?: ReactionType; // Current user's reaction
 }

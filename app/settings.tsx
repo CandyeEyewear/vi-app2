@@ -42,6 +42,7 @@ const insets = useSafeAreaInsets();
    });
 
    const [loading, setLoading] = useState(true);
+   const [updatingNotificationField, setUpdatingNotificationField] = useState<string | null>(null);
 
 // Change Password Modal State
    const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
@@ -72,6 +73,11 @@ const insets = useSafeAreaInsets();
    const [helpModalVisible, setHelpModalVisible] = useState(false);
     
  const [isPrivate, setIsPrivate] = useState(user?.isPrivate || false);
+
+ // Keep local privacy toggle in sync if the user object updates
+ useEffect(() => {
+   setIsPrivate(user?.isPrivate || false);
+ }, [user?.isPrivate]);
   
   // Load notification settings from database
    useEffect(() => {
@@ -89,22 +95,60 @@ const insets = useSafeAreaInsets();
          .eq('user_id', user?.id)
          .single();
 
-       if (error && error.code !== 'PGRST116') {
-         console.error('Error loading settings:', error);
-         return;
-       }
+      // If settings row doesn't exist, create defaults so toggles actually persist.
+      if (error?.code === 'PGRST116') {
+        const defaults = {
+          user_id: user?.id,
+          circle_requests_enabled: true,
+          announcements_enabled: true,
+          opportunities_enabled: true,
+          messages_enabled: true,
+          opportunity_proposals_enabled: true,
+          causes_enabled: true,
+          events_enabled: true,
+        };
 
-       if (data) {
-         setNotificationSettings({
-           circle_requests_enabled: data.circle_requests_enabled,
-           announcements_enabled: data.announcements_enabled,
-           opportunities_enabled: data.opportunities_enabled,
-           messages_enabled: data.messages_enabled,
-           opportunity_proposals_enabled: data.opportunity_proposals_enabled,
-           causes_enabled: data.causes_enabled ?? true,
-           events_enabled: data.events_enabled ?? true,
-         });
-       }
+        const { data: created, error: createError } = await supabase
+          .from('user_notification_settings')
+          .insert(defaults)
+          .select('*')
+          .single();
+
+        if (createError) {
+          console.error('Error creating notification settings:', createError);
+          showAlert('Error', 'Failed to initialize notification settings', 'error');
+          return;
+        }
+
+        setNotificationSettings({
+          circle_requests_enabled: created.circle_requests_enabled,
+          announcements_enabled: created.announcements_enabled,
+          opportunities_enabled: created.opportunities_enabled,
+          messages_enabled: created.messages_enabled,
+          opportunity_proposals_enabled: created.opportunity_proposals_enabled,
+          causes_enabled: created.causes_enabled ?? true,
+          events_enabled: created.events_enabled ?? true,
+        });
+        return;
+      }
+
+      if (error) {
+        console.error('Error loading settings:', error);
+        showAlert('Error', 'Failed to load notification settings', 'error');
+        return;
+      }
+
+      if (data) {
+        setNotificationSettings({
+          circle_requests_enabled: data.circle_requests_enabled,
+          announcements_enabled: data.announcements_enabled,
+          opportunities_enabled: data.opportunities_enabled,
+          messages_enabled: data.messages_enabled,
+          opportunity_proposals_enabled: data.opportunity_proposals_enabled,
+          causes_enabled: data.causes_enabled ?? true,
+          events_enabled: data.events_enabled ?? true,
+        });
+      }
      } catch (error) {
        console.error('Error loading notification settings:', error);
      } finally {
@@ -114,20 +158,36 @@ const insets = useSafeAreaInsets();
 
    const updateNotificationSetting = async (field: string, value: boolean) => {
      try {
-       const { error } = await supabase
+      if (!user?.id) {
+        showAlert('Error', 'You must be logged in to change settings', 'error');
+        return;
+      }
+
+      setUpdatingNotificationField(field);
+
+      // Optimistic UI update
+      const prevValue = (notificationSettings as any)[field];
+      setNotificationSettings(prev => ({
+        ...prev,
+        [field]: value,
+      }));
+
+      const { error } = await supabase
          .from('user_notification_settings')
-         .update({ [field]: value })
-         .eq('user_id', user?.id);
+        .update({ [field]: value })
+        .eq('user_id', user.id);
 
        if (error) throw error;
-
-       setNotificationSettings(prev => ({
-         ...prev,
-         [field]: value,
-       }));
      } catch (error) {
        console.error('Error updating notification setting:', error);
-       Alert.alert('Error', 'Failed to update notification setting');
+      // Revert optimistic update on error
+      setNotificationSettings(prev => ({
+        ...prev,
+        [field]: (prev as any)[field],
+      }));
+      showAlert('Error', 'Failed to update notification setting', 'error');
+    } finally {
+      setUpdatingNotificationField(null);
      }
    };
 
@@ -141,7 +201,7 @@ const insets = useSafeAreaInsets();
     if (!response.success) {
       // Revert on error
       setIsPrivate(!newPrivacyValue);
-      Alert.alert('Error', response.error || 'Failed to update privacy setting');
+      showAlert('Error', response.error || 'Failed to update privacy setting', 'error');
     }
   };
 
@@ -209,9 +269,7 @@ const insets = useSafeAreaInsets();
      }
    };
 
-  const handlePrivacy = () => {
-    Alert.alert('Privacy Settings', 'This feature will be implemented soon');
-  };
+  // NOTE: privacy settings are currently handled via the "Private Profile" toggle.
 
   
 
@@ -325,7 +383,7 @@ const handleDeleteAccount = async () => {
          onValueChange={(value) => updateNotificationSetting('circle_requests_enabled', value)}
          trackColor={{ false: Colors.light.border, true: Colors.light.primary }}
          thumbColor="#FFFFFF"
-         disabled={loading}
+         disabled={loading || updatingNotificationField === 'circle_requests_enabled'}
        />
      </View>
 
@@ -341,7 +399,7 @@ const handleDeleteAccount = async () => {
          onValueChange={(value) => updateNotificationSetting('announcements_enabled', value)}
          trackColor={{ false: Colors.light.border, true: Colors.light.primary }}
          thumbColor="#FFFFFF"
-         disabled={loading}
+         disabled={loading || updatingNotificationField === 'announcements_enabled'}
        />
      </View>
 
@@ -357,7 +415,7 @@ const handleDeleteAccount = async () => {
         onValueChange={(value) => updateNotificationSetting('opportunities_enabled', value)}
         trackColor={{ false: Colors.light.border, true: Colors.light.primary }}
         thumbColor="#FFFFFF"
-        disabled={loading}
+        disabled={loading || updatingNotificationField === 'opportunities_enabled'}
       />
     </View>
 
@@ -373,7 +431,7 @@ const handleDeleteAccount = async () => {
         onValueChange={(value) => updateNotificationSetting('causes_enabled', value)}
         trackColor={{ false: Colors.light.border, true: Colors.light.primary }}
         thumbColor="#FFFFFF"
-        disabled={loading}
+        disabled={loading || updatingNotificationField === 'causes_enabled'}
       />
     </View>
 
@@ -389,7 +447,7 @@ const handleDeleteAccount = async () => {
         onValueChange={(value) => updateNotificationSetting('events_enabled', value)}
         trackColor={{ false: Colors.light.border, true: Colors.light.primary }}
         thumbColor="#FFFFFF"
-        disabled={loading}
+        disabled={loading || updatingNotificationField === 'events_enabled'}
       />
     </View>
 
@@ -405,7 +463,7 @@ const handleDeleteAccount = async () => {
         onValueChange={(value) => updateNotificationSetting('messages_enabled', value)}
         trackColor={{ false: Colors.light.border, true: Colors.light.primary }}
         thumbColor="#FFFFFF"
-        disabled={loading}
+        disabled={loading || updatingNotificationField === 'messages_enabled'}
       />
     </View>
 
@@ -422,7 +480,7 @@ const handleDeleteAccount = async () => {
            onValueChange={(value) => updateNotificationSetting('opportunity_proposals_enabled', value)}
            trackColor={{ false: Colors.light.border, true: Colors.light.primary }}
            thumbColor="#FFFFFF"
-           disabled={loading}
+           disabled={loading || updatingNotificationField === 'opportunity_proposals_enabled'}
          />
        </View>
      )}

@@ -282,19 +282,26 @@ function AppContent() {
           return;
         }
         if (parsed.path.includes('payment/cancel')) {
-          // For cancel, also check for returnPath but default to feed
+          // Show the cancel screen in-app (instead of silently jumping to feed)
+          // so the user sees an explicit failure/cancel state and can retry.
+          const orderId = parsed.queryParams?.orderId;
+          const orderIdValue = Array.isArray(orderId) ? orderId[0] : orderId;
           const returnPathRaw = parsed.queryParams?.returnPath || parsed.queryParams?.return_path;
           const returnPath = Array.isArray(returnPathRaw) ? returnPathRaw[0] : returnPathRaw;
-          const redirectPath = returnPath && typeof returnPath === 'string' 
-            ? returnPath 
-            : '/feed';
+
           logger.info('[DEEP LINK] Payment cancel redirect detected', { 
             path: parsed.path,
+            orderId: orderIdValue,
             returnPathRaw,
             returnPath,
-            redirectPath 
           });
-          router.replace(redirectPath);
+          const cancelParams: any = {};
+          if (orderIdValue) cancelParams.orderId = orderIdValue;
+          if (returnPath && typeof returnPath === 'string') cancelParams.returnPath = returnPath;
+          router.replace({
+            pathname: '/payment/cancel',
+            params: cancelParams,
+          } as any);
           return;
         }
       }

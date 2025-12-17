@@ -18,7 +18,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Calendar } from 'lucide-react-native';
 import { Post } from '../../types';
 import { Colors } from '../../constants/colors';
-import { useFeed } from '../../contexts/FeedContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../services/supabase';
 import MentionText from '../MentionText';
@@ -42,7 +41,6 @@ export default function ShoutoutCard({ post, onReaction, onComment, onShare }: S
   const router = useRouter();
   
   // Co-Sign state and hooks
-  const { addReaction, removeReaction } = useFeed();
   const { user: currentUser } = useAuth();
   const [coSigners, setCoSigners] = useState<CoSigner[]>([]);
   const [hasCoSigned, setHasCoSigned] = useState(false);
@@ -92,13 +90,12 @@ export default function ShoutoutCard({ post, onReaction, onComment, onShare }: S
   const loadCoSigners = async () => {
     try {
       const { data, error } = await supabase
-        .from('post_reactions')
+        .from('post_cosigns')
         .select(`
           user_id,
-          user:users!post_reactions_user_id_fkey(id, full_name, avatar_url)
+          user:users!post_cosigns_user_id_fkey(id, full_name, avatar_url)
         `)
         .eq('post_id', post.id)
-        .eq('reaction_type', 'cosign')
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -129,12 +126,23 @@ export default function ShoutoutCard({ post, onReaction, onComment, onShare }: S
     try {
       if (hasCoSigned) {
         // Remove co-sign
-        await removeReaction(post.id);
+        const { error } = await supabase
+          .from('post_cosigns')
+          .delete()
+          .eq('post_id', post.id)
+          .eq('user_id', currentUser.id);
+        if (error) throw error;
         setCoSigners(prev => prev.filter(s => s.id !== currentUser.id));
         setHasCoSigned(false);
       } else {
         // Add co-sign
-        await addReaction(post.id, 'cosign');
+        const { error } = await supabase
+          .from('post_cosigns')
+          .insert({
+            post_id: post.id,
+            user_id: currentUser.id,
+          });
+        if (error) throw error;
         setCoSigners(prev => [{
           id: currentUser.id,
           fullName: currentUser.fullName || 'You',

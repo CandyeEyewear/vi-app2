@@ -29,6 +29,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 import { useThemeStyles } from '../hooks/useThemeStyles';
 import { AnimatedPressable } from '../components/AnimatedPressable';
+import Button from '../components/Button';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ShimmerSkeleton } from '../components/ShimmerSkeleton';
 import {
@@ -205,6 +206,7 @@ export default function OpportunityDetailsScreen() {
 
       const opportunityData: Opportunity = {
         id: data.id,
+        slug: String(data.slug ?? data.id),
         title: data.title,
         description: data.description,
         organizationName: data.organization_name,
@@ -268,28 +270,13 @@ export default function OpportunityDetailsScreen() {
 
     try {
       setSubmitting(true);
-
-      // Insert signup
-      const { error: signupError } = await supabase
-        .from('opportunity_signups')
-        .insert({
-          opportunity_id: opportunityId,
-          user_id: user.id,
-          status: 'confirmed',
-          signed_up_at: new Date().toISOString(),
-        });
-
-      if (signupError) throw signupError;
-
-      // Update spots available
-      const { error: updateError } = await supabase
-        .from('opportunities')
-        .update({
-          spots_available: opportunity.spotsAvailable - 1,
-        })
-        .eq('id', opportunityId);
-
-      if (updateError) throw updateError;
+      const { data: result, error } = await supabase.rpc('sign_up_for_opportunity', {
+        p_opportunity_id: opportunityId,
+      });
+      if (error) throw error;
+      if (result?.success === false) {
+        throw new Error(result?.error || 'Failed to sign up');
+      }
 
       setIsSignedUp(true);
       setSignupStatus('confirmed');
@@ -351,25 +338,13 @@ export default function OpportunityDetailsScreen() {
 
     try {
       setSubmitting(true);
-
-      // Delete signup
-      const { error: deleteError } = await supabase
-        .from('opportunity_signups')
-        .delete()
-        .eq('opportunity_id', opportunityId)
-        .eq('user_id', user.id);
-
-      if (deleteError) throw deleteError;
-
-      // Update spots available
-      const { error: updateError } = await supabase
-        .from('opportunities')
-        .update({
-          spots_available: opportunity.spotsAvailable + 1,
-        })
-        .eq('id', opportunityId);
-
-      if (updateError) throw updateError;
+      const { data: result, error } = await supabase.rpc('cancel_opportunity_signup', {
+        p_opportunity_id: opportunityId,
+      });
+      if (error) throw error;
+      if (result?.success === false) {
+        throw new Error(result?.error || 'Failed to cancel signup');
+      }
 
       setIsSignedUp(false);
       setSignupStatus(null);
@@ -624,38 +599,7 @@ export default function OpportunityDetailsScreen() {
               </AnimatedPressable>
             )}
             
-            {/* Admin Actions */}
-            {isAdmin && (
-              <>
-                <AnimatedPressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Edit opportunity"
-                  style={({ pressed }) => [
-                    styles.roundedIconButton,
-                    {
-                      backgroundColor: pressed ? colors.primarySoft : colors.surfaceElevated,
-                    },
-                  ]}
-                  onPress={() => router.push(`/edit-opportunity/${opportunityId}`)}
-                >
-                  <Edit size={responsive.iconSize.md} color={colors.primary} />
-                </AnimatedPressable>
-                <AnimatedPressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Delete opportunity"
-                  style={({ pressed }) => [
-                    styles.roundedIconButton,
-                    {
-                      backgroundColor: pressed ? colors.errorSoft : colors.surfaceElevated,
-                    },
-                  ]}
-                  onPress={handleDelete}
-                  disabled={submitting}
-                >
-                  <Trash2 size={responsive.iconSize.md} color={colors.error} />
-                </AnimatedPressable>
-              </>
-            )}
+            {/* Admin edit/delete moved to Admin Dashboard -> Opportunities */}
           </View>
         </View>
       </Animated.View>
@@ -709,15 +653,25 @@ export default function OpportunityDetailsScreen() {
 
           {/* Info Cards */}
           <View style={styles.infoGrid}>
-            <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border, ...cardShadow }]}>
+            <LinearGradient
+              colors={[colors.card, colors.background]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.infoCard, { borderColor: colors.border, ...cardShadow }]}
+            >
               <MapPin size={20} color={colors.primary} />
               <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Location</Text>
               <Text style={[styles.infoValue, { color: colors.text }]} numberOfLines={2}>
                 {opportunity.location}
               </Text>
-            </View>
+            </LinearGradient>
 
-            <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border, ...cardShadow }]}>
+            <LinearGradient
+              colors={[colors.card, colors.background]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.infoCard, { borderColor: colors.border, ...cardShadow }]}
+            >
               <Calendar size={20} color={colors.primary} />
               <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Date</Text>
               <Text style={[styles.infoValue, { color: colors.text }]}>
@@ -727,21 +681,31 @@ export default function OpportunityDetailsScreen() {
                   year: 'numeric',
                 })}
               </Text>
-            </View>
+            </LinearGradient>
 
-            <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border, ...cardShadow }]}>
+            <LinearGradient
+              colors={[colors.card, colors.background]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.infoCard, { borderColor: colors.border, ...cardShadow }]}
+            >
               <Clock size={20} color={colors.primary} />
               <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Duration</Text>
               <Text style={[styles.infoValue, { color: colors.text }]}>{opportunity.duration}</Text>
-            </View>
+            </LinearGradient>
 
-            <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border, ...cardShadow }]}>
+            <LinearGradient
+              colors={[colors.card, colors.background]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.infoCard, { borderColor: colors.border, ...cardShadow }]}
+            >
               <Users size={20} color={isLimited ? colors.warning : colors.primary} />
               <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Spots Left</Text>
               <Text style={[styles.infoValue, { color: isLimited ? colors.warning : colors.text }]}>
                 {spotsLeft} / {opportunity.spotsTotal}
               </Text>
-            </View>
+            </LinearGradient>
           </View>
 
           {/* Description */}
@@ -757,12 +721,15 @@ export default function OpportunityDetailsScreen() {
 
           {/* Impact Statement */}
           {opportunity.impactStatement && (
-            <View style={[styles.impactCard, { backgroundColor: colors.primarySoft, borderColor: colors.primary, ...cardShadow }]}>
+            <LinearGradient
+              colors={[colors.primarySoft, colors.card]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.impactCard, { borderColor: colors.primary, ...cardShadow }]}
+            >
               <Award size={20} color={colors.primary} />
-              <Text style={[styles.impactText, { color: colors.text }]}>
-                {opportunity.impactStatement}
-              </Text>
-            </View>
+              <Text style={[styles.impactText, { color: colors.text }]}>{opportunity.impactStatement}</Text>
+            </LinearGradient>
           )}
 
           {/* Requirements */}
@@ -815,82 +782,35 @@ export default function OpportunityDetailsScreen() {
           ]}
         >
           {/* Add to Calendar Button */}
-          <AnimatedPressable
+          <Button
+            variant="outline"
             onPress={handleAddToCalendar}
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              {
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-                opacity: pressed ? 0.7 : 1,
-                marginBottom: responsive.spacing.sm,
-              },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Add opportunity to calendar"
+            icon={<CalendarPlus size={20} color={colors.primary} />}
+            style={{ marginBottom: responsive.spacing.sm }}
           >
-            <CalendarPlus size={20} color={colors.primary} />
-            <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>
-              Add to Calendar
-            </Text>
-          </AnimatedPressable>
+            Add to Calendar
+          </Button>
 
           {isSignedUp ? (
-            <AnimatedPressable
+            <Button
+              variant="destructive"
+              size="lg"
               onPress={handleCancelSignup}
               disabled={submitting}
-              style={({ pressed }) => [
-                styles.actionButton,
-                {
-                  opacity: pressed ? 0.9 : 1,
-                },
-              ]}
+              loading={submitting}
             >
-              <LinearGradient
-                colors={[colors.error, colors.errorDark]}
-                style={[
-                  styles.gradientButton,
-                  {
-                    height: responsive.buttonHeight,
-                    paddingHorizontal: responsive.spacing.xl,
-                    opacity: submitting ? 0.7 : 1,
-                  },
-                ]}
-              >
-                <Text style={[styles.actionButtonText, { color: colors.textOnPrimary }]}>
-                  {submitting ? 'Cancelling...' : 'Cancel Signup'}
-                </Text>
-              </LinearGradient>
-            </AnimatedPressable>
+              Cancel Signup
+            </Button>
           ) : (
-            <AnimatedPressable
+            <Button
+              variant="primary"
+              size="lg"
               onPress={handleSignUp}
               disabled={submitting || isFull}
-              style={({ pressed }) => [
-                styles.actionButton,
-                { opacity: pressed ? 0.9 : 1 },
-              ]}
+              loading={submitting}
             >
-              <LinearGradient
-                colors={
-                  submitting || isFull
-                    ? [colors.textSecondary, colors.textSecondary]
-                    : [colors.primary, colors.primaryDark]
-                }
-                style={[
-                  styles.gradientButton,
-                  {
-                    height: responsive.buttonHeight,
-                    paddingHorizontal: responsive.spacing.xl,
-                    opacity: submitting || isFull ? 0.7 : 1,
-                  },
-                ]}
-              >
-                <Text style={[styles.actionButtonText, { color: colors.textOnPrimary }]}>
-                  {submitting ? 'Signing Up...' : isFull ? 'Opportunity Full' : 'Sign Up'}
-                </Text>
-              </LinearGradient>
-            </AnimatedPressable>
+              {isFull ? 'Opportunity Full' : 'Sign Up'}
+            </Button>
           )}
         </View>
       )}
@@ -1024,7 +944,7 @@ const styles = StyleSheet.create({
   infoCard: {
     width: '48%',
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     alignItems: 'center',
     gap: 8,
@@ -1058,7 +978,7 @@ const styles = StyleSheet.create({
   impactCard: {
     flexDirection: 'row',
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     gap: 12,
     marginBottom: 24,

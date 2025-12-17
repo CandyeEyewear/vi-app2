@@ -4,7 +4,7 @@
     "slug": "vibe-volunteer-app",
     "scheme": "vibe",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "splash": {
       "image": "./assets/images/splash.png",
@@ -49,6 +49,11 @@
               "scheme": "https",
               "host": "vibe.volunteersinc.org",
               "pathPrefix": "/invite"
+            },
+            {
+              "scheme": "https",
+              "host": "vibe.volunteersinc.org",
+              "pathPrefix": "/payment"
             },
             {
               "scheme": "vibe"

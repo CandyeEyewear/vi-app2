@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { Text, StyleSheet, useColorScheme } from 'react-native';
+import { Text, StyleSheet, useColorScheme, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '../constants/colors';
 
@@ -16,7 +16,7 @@ interface MentionTextProps {
   numberOfLines?: number;
 }
 
-type SegmentType = 'text' | 'mention' | 'hashtag';
+type SegmentType = 'text' | 'mention' | 'hashtag' | 'link';
 type HashtagType = 'event' | 'cause' | 'opportunity';
 
 interface TextSegment {
@@ -25,7 +25,52 @@ interface TextSegment {
   userId?: string;
   hashtagType?: HashtagType;
   hashtagId?: string;
+  url?: string;
 }
+
+// URL regex pattern - matches http, https, www, and common domains
+const URL_REGEX = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9-]+\.[a-zA-Z]{2,}[^\s]*)/gi;
+
+const splitTrailingPunctuation = (raw: string): { linkText: string; trailingText: string } => {
+  const match = raw.match(/^(.+?)([),.!?;:]+)$/);
+  if (!match) return { linkText: raw, trailingText: '' };
+  return { linkText: match[1], trailingText: match[2] };
+};
+
+const normalizeUrl = (rawUrl: string): string => {
+  if (rawUrl.startsWith('www.')) return `https://${rawUrl}`;
+  if (!rawUrl.match(/^https?:\/\//i)) return `https://${rawUrl}`;
+  return rawUrl;
+};
+
+const linkifyPlainText = (rawText: string): TextSegment[] => {
+  const segments: TextSegment[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  URL_REGEX.lastIndex = 0;
+  while ((match = URL_REGEX.exec(rawText)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ type: 'text', content: rawText.slice(lastIndex, match.index) });
+    }
+
+    const { linkText, trailingText } = splitTrailingPunctuation(match[0]);
+    const url = normalizeUrl(linkText);
+    segments.push({ type: 'link', content: linkText, url });
+
+    if (trailingText) {
+      segments.push({ type: 'text', content: trailingText });
+    }
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < rawText.length) {
+    segments.push({ type: 'text', content: rawText.slice(lastIndex) });
+  }
+
+  return segments.length ? segments : [{ type: 'text', content: rawText }];
+};
 
 // Parse text into segments (plain text, mentions, and hashtags)
 const parseText = (text: string): TextSegment[] => {
@@ -40,10 +85,7 @@ const parseText = (text: string): TextSegment[] => {
   while ((match = combinedPattern.exec(text)) !== null) {
     // Add text before this match
     if (match.index > lastIndex) {
-      segments.push({
-        type: 'text',
-        content: text.slice(lastIndex, match.index),
-      });
+      segments.push(...linkifyPlainText(text.slice(lastIndex, match.index)));
     }
 
     if (match[1] !== undefined) {
@@ -68,10 +110,7 @@ const parseText = (text: string): TextSegment[] => {
 
   // Add remaining text
   if (lastIndex < text.length) {
-    segments.push({
-      type: 'text',
-      content: text.slice(lastIndex),
-    });
+    segments.push(...linkifyPlainText(text.slice(lastIndex)));
   }
 
   return segments;
@@ -108,6 +147,16 @@ export default function MentionText({ text, style, numberOfLines }: MentionTextP
 
   const handleHashtagPress = (type: HashtagType, id: string) => {
     router.push(getHashtagRoute(type, id) as any);
+  };
+
+  const handleLinkPress = async (url: string) => {
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) await Linking.openURL(url);
+    } catch (error) {
+      // no-op; link failures shouldn't crash rendering
+      if (__DEV__) console.warn('[MentionText] Failed to open url', url, error);
+    }
   };
 
   const segments = parseText(text);
@@ -147,6 +196,22 @@ export default function MentionText({ text, style, numberOfLines }: MentionTextP
             </Text>
           );
         }
+
+        if (segment.type === 'link' && segment.url) {
+          return (
+            <Text
+              key={`link-${index}`}
+              style={[styles.link, { color: colors.primary }]}
+              onPress={(e: any) => {
+                e?.stopPropagation?.();
+                handleLinkPress(segment.url!);
+              }}
+              suppressHighlighting={false}
+            >
+              {segment.content}
+            </Text>
+          );
+        }
         
         return (
           <Text key={`text-${index}`}>
@@ -164,5 +229,8 @@ const styles = StyleSheet.create({
   },
   hashtag: {
     fontWeight: '600',
+  },
+  link: {
+    textDecorationLine: 'underline',
   },
 });

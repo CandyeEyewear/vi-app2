@@ -24,6 +24,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
 import CustomAlert from '../components/CustomAlert';
 import { supabase } from '../services/supabase';
+import Button from '../components/Button';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -204,22 +205,15 @@ export default function LoginScreen() {
                 <Text style={{ fontWeight: '600' }}>{userEmail}</Text>. Please check your
                 inbox (and spam folder) to verify your account before logging in.
               </Text>
-              <TouchableOpacity
-                onPress={handleResendVerification}
+              <Button
+                variant="primary"
+                loading={resendingEmail}
                 disabled={resendingEmail}
-                style={{
-                  marginTop: 12,
-                  backgroundColor: '#4A90E2',
-                  paddingVertical: 8,
-                  paddingHorizontal: 16,
-                  borderRadius: 6,
-                  alignSelf: 'flex-start',
-                }}
+                onPress={handleResendVerification}
+                style={{ marginTop: 12, alignSelf: 'flex-start' }}
               >
-                <Text style={{ color: 'white', fontWeight: '600', fontSize: 14 }}>
-                  {resendingEmail ? 'Sending...' : 'Resend Verification Link'}
-                </Text>
-              </TouchableOpacity>
+                Resend Verification Link
+              </Button>
             </View>
           )}
 
@@ -273,18 +267,16 @@ export default function LoginScreen() {
           </TouchableOpacity>
 
           {/* Login Button */}
-          <TouchableOpacity
-            style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+          <Button
+            variant="primary"
+            size="lg"
             onPress={handleLogin}
             disabled={loading}
-            activeOpacity={0.7}
+            loading={loading}
+            style={styles.loginButton}
           >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.loginButtonText}>Sign In</Text>
-            )}
-          </TouchableOpacity>
+            Sign In
+          </Button>
 
           {/* Register Link */}
           <View style={styles.registerContainer}>
@@ -412,19 +404,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   loginButton: {
-    backgroundColor: '#2196F3',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
     marginBottom: 24,
-  },
-  loginButtonDisabled: {
-    opacity: 0.6,
-  },
-  loginButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
   },
   registerContainer: {
     flexDirection: 'row',

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Supabase Edge Function: Check Pending Payments
  * 
@@ -21,23 +22,34 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getCorsHeaders, handleCorsPreflight } from '../_shared/cors.ts';
 
-// CORS headers
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// CORS headers handled via shared helper
 
 serve(async (req) => {
   // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  const preflight = handleCorsPreflight(req);
+  if (preflight) return preflight;
+  const corsHeaders = getCorsHeaders(req);
 
   const startTime = Date.now();
   const logPrefix = '[CHECK-PENDING]';
 
   try {
+    // AuthN: require a bearer token matching the service role key (used by pg_cron migration) or PAYMENTS_CRON_SECRET.
+    const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || '';
+    const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    const paymentsCronSecret = Deno.env.get('PAYMENTS_CRON_SECRET') || '';
+    const ok =
+      (!!serviceRole && authHeader === `Bearer ${serviceRole}`) ||
+      (!!paymentsCronSecret && authHeader === `Bearer ${paymentsCronSecret}`);
+    if (!ok) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Initialize Supabase client with service role
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';

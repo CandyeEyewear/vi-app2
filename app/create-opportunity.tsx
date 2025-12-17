@@ -21,6 +21,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 import { useThemeStyles } from '../hooks/useThemeStyles';
 import { AnimatedPressable } from '../components/AnimatedPressable';
+import Button from '../components/Button';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ChevronLeft,
@@ -1253,39 +1254,17 @@ export default function CreateOpportunityScreen() {
         </View>
 
         {/* Create Button */}
-        <AnimatedPressable
-          style={[styles.createButton, (loading || !isOnline) && styles.createButtonDisabled]}
+        <Button
+          variant="primary"
+          size="lg"
           onPress={handleCreate}
           disabled={loading || !isOnline}
+          loading={loading}
+          loadingText="Creating Opportunity..."
+          style={styles.createButton}
         >
-          <LinearGradient
-            colors={
-              loading || !isOnline
-                ? [colors.textSecondary, colors.textSecondary]
-                : [colors.primary, colors.primaryDark]
-            }
-            style={[
-              styles.createButtonGradient,
-              {
-                height: responsive.buttonHeight,
-                paddingHorizontal: responsive.spacing.xl,
-              },
-            ]}
-          >
-            {loading ? (
-              <View style={styles.buttonLoadingContainer}>
-                <ActivityIndicator size="small" color={colors.textOnPrimary} />
-                <Text style={[styles.createButtonText, { color: colors.textOnPrimary }]}>
-                  Creating Opportunity...
-                </Text>
-              </View>
-            ) : (
-              <Text style={[styles.createButtonText, { color: colors.textOnPrimary }]}>
-                {!isOnline ? 'No Internet Connection' : 'Create Opportunity'}
-              </Text>
-            )}
-          </LinearGradient>
-        </AnimatedPressable>
+          {!isOnline ? 'No Internet Connection' : 'Create Opportunity'}
+        </Button>
       </ScrollView>
       </WebContainer>
 
@@ -1494,22 +1473,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   createButton: {
-    borderRadius: 16,
-    overflow: 'hidden',
     marginTop: 8,
-  },
-  createButtonGradient: {
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-  },
-  createButtonDisabled: {
-    opacity: 0.6,
-  },
-  createButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
   },
   fieldDescription: {
     fontSize: 13,
@@ -1575,10 +1539,5 @@ const styles = StyleSheet.create({
   networkBannerText: {
     fontSize: 14,
     fontWeight: '600',
-  },
-  buttonLoadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
   },
 });

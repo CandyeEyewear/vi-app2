@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
 import CustomAlert from '../components/CustomAlert';
+import Button from '../components/Button';
 import { ChevronLeft, Mail } from 'lucide-react-native';
 
 export default function ForgotPasswordScreen() {
@@ -128,18 +129,16 @@ export default function ForgotPasswordScreen() {
           </View>
 
           {/* Reset Button */}
-          <TouchableOpacity
-            style={[styles.resetButton, loading && styles.resetButtonDisabled]}
+          <Button
+            variant="primary"
+            size="lg"
             onPress={handleResetPassword}
             disabled={loading}
-            activeOpacity={0.7}
+            loading={loading}
+            style={styles.resetButton}
           >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.resetButtonText}>Send Reset Link</Text>
-            )}
-          </TouchableOpacity>
+            Send Reset Link
+          </Button>
 
           {/* Back to Login */}
           <View style={styles.backToLoginContainer}>
@@ -237,19 +236,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.light.border,
   },
   resetButton: {
-    backgroundColor: Colors.light.primary,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
     marginBottom: 24,
-  },
-  resetButtonDisabled: {
-    opacity: 0.6,
-  },
-  resetButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
   },
   backToLoginContainer: {
     flexDirection: 'row',

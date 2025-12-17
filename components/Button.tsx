@@ -6,13 +6,25 @@ import { useThemeStyles } from '../hooks/useThemeStyles';
 
 interface ButtonProps {
   children: React.ReactNode;
-  variant?: 'primary' | 'outline' | 'ghost';
+  variant?: 'primary' | 'outline' | 'ghost' | 'destructive';
   size?: 'lg' | 'md';
   loading?: boolean;
   disabled?: boolean;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
   icon?: React.ReactNode;
+  /**
+   * Override the text/spinner color (useful for non-standard backgrounds like warning/yellow).
+   */
+  textColorOverride?: string;
+  /**
+   * Override gradient colors for the primary variant.
+   */
+  gradientColors?: [string, string];
+  /**
+   * Optional label to show while loading. If omitted, we'll try to reuse children when it's a string.
+   */
+  loadingText?: string;
 }
 
 export default function Button({
@@ -24,33 +36,38 @@ export default function Button({
   onPress,
   style,
   icon,
+  textColorOverride,
+  gradientColors,
+  loadingText,
   ...props
 }: ButtonProps) {
-  const { colors, responsive } = useThemeStyles();
+  const { colors, responsive, buttonShadow } = useThemeStyles();
 
   const textColor =
-    variant === 'primary' ? colors.textOnPrimary : variant === 'outline' ? colors.text : colors.text;
+    textColorOverride ??
+    ((variant === 'primary' || variant === 'destructive')
+      ? colors.textOnPrimary
+      : colors.text);
+
+  const resolvedLoadingText =
+    loadingText ?? (typeof children === 'string' ? children : undefined);
 
   const content = (
     <>
-      {loading ? (
-        <ActivityIndicator color={textColor} />
-      ) : (
-        <>
-          {icon && <View>{icon}</View>}
-          <Text
-            style={[
-              styles.text,
-              {
-                color: textColor,
-                fontSize: size === 'lg' ? responsive.fontSize.lg : responsive.fontSize.md,
-              },
-            ]}
-          >
-            {children}
-          </Text>
-        </>
-      )}
+      {icon && !loading && <View>{icon}</View>}
+      {loading && <ActivityIndicator color={textColor} />}
+      <Text
+        style={[
+          styles.text,
+          {
+            color: textColor,
+            fontSize: size === 'lg' ? responsive.fontSize.lg : responsive.fontSize.md,
+            opacity: disabled || loading ? 0.9 : 1,
+          },
+        ]}
+      >
+        {loading ? resolvedLoadingText ?? children : children}
+      </Text>
     </>
   );
 
@@ -59,6 +76,11 @@ export default function Button({
       <AnimatedPressable
         onPress={onPress}
         disabled={disabled || loading}
+        containerStyle={[
+          styles.raisedContainer,
+          buttonShadow,
+          (disabled || loading) && styles.disabledShadow,
+        ]}
         style={({ pressed }) => [
           styles.button,
           {
@@ -71,7 +93,7 @@ export default function Button({
         {...props}
       >
         <LinearGradient
-          colors={[colors.primary, colors.primaryDark]}
+          colors={gradientColors ?? [colors.primary, colors.primaryDark]}
           style={[
             styles.gradient,
             {
@@ -83,6 +105,34 @@ export default function Button({
         >
           {content}
         </LinearGradient>
+      </AnimatedPressable>
+    );
+  }
+
+  if (variant === 'destructive') {
+    return (
+      <AnimatedPressable
+        onPress={onPress}
+        disabled={disabled || loading}
+        containerStyle={[
+          styles.raisedContainer,
+          buttonShadow,
+          (disabled || loading) && styles.disabledShadow,
+        ]}
+        style={({ pressed }) => [
+          styles.button,
+          {
+            borderRadius: 14,
+            backgroundColor: colors.danger || '#DC2626',
+            opacity: pressed ? 0.9 : 1,
+            paddingHorizontal: responsive.spacing.xl,
+            height: size === 'lg' ? responsive.buttonHeight : responsive.buttonHeight - 4,
+          },
+          style,
+        ]}
+        {...props}
+      >
+        {content}
       </AnimatedPressable>
     );
   }
@@ -112,6 +162,14 @@ export default function Button({
 }
 
 const styles = StyleSheet.create({
+  raisedContainer: {
+    borderRadius: 14,
+  },
+  disabledShadow: {
+    // On iOS, shadows remain visible even if opacity changes; reduce it explicitly.
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   button: {
     flexDirection: 'row',
     alignItems: 'center',

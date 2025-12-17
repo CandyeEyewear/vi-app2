@@ -13,6 +13,7 @@ import {
   useColorScheme,
   ActivityIndicator,
   Image,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -20,6 +21,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Colors } from '../../constants/colors';
 import { ChevronLeft, Calendar, MapPin, User, Clock, Eye } from 'lucide-react-native';
 import { supabase } from '../../services/supabase';
+import { LinearGradient } from 'expo-linear-gradient';
+import { AnimatedPressable } from '../../components/AnimatedPressable';
 
 interface PendingOpportunity {
   id: string;
@@ -46,6 +49,23 @@ export default function OpportunityReviewsScreen() {
   const { isAdmin } = useAuth();
   const [opportunities, setOpportunities] = useState<PendingOpportunity[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const surfaceShadow = Platform.select({
+    ios: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.12,
+      shadowRadius: 18,
+    },
+    android: { elevation: 6 },
+    web: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.12,
+      shadowRadius: 18,
+    },
+    default: {},
+  });
 
   useEffect(() => {
     loadPendingOpportunities();
@@ -114,9 +134,9 @@ export default function OpportunityReviewsScreen() {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <AnimatedPressable onPress={() => router.back()} style={styles.backButton}>
             <ChevronLeft size={24} color={colors.text} />
-          </TouchableOpacity>
+          </AnimatedPressable>
         </View>
         <View style={styles.errorContainer}>
           <Text style={[styles.errorText, { color: colors.error }]}>
@@ -134,9 +154,9 @@ export default function OpportunityReviewsScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <AnimatedPressable onPress={() => router.back()} style={styles.backButton}>
           <ChevronLeft size={24} color={colors.text} />
-        </TouchableOpacity>
+        </AnimatedPressable>
         <View style={styles.headerContent}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>
             Opportunity Reviews
@@ -171,12 +191,17 @@ export default function OpportunityReviewsScreen() {
           </View>
         ) : (
           opportunities.map((opportunity) => (
-            <TouchableOpacity
+            <AnimatedPressable
               key={opportunity.id}
-              style={[styles.opportunityCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+              style={[styles.opportunityCard, surfaceShadow, { borderColor: colors.border }]}
               onPress={() => router.push(`/(admin)/opportunity-review/${opportunity.id}`)}
-              activeOpacity={0.7}
             >
+              <LinearGradient
+                colors={[colors.card, colors.background]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.opportunityCardInner}
+              >
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderLeft}>
                   <Text style={[styles.opportunityTitle, { color: colors.text }]}>
@@ -246,7 +271,8 @@ export default function OpportunityReviewsScreen() {
                   Submitted {formatDate(opportunity.created_at)}
                 </Text>
               </View>
-            </TouchableOpacity>
+              </LinearGradient>
+            </AnimatedPressable>
           ))
         )}
       </ScrollView>
@@ -326,10 +352,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   opportunityCard: {
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
-    padding: 16,
+    overflow: 'hidden',
     marginBottom: 16,
+  },
+  opportunityCardInner: {
+    padding: 16,
   },
   cardHeader: {
     flexDirection: 'row',

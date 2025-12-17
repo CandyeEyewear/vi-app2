@@ -17,7 +17,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
-import { ShoppingBag, ExternalLink, X } from 'lucide-react-native';
+import { ShoppingBag, ExternalLink, ChevronLeft } from 'lucide-react-native';
 
 interface Product {
   id: string;
@@ -79,17 +79,21 @@ export default function VIShoppScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={handleClose}
+          activeOpacity={0.7}
+        >
+          <ChevronLeft size={24} color={Colors.light.text} />
+        </TouchableOpacity>
+
         <View style={styles.headerLeft}>
           <ShoppingBag size={24} color={Colors.light.primary} />
           <Text style={styles.headerTitle}>VI Shopp</Text>
         </View>
-        <TouchableOpacity
-          style={styles.closeButton}
-          onPress={handleClose}
-          activeOpacity={0.7}
-        >
-          <X size={24} color={Colors.light.text} />
-        </TouchableOpacity>
+
+        {/* Spacer to keep title block centered-ish when back button is on the left */}
+        <View style={styles.headerRightSpacer} />
       </View>
 
       <ScrollView 
@@ -178,10 +182,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: Colors.light.text,
   },
-  closeButton: {
+  backButton: {
     padding: 8,
     borderRadius: 8,
     backgroundColor: Colors.light.card,
+  },
+  headerRightSpacer: {
+    width: 40,
   },
   scrollView: {
     flex: 1,

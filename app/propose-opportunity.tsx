@@ -41,6 +41,7 @@ import { File } from 'expo-file-system';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import CrossPlatformDateTimePicker from '../components/CrossPlatformDateTimePicker';
 import CustomAlert from '../components/CustomAlert';
+import Button from '../components/Button';
 import { sendNotificationToUser } from '../services/pushNotifications';
 import { MembershipFeatureScreen } from '../components/MembershipFeatureScreen';
 
@@ -644,7 +645,7 @@ export default function ProposeOpportunityScreen() {
               console.log('📤 Sending push to admin:', admin.id.substring(0, 8) + '...');
               try {
                 await sendNotificationToUser(admin.id, {
-                  type: 'opportunity_submitted',
+                  type: 'opportunity',
                   id: data.id,
                   title: 'New Opportunity Proposal',
                   body: `${user?.fullName || 'A volunteer'} submitted: ${title.trim()}`,
@@ -1219,22 +1220,17 @@ export default function ProposeOpportunityScreen() {
         </View>
 
         {/* Create Button */}
-        <TouchableOpacity
-          style={[styles.createButton, { backgroundColor: colors.primary }, (loading || !isOnline) && styles.createButtonDisabled]}
+        <Button
+          variant="primary"
+          size="lg"
           onPress={handlePropose}
           disabled={loading || !isOnline}
+          loading={loading}
+          loadingText="Submitting Proposal..."
+          style={styles.createButton}
         >
-          {loading ? (
-            <View style={styles.buttonLoadingContainer}>
-              <ActivityIndicator size="small" color="#FFFFFF" />
-              <Text style={styles.createButtonText}>Submitting Proposal...</Text>
-            </View>
-          ) : (
-            <Text style={styles.createButtonText}>
-              {!isOnline ? 'No Internet Connection' : 'Submit Proposal'}
-            </Text>
-          )}
-        </TouchableOpacity>
+          {!isOnline ? 'No Internet Connection' : 'Submit Proposal'}
+        </Button>
       </ScrollView>
 
       {/* Custom Alert */}
@@ -1446,18 +1442,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   createButton: {
-    padding: 18,
-    borderRadius: 12,
-    alignItems: 'center',
     marginTop: 8,
-  },
-  createButtonDisabled: {
-    opacity: 0.6,
-  },
-  createButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
   },
   fieldDescription: {
     fontSize: 13,
@@ -1501,10 +1486,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
-  },
-  buttonLoadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
   },
 });

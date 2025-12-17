@@ -218,7 +218,9 @@ export const supabase = createClient(
       storage: storage,
       autoRefreshToken: true,
       persistSession: true,
-      detectSessionInUrl: false,
+      // Web-based auth flows (email confirmation, magic links, OAuth) return sessions via URL.
+      // Keep this off for native apps, but on for web so confirmations can complete.
+      detectSessionInUrl: isWeb,
     },
   }
 );

@@ -125,7 +125,18 @@ export default async function handler(req: any, res: any) {
     
     // Determine redirect URLs based on platform
     const isApp = platform === 'app';
-    const postBackUrl = `${APP_URL}/api/ezee/webhook`;
+    
+    // Ensure APP_URL is HTTPS (eZeePayments requirement)
+    // Remove any trailing slashes and ensure it starts with https://
+    let baseUrl = APP_URL.trim();
+    if (!baseUrl.startsWith('https://') && !baseUrl.startsWith('http://')) {
+      baseUrl = `https://${baseUrl}`;
+    } else if (baseUrl.startsWith('http://')) {
+      baseUrl = baseUrl.replace('http://', 'https://');
+    }
+    baseUrl = baseUrl.replace(/\/+$/, ''); // Remove trailing slashes
+    
+    const postBackUrl = `${baseUrl}/api/ezee/webhook`;
     
     // Build return URL with returnPath if provided
     const returnParams = new URLSearchParams({ 
@@ -135,12 +146,18 @@ export default async function handler(req: any, res: any) {
     if (returnPath) {
       returnParams.append('returnPath', returnPath);
     }
-    const returnUrl = isApp 
-      ? `vibe://payment/success?${returnParams.toString()}`
-      : `${APP_URL}/payment/success?${returnParams.toString()}`;
-    const cancelUrl = isApp 
-      ? `vibe://payment/cancel?orderId=${subscriptionOrderId}&type=subscription`
-      : `${APP_URL}/payment/cancel?orderId=${subscriptionOrderId}&type=subscription`;
+    if (isApp) {
+      returnParams.append('platform', 'app'); // flag for app-specific handling
+    }
+    const returnUrl = `${baseUrl}/payment/success?${returnParams.toString()}`;
+    const cancelParams = new URLSearchParams({
+      orderId: subscriptionOrderId,
+      type: 'subscription',
+    });
+    if (isApp) {
+      cancelParams.append('platform', 'app');
+    }
+    const cancelUrl = `${baseUrl}/payment/cancel?${cancelParams.toString()}`;
 
     // Create subscription with eZeePayments using form data
     const subscriptionFormData = new URLSearchParams();

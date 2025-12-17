@@ -255,7 +255,8 @@ export default function OpportunityReviewDetailScreen() {
   };
 
   const handleEdit = () => {
-    router.push(`/edit-opportunity/${opportunityId}`);
+    // Centralized edit flow: Admin Dashboard -> Opportunities
+    router.push(`/opportunities?highlight=${opportunityId}`);
   };
 
   const formatDate = (dateString: string) => {

@@ -65,3 +65,6 @@ desktop.ini
 *.md
 *.md
 *.md
+
+.vercel
+.env*.local

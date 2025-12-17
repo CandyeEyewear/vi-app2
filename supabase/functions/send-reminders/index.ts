@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Supabase Edge Function: Send Reminders
  * 
@@ -19,12 +20,9 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getCorsHeaders, handleCorsPreflight } from '../_shared/cors.ts';
 
-// CORS headers
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// CORS headers handled via shared helper
 
 interface ServiceAccount {
   type: string;
@@ -219,13 +217,20 @@ function formatTime(timestamp: string): string {
 
 serve(async (req) => {
   // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  const preflight = handleCorsPreflight(req);
+  if (preflight) return preflight;
+  const corsHeaders = getCorsHeaders(req);
 
   try {
-    // Note: When invoked via Supabase Cron, no auth check needed
-    // Supabase automatically authenticates cron requests
+    // AuthN: require CRON_SECRET (external cron callers)
+    const cronSecret = Deno.env.get('CRON_SECRET') || '';
+    const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || '';
+    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     
     console.log('[CRON] Starting reminder processing...');
 

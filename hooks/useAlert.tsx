@@ -43,6 +43,40 @@ export function useAlert() {
   };
 }
 
+// ---- Standardized helpers (consistent titles + default buttons) ----
+const normalizeTitle = (title?: string, fallback: string = 'Notice') => {
+  const t = (title || '').trim();
+  return t.length ? t : fallback;
+};
+
+export const alertSuccess = (message: string, title: string = 'Success', buttons?: AlertButton[]) => ({
+  type: 'success' as AlertType,
+  title: normalizeTitle(title, 'Success'),
+  message,
+  buttons: buttons || [{ text: 'OK', style: 'default' as const }],
+});
+
+export const alertError = (message: string, title: string = 'Error', buttons?: AlertButton[]) => ({
+  type: 'error' as AlertType,
+  title: normalizeTitle(title, 'Error'),
+  message,
+  buttons: buttons || [{ text: 'OK', style: 'default' as const }],
+});
+
+export const alertWarning = (message: string, title: string = 'Warning', buttons?: AlertButton[]) => ({
+  type: 'warning' as AlertType,
+  title: normalizeTitle(title, 'Warning'),
+  message,
+  buttons: buttons || [{ text: 'OK', style: 'default' as const }],
+});
+
+export const alertInfo = (message: string, title: string = 'Notice', buttons?: AlertButton[]) => ({
+  type: 'info' as AlertType,
+  title: normalizeTitle(title, 'Notice'),
+  message,
+  buttons: buttons || [{ text: 'OK', style: 'default' as const }],
+});
+
 // Convenience functions that match Alert.alert() API
 export const showSuccessAlert = (
   title: string,

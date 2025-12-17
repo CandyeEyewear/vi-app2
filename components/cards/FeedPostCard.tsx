@@ -11,6 +11,7 @@ import {
   Text,
   Image,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   TextInput,
   Modal,
@@ -43,6 +44,9 @@ import MentionText from '../MentionText';
 import MentionInput from '../MentionInput';
 import { UserAvatar, UserNameWithBadge } from '../index';
 import { mentionToDisplayText } from '../../utils/mentions';
+import { extractMediaLinks } from '../../utils/extractMediaLinks';
+import LinkPreviewCard from '../LinkPreviewCard';
+import { extractSocialLinks } from '../../utils/socialLinkPreview';
 
 const { width } = Dimensions.get('window');
 
@@ -139,7 +143,7 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const handleEdit = async () => {
-    if (!editText.trim()) {
+    if (!editText?.trim()) {
       showAlert('Error', 'Post text cannot be empty', 'error');
       return;
     }
@@ -184,7 +188,9 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
   const handleShareExternal = async () => {
     try {
       const postUrl = `https://vibe.volunteersinc.org/post/${post.id}`;
-      const shareMessage = `Check out this post from ${post.user.fullName} on VIbe:\n\n${post.text}`;
+      // Convert stored mention markup (@[Name](id)) into plain display text for sharing.
+      const shareText = mentionToDisplayText(post.text || '');
+      const shareMessage = `Check out this post from ${post.user.fullName} on VIbe:\n\n${shareText}`;
       
       await Share.share({
         message: Platform.OS === 'ios' ? shareMessage : `${shareMessage}\n\n${postUrl}`,
@@ -316,6 +322,55 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
         text={post.text || ''}
         style={[styles.text, isAnnouncement && styles.announcementText]}
       />
+
+      {/* Auto-embed direct media links inside the post text (e.g. https://.../file.mp4) */}
+      {(() => {
+        // Don’t embed for shared/opportunity/cause/event cards; those have their own render rules.
+        if (post.sharedPost || post.opportunity || post.cause || post.event) return null;
+
+        const { imageUrls, videoUrls } = extractMediaLinks(post.text || '');
+        // Avoid duplicating already-attached media
+        const attached = new Set(post.mediaUrls || []);
+        const embedVideos = videoUrls.filter(u => !attached.has(u));
+        const embedImages = imageUrls.filter(u => !attached.has(u));
+
+        if (embedVideos.length === 0 && embedImages.length === 0) return null;
+
+        return (
+          <View style={styles.mediaContainer}>
+            {embedVideos.map((url, index) => (
+              <VideoPlayer
+                key={`embed-video-${index}`}
+                uri={url}
+                style={{ marginBottom: 8 }}
+              />
+            ))}
+            {embedImages.length > 0 ? <ImageCollage images={embedImages} /> : null}
+          </View>
+        );
+      })()}
+
+      {/* Social link previews (YouTube/TikTok/Instagram) */}
+      {(() => {
+        if (post.sharedPost || post.opportunity || post.cause || post.event) return null;
+
+        const previews = extractSocialLinks(post.text || '');
+        if (previews.length === 0) return null;
+
+        // Avoid duplicates where a direct-media embed already covered the link target
+        const direct = extractMediaLinks(post.text || '');
+        const directSet = new Set([...direct.imageUrls, ...direct.videoUrls, ...(post.mediaUrls || [])]);
+        const filtered = previews.filter(p => !directSet.has(p.url));
+        if (filtered.length === 0) return null;
+
+        return (
+          <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}>
+            {filtered.slice(0, 2).map((p, idx) => (
+              <LinkPreviewCard key={`${p.provider}-${p.url}-${idx}`} preview={p} />
+            ))}
+          </View>
+        );
+      })()}
 
       {/* NEW: Render Shared Post if this is a share */}
       {post.sharedPost && (
@@ -735,7 +790,8 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
                 style={styles.moreMenuItem}
                 onPress={() => {
                   setShowMoreMenu(false);
-                  setEditText(post.text);
+                  // Guard: TextInput value must be a string; some posts may have null/undefined text.
+                  setEditText(post.text || '');
                   setShowEditModal(true);
                 }}
               >
@@ -816,12 +872,12 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.editModalContainer}
         >
-          <TouchableOpacity
+          {/* Backdrop overlay (behind the sheet). Using Pressable + zIndex prevents it from stealing taps on the sheet. */}
+          <Pressable
             style={styles.editModalOverlay}
-            activeOpacity={1}
             onPress={() => setShowEditModal(false)}
           />
-          <View style={[styles.editModalContent, { backgroundColor: Colors.light.background }]}>
+          <View style={[styles.editModalContent, { backgroundColor: Colors.light.background }]} pointerEvents="auto">
             <View style={styles.editModalHeader}>
               <Text style={[styles.editModalTitle, { color: Colors.light.text }]}>Edit Post</Text>
               <TouchableOpacity
@@ -1213,6 +1269,7 @@ const styles = StyleSheet.create({
   editModalOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 1,
   },
   editModalContent: {
     borderTopLeftRadius: 20,
@@ -1220,6 +1277,7 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
     maxHeight: '80%',
+    zIndex: 2,
   },
   editModalHeader: {
     flexDirection: 'row',

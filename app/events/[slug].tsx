@@ -525,31 +525,36 @@ function EventInfoCard({
   const titleColor = onPress ? colors.primary : colors.text;
 
   const cardContent = (
-    <Animated.View
-      style={[
-        styles.infoCard,
-        {
-          padding: responsive.spacing.lg,
-          marginBottom: responsive.spacing.lg,
-          backgroundColor: colors.card,
-          transform: [{ scale: scaleAnim }],
-        },
-        getPremiumShadow(colors),
-      ]}
-    >
-      <View style={[styles.infoIcon, { backgroundColor: colors.primarySoft }]}>{icon}</View>
-      <View style={styles.infoContent}>
-        <View style={styles.infoTitleRow}>
-          <Text style={[styles.infoTitle, { color: titleColor }]}>{title}</Text>
-          {badge}
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <LinearGradient
+        colors={[colors.card, colors.background]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[
+          styles.infoCard,
+          {
+            padding: responsive.spacing.lg,
+            marginBottom: responsive.spacing.lg,
+            borderWidth: 1,
+            borderColor: colors.border,
+          },
+          getPremiumShadow(colors),
+        ]}
+      >
+        <View style={[styles.infoIcon, { backgroundColor: colors.primarySoft }]}>{icon}</View>
+        <View style={styles.infoContent}>
+          <View style={styles.infoTitleRow}>
+            <Text style={[styles.infoTitle, { color: titleColor }]}>{title}</Text>
+            {badge}
+          </View>
+          {subtitle && (
+            <Text style={[styles.infoSubtitle, { color: colors.textSecondary }]} numberOfLines={2}>
+              {subtitle}
+            </Text>
+          )}
         </View>
-        {subtitle && (
-          <Text style={[styles.infoSubtitle, { color: colors.textSecondary }]} numberOfLines={2}>
-            {subtitle}
-          </Text>
-        )}
-      </View>
-      {onPress && <ExternalLink size={20} color={colors.primary} />}
+        {onPress && <ExternalLink size={20} color={colors.primary} />}
+      </LinearGradient>
     </Animated.View>
   );
 
@@ -1025,11 +1030,14 @@ export default function EventDetailScreen() {
               ]}
             >
               {stats.map(({ key, icon: IconComponent, value, label }) => (
-                <View
+                <LinearGradient
                   key={key}
+                  colors={[colors.card, colors.background]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
                   style={[
                     styles.statCard,
-                    { backgroundColor: colors.card },
+                    { borderWidth: 1, borderColor: colors.border },
                     getPremiumShadow(colors),
                     responsive.isMobile && styles.statCardStacked,
                   ]}
@@ -1046,30 +1054,44 @@ export default function EventDetailScreen() {
                     {value}
                   </Text>
                   <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{label}</Text>
-                </View>
+                </LinearGradient>
               ))}
             </View>
 
             {/* Description */}
             {event.description && (
-              <View
+              <LinearGradient
+                colors={[colors.card, colors.background]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
                 style={[
                   styles.sectionCard,
-                  { backgroundColor: colors.card, padding: responsive.spacing.xl },
+                  {
+                    padding: responsive.spacing.xl,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                  },
                   getPremiumShadow(colors),
                 ]}
               >
                 <Text style={[styles.sectionTitle, { color: colors.text }]}>About This Event</Text>
                 <Text style={[styles.description, { color: colors.text }]}>{event.description}</Text>
-              </View>
+              </LinearGradient>
             )}
 
             {/* Contact Information */}
             {(event.contactEmail || event.contactPhone) && (
-              <View
+              <LinearGradient
+                colors={[colors.card, colors.background]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
                 style={[
                   styles.sectionCard,
-                  { backgroundColor: colors.card, padding: responsive.spacing.xl },
+                  {
+                    padding: responsive.spacing.xl,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                  },
                   getPremiumShadow(colors),
                 ]}
               >
@@ -1110,7 +1132,7 @@ export default function EventDetailScreen() {
                     </Pressable>
                   )}
                 </View>
-              </View>
+              </LinearGradient>
             )}
 
             {/* Bottom spacing for fixed button */}

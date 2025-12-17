@@ -27,7 +27,9 @@ interface AuthContextType {
   forgotPassword: (email: string) => Promise<ApiResponse<void>>;
   resetPassword: (newPassword: string) => Promise<ApiResponse<void>>;
   refreshUser: () => Promise<void>;
+  refreshSession: () => Promise<boolean>;
   isAdmin: boolean;
+  isSup: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -38,6 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [initialAuthComplete, setInitialAuthComplete] = useState(false); // Prevents race condition during initial boot
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+  const [sessionAppRole, setSessionAppRole] = useState<string | null>(null);
   const profileLoadInProgress = useRef<string | null>(null); // Tracks which userId is being loaded
 
   // Initialize auth state on mount
@@ -194,6 +197,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (session) {
           console.log('[AUTH] Session active - User ID:', session.user.id);
           setNeedsPasswordSetup(session?.user?.user_metadata?.needs_password_setup === true);
+          setSessionAppRole((session.user as any)?.app_metadata?.app_role ?? null);
           await loadUserProfile(session.user.id);
           // Set up real-time subscription after session is confirmed
           setupRealtimeSubscription().catch((error) => {
@@ -217,6 +221,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           setUser(null);
           setNeedsPasswordSetup(false);
+          setSessionAppRole(null);
           setLoading(false);
           // Clean up real-time subscription on logout
           if (userChannel) {
@@ -712,12 +717,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AUTH] Phone:', metadata.phone);
       console.log('[AUTH] Location:', metadata.location);
       
+      // Determine signup confirmation redirect URL based on platform.
+      // If Supabase email confirmations are enabled, this is where the "Confirm your email" link sends users.
+      // - Web: send to hosted web app
+      // - Native: send to deep link handled by Expo/React Navigation
+      const emailRedirectTo = isWeb
+        ? 'https://vibe.volunteersinc.org/login'
+        : 'vibe://login';
+
       // Sign up with Supabase Auth - pass ALL data as metadata
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
-          data: metadata
+          data: metadata,
+          emailRedirectTo,
         }
       });
 
@@ -1085,7 +1099,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log('[AUTH] ✅ User profile refreshed');
   };
 
-  const isAdmin = user?.role === 'admin';
+  const refreshSession = async (): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase.auth.refreshSession();
+      if (error) {
+        console.warn('[AUTH] ⚠️ refreshSession failed:', error.message);
+        return false;
+      }
+      const appRole = (data?.session?.user as any)?.app_metadata?.app_role ?? null;
+      setSessionAppRole(appRole);
+      // Re-fetch profile as well (role may have changed)
+      if (data?.session?.user?.id) {
+        await loadUserProfile(data.session.user.id, true);
+      }
+      return true;
+    } catch (e: any) {
+      console.warn('[AUTH] ⚠️ refreshSession exception:', e?.message);
+      return false;
+    }
+  };
+
+  const isAdmin = sessionAppRole === 'admin' || user?.role === 'admin';
+  const isSup = sessionAppRole === 'sup' || user?.role === 'sup';
 
   return (
     <AuthContext.Provider
@@ -1102,7 +1137,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         forgotPassword,
         resetPassword,
         refreshUser,
+        refreshSession,
         isAdmin,
+        isSup,
       }}
     >
       {children}

@@ -16,6 +16,7 @@ import {
   Linking,
   FlatList,
   useColorScheme,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -52,6 +53,8 @@ import { cache, CacheKeys } from '../../services/cache';
 import FeedPostCard from '../../components/cards/FeedPostCard';
 import { UserAvatar, UserNameWithBadge } from '../../components';
 import { goBack } from '../../utils/navigation';
+import { LinearGradient } from 'expo-linear-gradient';
+import { AnimatedPressable } from '../../components/AnimatedPressable';
 
 type TabType = 'posts' | 'checkins' | 'about';
 
@@ -92,6 +95,23 @@ export default function ViewProfileScreen() {
   
   // Shoutouts state
   const [shoutoutsReceived, setShoutoutsReceived] = useState(0);
+
+  const surfaceShadow = Platform.select({
+    ios: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.12,
+      shadowRadius: 18,
+    },
+    android: { elevation: 6 },
+    web: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.12,
+      shadowRadius: 18,
+    },
+    default: {},
+  });
 
   const isOwnProfile = currentUser?.slug === slug || currentUser?.id === slug;
   const isPrivateProfile = profileUser?.isPrivate && !isOwnProfile;
@@ -1031,54 +1051,91 @@ export default function ViewProfileScreen() {
         <View style={[styles.statsSection, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
           {isOrganization ? (
             <View style={styles.statsGrid}>
-              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <LinearGradient
+                colors={[colors.card, colors.background]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+              >
                 <Text style={[styles.statValue, { color: colors.primary }]}>{profileUser.activitiesCompleted}</Text>
                 <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
                   {profileUser.activitiesCompleted === 1 ? 'Opportunity' : 'Opportunities'}
                 </Text>
-              </View>
-              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              </LinearGradient>
+
+              <LinearGradient
+                colors={[colors.card, colors.background]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+              >
                 <Text style={[styles.statValue, { color: colors.primary }]}>{profileUser.totalHours}</Text>
                 <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total Hours</Text>
-              </View>
-              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              </LinearGradient>
+
+              <LinearGradient
+                colors={[colors.card, colors.background]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+              >
                 <Text style={[styles.statValue, { color: colors.primary }]}>{profileUser.organizationsHelped}</Text>
                 <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Volunteers</Text>
-              </View>
+              </LinearGradient>
             </View>
           ) : (
             <View style={styles.statsGrid}>
-              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <LinearGradient
+                colors={[colors.card, colors.background]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+              >
                 <Text style={[styles.statValue, { color: colors.primary }]}>{profileUser.totalHours}</Text>
                 <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Hours</Text>
-              </View>
-              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              </LinearGradient>
+
+              <LinearGradient
+                colors={[colors.card, colors.background]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+              >
                 <Text style={[styles.statValue, { color: colors.primary }]}>{profileUser.activitiesCompleted}</Text>
                 <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
                   {profileUser.activitiesCompleted === 1 ? 'Activity' : 'Activities'}
                 </Text>
-              </View>
-              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              </LinearGradient>
+
+              <LinearGradient
+                colors={[colors.card, colors.background]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+              >
                 <Text style={[styles.statValue, { color: colors.primary }]}>{profileUser.organizationsHelped}</Text>
                 <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Organizations</Text>
-              </View>
-              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={[styles.statValue, { color: colors.warning }]}>
-                  {shoutoutsReceived}
-                </Text>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-                  🌟 Shoutouts
-                </Text>
-              </View>
+              </LinearGradient>
+
+              <LinearGradient
+                colors={[colors.card, colors.background]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+              >
+                <Text style={[styles.statValue, { color: colors.warning }]}>{shoutoutsReceived}</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>🌟 Shoutouts</Text>
+              </LinearGradient>
             </View>
           )}
 
           {/* Action Buttons */}
           <View style={styles.actionButtons}>
             {!isOwnProfile && !isOrganization && (
-              <TouchableOpacity
+              <AnimatedPressable
                 style={[
                   styles.actionButton,
+                  surfaceShadow,
                   { backgroundColor: colors.primary },
                   (circleStatus === 'accepted' || circleStatus === 'pending') && {
                     backgroundColor: colors.background,
@@ -1110,16 +1167,21 @@ export default function ViewProfileScreen() {
                     </Text>
                   </>
                 )}
-              </TouchableOpacity>
+              </AnimatedPressable>
             )}
             {!isOwnProfile && (
-              <TouchableOpacity
-                style={[styles.actionButton, styles.messageButton, { borderColor: colors.border }]}
+              <AnimatedPressable
+                style={[
+                  styles.actionButton,
+                  styles.messageButton,
+                  surfaceShadow,
+                  { borderColor: colors.border, backgroundColor: colors.card },
+                ]}
                 onPress={handleMessage}
               >
                 <MessageCircle size={20} color={colors.text} />
                 <Text style={[styles.actionButtonText, { color: colors.text }]}>Message</Text>
-              </TouchableOpacity>
+              </AnimatedPressable>
             )}
           </View>
         </View>
@@ -1287,8 +1349,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   messageButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 2,
+    borderWidth: 1.5,
   },
   actionButtonText: {
     fontSize: 16,

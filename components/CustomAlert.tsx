@@ -101,11 +101,11 @@ export default function CustomAlert({
               </View>
 
               {/* Title */}
-              <Text style={styles.title}>{title}</Text>
+              <Text style={styles.title}>{String(title)}</Text>
 
               {/* Message */}
               {message && (
-                <Text style={styles.message}>{message}</Text>
+                <Text style={styles.message}>{String(message)}</Text>
               )}
 
               {/* Buttons */}
@@ -134,7 +134,7 @@ export default function CustomAlert({
                           isCancel && styles.buttonTextCancel,
                         ]}
                       >
-                        {button.text}
+                        {String(button.text)}
                       </Text>
                     </TouchableOpacity>
                   );

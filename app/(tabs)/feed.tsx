@@ -9,6 +9,7 @@ import {
   View,
   Text,
   FlatList,
+  ScrollView,
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
@@ -40,7 +41,7 @@ import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../../services/supabase';
 import { uploadMultipleImages } from '../../services/imageUpload';
-import { uploadVideo, getVideoSize, formatFileSize, isVideoTooLarge } from '../../services/videoUtils';
+import { uploadVideo, getVideoSize, formatFileSize, isVideoTooLarge, MAX_VIDEO_DURATION_SECONDS, MAX_VIDEO_SIZE_BYTES } from '../../services/videoUtils';
 import { extractMentionedUserIds } from '../../utils/mentions';
 import { extractHashtagIds } from '../../utils/hashtags';
 
@@ -74,7 +75,14 @@ export default function FeedScreen() {
   const [showShoutoutModal, setShowShoutoutModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'forYou' | 'myCircle'>('forYou');
   const [postText, setPostText] = useState('');
-  const [selectedMedia, setSelectedMedia] = useState<string[]>([]);
+  type SelectedMediaItem = {
+    uri: string;
+    type: 'image' | 'video';
+    fileSize?: number;
+    duration?: number; // seconds (video)
+  };
+
+  const [selectedMedia, setSelectedMedia] = useState<SelectedMediaItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [notificationCount, setNotificationCount] = useState(0);
@@ -173,31 +181,42 @@ const loadNotificationCount = async () => {
       // Upload media
       if (selectedMedia.length > 0) {
         console.log('📤 [POST] Uploading', selectedMedia.length, 'media files...');
-        console.log('📸 [POST] Media details:', selectedMedia.map((uri, i) => ({
+        console.log('📸 [POST] Media details:', selectedMedia.map((item, i) => ({
           index: i,
-          uri: uri.substring(0, 50) + '...',
-          isVideo: uri.endsWith('.mp4') || uri.endsWith('.mov') || uri.endsWith('.MOV')
+          uri: item.uri.substring(0, 50) + '...',
+          type: item.type,
+          fileSize: item.fileSize,
+          duration: item.duration,
         })));
         
         for (let i = 0; i < selectedMedia.length; i++) {
-          const mediaUri = selectedMedia[i];
-          const isVideo = mediaUri.endsWith('.mp4') || 
-                         mediaUri.endsWith('.mov') || 
-                         mediaUri.endsWith('.MOV');
+          const mediaItem = selectedMedia[i];
+          const mediaUri = mediaItem.uri;
+          const isVideo = mediaItem.type === 'video';
 
           if (isVideo) {
             console.log(`🎥 [POST] Processing video ${i + 1}/${selectedMedia.length}...`);
             console.log(`🎥 [POST] Video URI: ${mediaUri.substring(0, 50)}...`);
+
+            // Enforce duration (if available)
+            if (typeof mediaItem.duration === 'number' && mediaItem.duration > MAX_VIDEO_DURATION_SECONDS) {
+              showAlert(
+                'Video Too Long',
+                `Video ${i + 1} is ${Math.round(mediaItem.duration)}s. Maximum is ${MAX_VIDEO_DURATION_SECONDS}s. Please choose a shorter video.`,
+                'error'
+              );
+              return;
+            }
             
             // Check video size first
             console.log(`🎥 [POST] Checking video size...`);
-            const size = await getVideoSize(mediaUri);
+            const size = typeof mediaItem.fileSize === 'number' ? mediaItem.fileSize : await getVideoSize(mediaUri);
             console.log(`🎥 [POST] Video size: ${formatFileSize(size)}`);
             
             if (isVideoTooLarge(size)) {
               showAlert(
                 'Video Too Large',
-                `Video ${i + 1} is ${formatFileSize(size)}. Maximum is 50MB. Please choose a shorter video.`,
+                `Video ${i + 1} is ${formatFileSize(size)}. Maximum is ${formatFileSize(MAX_VIDEO_SIZE_BYTES)}. Please choose a smaller/shorter video.`,
                 'error'
               );
               return;
@@ -345,6 +364,9 @@ const loadNotificationCount = async () => {
   };
 
 
+  const MAX_ATTACHMENTS = 6;
+  const MAX_VIDEOS_PER_POST = 1;
+
   const pickImage = async (useCamera: boolean = false) => {
     try {
       console.log('📸 [IMAGE] Starting image picker...', { useCamera });
@@ -356,7 +378,7 @@ const loadNotificationCount = async () => {
       console.log('📸 [IMAGE] Permission status:', status);
 
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', `Camera/Library access is required`);
+        showAlert('Permission Denied', 'Camera/Library access is required.', 'error');
         return;
       }
 
@@ -364,15 +386,18 @@ const loadNotificationCount = async () => {
       
       const result = useCamera
         ? await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            // Facebook-like: camera can capture photo OR video
+            mediaTypes: ImagePicker.MediaTypeOptions.All,
             allowsEditing: false,  // Must be false
             quality: 0.2,  // Very low to prevent memory issues
+            videoMaxDuration: MAX_VIDEO_DURATION_SECONDS,
             base64: false,
             exif: false,
           })
         : await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.All,
             allowsMultipleSelection: true,
+            selectionLimit: MAX_ATTACHMENTS, // iOS honored; Android may ignore depending on picker impl
             quality: 0.5,
             base64: false,
             exif: false,
@@ -389,11 +414,47 @@ const loadNotificationCount = async () => {
           uri: asset.uri.substring(0, 50) + '...',
           width: asset.width,
           height: asset.height,
-          fileSize: asset.fileSize
+          fileSize: asset.fileSize,
+          type: asset.type,
+          duration: (asset as any).duration,
         })));
 
-        // For camera, apply image resizing
-        if (useCamera && result.assets[0]) {
+        // Normalize + enforce limits up front (better UX than failing mid-upload)
+        const normalized: SelectedMediaItem[] = result.assets.map((asset: any) => ({
+          uri: asset.uri,
+          type: asset.type === 'video' ? 'video' : 'image',
+          fileSize: typeof asset.fileSize === 'number' ? asset.fileSize : undefined,
+          duration: typeof asset.duration === 'number' ? asset.duration : undefined,
+        }));
+
+        const nextTotalCount = selectedMedia.length + normalized.length;
+        if (nextTotalCount > MAX_ATTACHMENTS) {
+          showAlert('Too many attachments', `You can attach up to ${MAX_ATTACHMENTS} items per post.`, 'error');
+          return;
+        }
+
+        const nextVideoCount =
+          selectedMedia.filter(m => m.type === 'video').length +
+          normalized.filter(m => m.type === 'video').length;
+        if (nextVideoCount > MAX_VIDEOS_PER_POST) {
+          showAlert('Too many videos', `You can attach up to ${MAX_VIDEOS_PER_POST} video per post.`, 'error');
+          return;
+        }
+
+        const tooLong = normalized.find(m => m.type === 'video' && typeof m.duration === 'number' && m.duration > MAX_VIDEO_DURATION_SECONDS);
+        if (tooLong) {
+          showAlert('Video too long', `Max video length is ${MAX_VIDEO_DURATION_SECONDS} seconds.`, 'error');
+          return;
+        }
+
+        const tooBig = normalized.find(m => m.type === 'video' && typeof m.fileSize === 'number' && isVideoTooLarge(m.fileSize));
+        if (tooBig) {
+          showAlert('Video too large', `Max video size is ${formatFileSize(MAX_VIDEO_SIZE_BYTES)}.`, 'error');
+          return;
+        }
+
+        // For camera photo, apply image resizing (video cannot be resized here)
+        if (useCamera && result.assets[0] && (result.assets[0] as any).type !== 'video') {
           try {
             console.log('📸 [IMAGE] Resizing camera image...');
             const manipResult = await ImageManipulator.manipulateAsync(
@@ -403,7 +464,7 @@ const loadNotificationCount = async () => {
             );
             console.log('📸 [IMAGE] ✅ Image resized successfully');
             setSelectedMedia(prev => {
-              const newMedia = [...prev, manipResult.uri];
+              const newMedia: SelectedMediaItem[] = [...prev, { uri: manipResult.uri, type: 'image' }];
               console.log('📸 [IMAGE] ✅ Image added successfully. Total count:', newMedia.length);
               return newMedia;
             });
@@ -411,7 +472,7 @@ const loadNotificationCount = async () => {
             console.error('📸 [IMAGE] ❌ Error resizing image:', error);
             // Fallback to original if resizing fails
             setSelectedMedia(prev => {
-              const newMedia = [...prev, result.assets[0].uri];
+              const newMedia: SelectedMediaItem[] = [...prev, { uri: result.assets[0].uri, type: 'image' }];
               console.log('📸 [IMAGE] ⚠️ Using original image. Total count:', newMedia.length);
               return newMedia;
             });
@@ -420,7 +481,7 @@ const loadNotificationCount = async () => {
           // For gallery, add all selected assets
           console.log('📸 [IMAGE] Adding gallery images...');
           setSelectedMedia(prev => {
-            const newMedia = [...prev, ...result.assets.map(asset => asset.uri)];
+            const newMedia: SelectedMediaItem[] = [...prev, ...normalized];
             console.log('📸 [IMAGE] ✅ Images added successfully. Total count:', newMedia.length);
             return newMedia;
           });
@@ -430,7 +491,7 @@ const loadNotificationCount = async () => {
       }
     } catch (error: any) {
       console.error('📸 [IMAGE] ❌ Error in pickImage:', error);
-      Alert.alert('Error', 'Failed to pick image');
+      showAlert('Error', 'Failed to pick image.', 'error');
     }
   };
 
@@ -605,97 +666,105 @@ const renderTabs = () => (
             </View>
 
             <View style={styles.modalBody}>
-              <View style={styles.modalUserInfo}>
-                {user?.avatarUrl ? (
-                  <Image source={{ uri: user.avatarUrl }} style={styles.modalAvatar} />
-                ) : (
-                  <View style={[styles.modalAvatar, styles.modalAvatarPlaceholder]}>
-                    <Text style={styles.modalAvatarText}>
-                      {user?.fullName.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                )}
-                <Text style={styles.modalUserName}>{user?.fullName}</Text>
-              </View>
-
-             {/* Visibility Indicator */}
-             <View style={styles.visibilityIndicator}>
-               <Text style={styles.visibilityText}>
-                 Posting to: {activeTab === 'forYou' ? '🌍 For You' : '👥 My Circle'}
-               </Text>
-             </View>
-
-              {/* Give Shoutout Option */}
-              <TouchableOpacity
-                style={[styles.shoutoutOption, { backgroundColor: colors.primarySoft, borderColor: colors.primary }]}
-                onPress={() => {
-                  setShowCreateModal(false);
-                  setTimeout(() => setShowShoutoutModal(true), 300);
-                }}
+              <ScrollView
+                contentContainerStyle={styles.modalScrollContent}
+                keyboardShouldPersistTaps="handled"
               >
-                <Text style={styles.shoutoutOptionIcon}>🌟</Text>
-                <View style={styles.shoutoutOptionText}>
-                  <Text style={[styles.shoutoutOptionTitle, { color: colors.primary }]}>Give a Shoutout</Text>
-                  <Text style={[styles.shoutoutOptionSubtitle, { color: colors.textSecondary }]}>
-                    Recognize a volunteer who made a difference
+                <View style={styles.modalUserInfo}>
+                  {user?.avatarUrl ? (
+                    <Image source={{ uri: user.avatarUrl }} style={styles.modalAvatar} />
+                  ) : (
+                    <View style={[styles.modalAvatar, styles.modalAvatarPlaceholder]}>
+                      <Text style={styles.modalAvatarText}>
+                        {user?.fullName.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={styles.modalUserName}>{user?.fullName}</Text>
+                </View>
+
+                {/* Visibility Indicator */}
+                <View style={styles.visibilityIndicator}>
+                  <Text style={styles.visibilityText}>
+                    Posting to: {activeTab === 'forYou' ? '🌍 For You' : '👥 My Circle'}
                   </Text>
                 </View>
-              </TouchableOpacity>
 
-              <MentionInput
-                style={styles.modalInput}
-                placeholder="What's happening in your volunteer journey? Use @ to mention someone"
-                value={postText}
-                onChangeText={setPostText}
-                autoFocus
-                editable={!submitting}
-              />
+                {/* Give Shoutout Option */}
+                <TouchableOpacity
+                  style={[styles.shoutoutOption, { backgroundColor: colors.primarySoft, borderColor: colors.primary }]}
+                  onPress={() => {
+                    setShowCreateModal(false);
+                    setTimeout(() => setShowShoutoutModal(true), 300);
+                  }}
+                >
+                  <Text style={styles.shoutoutOptionIcon}>🌟</Text>
+                  <View style={styles.shoutoutOptionText}>
+                    <Text style={[styles.shoutoutOptionTitle, { color: colors.primary }]}>Give a Shoutout</Text>
+                    <Text style={[styles.shoutoutOptionSubtitle, { color: colors.textSecondary }]}>
+                      Recognize a volunteer who made a difference
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                <MentionInput
+                  style={styles.modalInput}
+                  placeholder="What's happening in your volunteer journey? Use @ to mention someone"
+                  value={postText}
+                  onChangeText={setPostText}
+                  autoFocus
+                  editable={!submitting}
+                />
 
               {selectedMedia.length > 0 && (
-                <View style={styles.mediaPreview}>
-                  {selectedMedia.map((uri, index) => (
-                    <View key={index} style={styles.mediaItem}>
-                      <Image source={{ uri }} style={styles.mediaImage} />
-                      <TouchableOpacity
-                        style={styles.mediaRemove}
-                        onPress={() =>
-                          setSelectedMedia(prev => prev.filter((_, i) => i !== index))
-                        }
-                      >
-                        <Text style={styles.mediaRemoveText}>×</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              {/* Upload Progress */}
-              {submitting && uploadProgress > 0 && (
-                <View style={styles.progressContainer}>
-                  <View style={styles.progressBar}>
-                    <View style={[styles.progressFill, { width: `${uploadProgress}%` }]} />
+                  <View style={styles.mediaPreview}>
+                  {selectedMedia.map((item, index) => (
+                      <View key={index} style={styles.mediaItem}>
+                      <Image source={{ uri: item.uri }} style={styles.mediaImage} />
+                        <TouchableOpacity
+                          style={styles.mediaRemove}
+                          onPress={() =>
+                            setSelectedMedia(prev => prev.filter((_, i) => i !== index))
+                          }
+                        >
+                          <Text style={styles.mediaRemoveText}>×</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
                   </View>
-                  <Text style={styles.progressText}>{uploadProgress}% uploaded</Text>
-                </View>
-              )}
+                )}
 
-              <View style={styles.mediaButtonsContainer}>
-                <TouchableOpacity
-                  style={styles.mediaButtonHalf}
-                  onPress={() => pickImage(true)}
-                  disabled={submitting}
-                >
-                  <Camera size={20} color={Colors.light.primary} />
-                  <Text style={styles.mediaButtonText}>Camera</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.mediaButtonHalf}
-                  onPress={() => pickImage(false)}
-                  disabled={submitting}
-                >
-                  <ImageIcon size={20} color={Colors.light.primary} />
-                  <Text style={styles.mediaButtonText}>Library</Text>
-                </TouchableOpacity>
+                {/* Upload Progress */}
+                {submitting && uploadProgress > 0 && (
+                  <View style={styles.progressContainer}>
+                    <View style={styles.progressBar}>
+                      <View style={[styles.progressFill, { width: `${uploadProgress}%` }]} />
+                    </View>
+                    <Text style={styles.progressText}>{uploadProgress}% uploaded</Text>
+                  </View>
+                )}
+              </ScrollView>
+
+              {/* Footer stays visible even with long captions (and above the bottom safe area) */}
+              <View style={[styles.modalFooter, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+                <View style={styles.mediaButtonsContainer}>
+                  <TouchableOpacity
+                    style={styles.mediaButtonHalf}
+                    onPress={() => pickImage(true)}
+                    disabled={submitting}
+                  >
+                    <Camera size={20} color={Colors.light.primary} />
+                    <Text style={styles.mediaButtonText}>Camera</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.mediaButtonHalf}
+                    onPress={() => pickImage(false)}
+                    disabled={submitting}
+                  >
+                    <ImageIcon size={20} color={Colors.light.primary} />
+                    <Text style={styles.mediaButtonText}>Library</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           </View>
@@ -842,6 +911,15 @@ headerRight: {
   modalBody: {
     flex: 1,
     padding: 16,
+  },
+  modalScrollContent: {
+    paddingBottom: 12,
+  },
+  modalFooter: {
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.light.border,
+    backgroundColor: Colors.light.background,
   },
   modalUserInfo: {
     flexDirection: 'row',

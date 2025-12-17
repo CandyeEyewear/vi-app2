@@ -3,7 +3,7 @@
  * Form for admins to create announcement posts
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -33,8 +33,11 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { File } from 'expo-file-system';
 import CustomAlert from '../components/CustomAlert';
+import Button from '../components/Button';
 import { sendNotificationToUser } from '../services/pushNotifications';
 import WebContainer from '../components/WebContainer';
+import MentionInput from '../components/MentionInput';
+import { extractHashtagIds } from '../utils/hashtags';
 
 export default function CreateAnnouncementScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -47,6 +50,18 @@ export default function CreateAnnouncementScreen() {
   const [text, setText] = useState('');
   const [isPinned, setIsPinned] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [announcementScope, setAnnouncementScope] = useState<'general' | 'targeted'>('general');
+  const [targetText, setTargetText] = useState('');
+
+  const selectedTargets = useMemo(() => {
+    const { eventIds, causeIds, opportunityIds } = extractHashtagIds(targetText);
+    return {
+      eventIds,
+      causeIds,
+      opportunityIds,
+      total: eventIds.length + causeIds.length + opportunityIds.length,
+    };
+  }, [targetText]);
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -163,6 +178,10 @@ export default function CreateAnnouncementScreen() {
       showAlert('Validation Error', 'Please enter announcement text', 'error');
       return false;
     }
+    if (announcementScope === 'targeted' && selectedTargets.total === 0) {
+      showAlert('Validation Error', 'Please select at least one target (event, cause, or opportunity)', 'error');
+      return false;
+    }
     return true;
   };
 
@@ -213,6 +232,7 @@ export default function CreateAnnouncementScreen() {
           media_types: mediaTypes,
           is_announcement: true,
           is_pinned: isPinned,
+          announcement_scope: announcementScope,
           likes: [],
           shares: 0,
         })
@@ -235,23 +255,35 @@ export default function CreateAnnouncementScreen() {
 
       // Create notifications using database function
       console.log('🔔 Starting notification process...');
-      console.log('🔧 Calling RPC function: create_announcement_notifications');
-      console.log('📦 Function parameters:', {
+
+      // Save targets if targeted
+      if (announcementScope === 'targeted') {
+        const targetRows = [
+          ...selectedTargets.opportunityIds.map((id) => ({ post_id: data.id, target_type: 'opportunity', target_id: id })),
+          ...selectedTargets.eventIds.map((id) => ({ post_id: data.id, target_type: 'event', target_id: id })),
+          ...selectedTargets.causeIds.map((id) => ({ post_id: data.id, target_type: 'cause', target_id: id })),
+        ];
+
+        const { error: targetsError } = await supabase.from('announcement_targets').insert(targetRows);
+        if (targetsError) {
+          console.error('❌ Failed to save announcement targets:', targetsError);
+          // Don't throw - post was created successfully
+        }
+      }
+
+      const rpcName =
+        announcementScope === 'targeted'
+          ? 'create_targeted_announcement_notifications'
+          : 'create_announcement_notifications';
+
+      console.log(`🔧 Calling RPC function: ${rpcName}`);
+
+      const { data: notificationCount, error: notifError } = await supabase.rpc(rpcName, {
         p_post_id: data.id,
         p_title: 'New Announcement',
-        p_content: text.trim().substring(0, 100),
+        p_content: text.trim().substring(0, 100) + (text.length > 100 ? '...' : ''),
         p_sender_id: user?.id,
       });
-
-      const { data: notificationCount, error: notifError } = await supabase.rpc(
-        'create_announcement_notifications',
-        {
-          p_post_id: data.id,
-          p_title: 'New Announcement',
-          p_content: text.trim().substring(0, 100) + (text.length > 100 ? '...' : ''),
-          p_sender_id: user?.id,
-        }
-      );
 
       console.log('🔍 RPC function response:', {
         notificationCount,
@@ -273,13 +305,18 @@ export default function CreateAnnouncementScreen() {
         console.log('📊 Total notifications sent:', notificationCount);
         
         // Send push notifications to users with announcements enabled
-        if (!notifError && notificationCount && Array.isArray(notificationCount) && notificationCount.length > 0) {
+        const notifiedUserIds: string[] = Array.isArray(notificationCount)
+          ? notificationCount.map((r: any) => r.user_id || r.userId).filter(Boolean)
+          : [];
+
+        if (!notifError && notifiedUserIds.length > 0) {
           console.log('🔔 Starting push notification process...');
           
-          // Get all users with push tokens
+          // Get users with push tokens (only notified audience)
           const { data: users, error: usersError } = await supabase
             .from('users')
             .select('id, push_token')
+            .in('id', notifiedUserIds)
             .not('push_token', 'is', null);
 
           console.log('📊 Users query result:', { 
@@ -415,9 +452,69 @@ export default function CreateAnnouncementScreen() {
         <View style={[styles.infoBanner, { backgroundColor: colors.primary + '10', borderColor: colors.primary }]}>
           <Megaphone size={20} color={colors.primary} />
           <Text style={[styles.infoBannerText, { color: colors.text }]}>
-            Announcements are highlighted posts that all volunteers will see and receive notifications for.
+            Announcements are highlighted posts. Choose General (everyone) or Targeted (only participants of selected items).
           </Text>
         </View>
+
+        {/* Audience */}
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.text }]}>Audience</Text>
+          <View style={[styles.scopeRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <TouchableOpacity
+              onPress={() => setAnnouncementScope('general')}
+              style={[
+                styles.scopePill,
+                {
+                  backgroundColor: announcementScope === 'general' ? colors.primary + '15' : 'transparent',
+                  borderColor: announcementScope === 'general' ? colors.primary + '40' : 'transparent',
+                },
+              ]}
+            >
+              <Text style={[styles.scopeText, { color: announcementScope === 'general' ? colors.primary : colors.textSecondary }]}>
+                General
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setAnnouncementScope('targeted')}
+              style={[
+                styles.scopePill,
+                {
+                  backgroundColor: announcementScope === 'targeted' ? colors.primary + '15' : 'transparent',
+                  borderColor: announcementScope === 'targeted' ? colors.primary + '40' : 'transparent',
+                },
+              ]}
+            >
+              <Text style={[styles.scopeText, { color: announcementScope === 'targeted' ? colors.primary : colors.textSecondary }]}>
+                Targeted
+              </Text>
+            </TouchableOpacity>
+          </View>
+          {announcementScope === 'targeted' && (
+            <Text style={[styles.helperText, { color: colors.textSecondary }]}>
+              Visible only to users who signed up, registered, or donated to the selected items.
+            </Text>
+          )}
+        </View>
+
+        {/* Targets */}
+        {announcementScope === 'targeted' && (
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>
+              Targets <Text style={{ color: colors.error }}>*</Text>
+            </Text>
+            <View style={[styles.mentionWrapper, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <MentionInput
+                value={targetText}
+                onChangeText={setTargetText}
+                placeholder="Type # to select Events, Causes, or Opportunities..."
+                multiline
+              />
+            </View>
+            <Text style={[styles.helperText, { color: colors.textSecondary }]}>
+              Selected: {selectedTargets.opportunityIds.length} opportunities, {selectedTargets.eventIds.length} events, {selectedTargets.causeIds.length} causes
+            </Text>
+          </View>
+        )}
 
         {/* Announcement Text */}
         <View style={styles.field}>
@@ -518,21 +615,18 @@ export default function CreateAnnouncementScreen() {
         </View>
 
         {/* Create Button */}
-        <TouchableOpacity
-          style={[
-            styles.createButton, 
-            { backgroundColor: colors.primary }, 
-            loading && styles.createButtonDisabled,
-            { marginBottom: insets.bottom + 16 }
-          ]}
+        <Button
+          variant="primary"
+          size="lg"
           onPress={handleCreate}
           disabled={loading}
+          loading={loading}
+          loadingText="Posting..."
+          icon={<Megaphone size={20} color="#FFFFFF" />}
+          style={[styles.createButton, { marginBottom: insets.bottom + 16 }]}
         >
-          <Megaphone size={20} color="#FFFFFF" />
-          <Text style={styles.createButtonText}>
-            {loading ? 'Posting...' : 'Post Announcement'}
-          </Text>
-        </TouchableOpacity>
+          Post Announcement
+        </Button>
       </ScrollView>
       </WebContainer>
 
@@ -613,6 +707,36 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
     textAlign: 'right',
+  },
+  scopeRow: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 6,
+    gap: 6,
+  },
+  scopePill: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  scopeText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  helperText: {
+    fontSize: 12,
+    marginTop: 8,
+    lineHeight: 16,
+  },
+  mentionWrapper: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   pinSection: {
     flexDirection: 'row',
@@ -698,20 +822,6 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   createButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    padding: 18,
-    borderRadius: 12,
     marginTop: 8,
-  },
-  createButtonDisabled: {
-    opacity: 0.6,
-  },
-  createButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
   },
 });

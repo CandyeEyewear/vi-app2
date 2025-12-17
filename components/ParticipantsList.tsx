@@ -7,6 +7,8 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
+  Platform,
+  useColorScheme,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { CheckCircle, XCircle, Clock, User, Mail } from 'lucide-react-native';
@@ -16,6 +18,7 @@ import { Colors } from '../constants/colors';
 import CustomAlert from './CustomAlert';
 import { UserAvatar, UserNameWithBadge } from './index';
 import type { OpportunitySignupWithCheckIn, CheckInStats } from '../types';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface ParticipantsListProps {
   opportunityId: string;
@@ -30,6 +33,24 @@ export default function ParticipantsList({
 }: ParticipantsListProps) {
   const { user } = useAuth();
   const router = useRouter();
+  const colorScheme = useColorScheme() ?? 'light';
+  const colors = Colors[colorScheme];
+  const surfaceShadow = Platform.select({
+    ios: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.12,
+      shadowRadius: 18,
+    },
+    android: { elevation: 6 },
+    web: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.12,
+      shadowRadius: 18,
+    },
+    default: {},
+  });
   const [participants, setParticipants] = useState<OpportunitySignupWithCheckIn[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -355,23 +376,36 @@ export default function ParticipantsList({
     <View style={styles.container}>
       {/* Stats Overview - Only show for admins */}
       {isAdmin && (
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{stats.total_signups}</Text>
-            <Text style={styles.statLabel}>Total</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={[styles.statNumber, { color: Colors.light.warning }]}>
-              {stats.pending_approval_count}
-            </Text>
-            <Text style={styles.statLabel}>Pending</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={[styles.statNumber, { color: Colors.light.success }]}>
-              {stats.approved_count}
-            </Text>
-            <Text style={styles.statLabel}>Approved</Text>
-          </View>
+        <View style={[styles.statsContainer, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+          <LinearGradient
+            colors={[colors.card, colors.background]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+          >
+            <Text style={[styles.statNumber, { color: colors.primary }]}>{stats.total_signups}</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total</Text>
+          </LinearGradient>
+
+          <LinearGradient
+            colors={[colors.card, colors.background]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+          >
+            <Text style={[styles.statNumber, { color: colors.warning }]}>{stats.pending_approval_count}</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pending</Text>
+          </LinearGradient>
+
+          <LinearGradient
+            colors={[colors.card, colors.background]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+          >
+            <Text style={[styles.statNumber, { color: colors.success }]}>{stats.approved_count}</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Approved</Text>
+          </LinearGradient>
         </View>
       )}
 
@@ -432,11 +466,10 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     alignItems: 'center',
-    padding: 12,
-    backgroundColor: Colors.light.background,
-    borderRadius: 8,
+    padding: 14,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.light.border,
+    overflow: 'hidden',
   },
   statNumber: {
     fontSize: 24,

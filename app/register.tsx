@@ -22,6 +22,7 @@ import { Colors } from '../constants/colors';
 import CrossPlatformDateTimePicker from '../components/CrossPlatformDateTimePicker';
 import CustomAlert from '../components/CustomAlert';
 import { supabase } from '../services/supabase';
+import Button from '../components/Button';
 
 type AccountType = 'individual' | 'organization';
 
@@ -954,31 +955,22 @@ export default function RegisterScreen() {
         )}
 
         {/* Register Button */}
-        <TouchableOpacity
-          style={[
-            styles.registerButton,
-            {
-              backgroundColor: accountType === 'organization' ? '#FFC107' : Colors.light.primary,
-            },
-            loading && styles.registerButtonDisabled,
-          ]}
+        <Button
+          variant="primary"
+          size="lg"
           onPress={handleRegister}
           disabled={loading}
-          activeOpacity={0.7}
+          loading={loading}
+          gradientColors={
+            accountType === 'organization'
+              ? ['#FFC107', '#FFB300']
+              : undefined
+          }
+          textColorOverride={accountType === 'organization' ? '#000000' : undefined}
+          style={styles.registerButton}
         >
-          {loading ? (
-            <ActivityIndicator color={accountType === 'organization' ? '#000000' : '#FFFFFF'} />
-          ) : (
-            <Text
-              style={[
-                styles.registerButtonText,
-                { color: accountType === 'organization' ? '#000000' : '#FFFFFF' },
-              ]}
-            >
-              {accountType === 'organization' ? 'Submit Application' : 'Create Account'}
-            </Text>
-          )}
-        </TouchableOpacity>
+          {accountType === 'organization' ? 'Submit Application' : 'Create Account'}
+        </Button>
 
         {/* Login Link */}
         <View style={styles.loginContainer}>
@@ -1147,13 +1139,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
     marginBottom: 24,
-  },
-  registerButtonDisabled: {
-    opacity: 0.6,
-  },
-  registerButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
   },
   loginContainer: {
     flexDirection: 'row',

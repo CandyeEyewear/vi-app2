@@ -8,7 +8,6 @@ import {
   View,
   Text,
   ScrollView,
-  TouchableOpacity,
   StyleSheet,
   Image,
   Alert,
@@ -24,6 +23,8 @@ import { Shield, ShoppingBag, Plus, Edit, Settings, Calendar, Crown, Heart, Chev
 import StreakBadge from '../../components/StreakBadge';
 import { UserAvatar, UserNameWithBadge } from '../../components/index';
 import Head from 'expo-router/head';
+import { LinearGradient } from 'expo-linear-gradient';
+import { AnimatedPressable } from '../../components/AnimatedPressable';
 
 // ============================================
 // WEB-COMPATIBLE ALERT HELPERS
@@ -123,6 +124,24 @@ export default function ProfileScreen() {
 
   const achievements = getAchievements();
 
+  const surfaceShadow = Platform.select({
+    ios: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.12,
+      shadowRadius: 18,
+    },
+    android: { elevation: 6 },
+    web: {
+      // RN-web supports `shadow*` inconsistently; keep it simple.
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.12,
+      shadowRadius: 18,
+    },
+    default: {},
+  });
+
   return (
     <ScrollView 
       style={[styles.container, { backgroundColor: colors.card }]} 
@@ -193,10 +212,9 @@ export default function ProfileScreen() {
 
       {/* Admin Dashboard Access - Only visible to admins */}
       {isAdmin && (
-        <TouchableOpacity
-          style={[styles.adminCard, { backgroundColor: colors.primary }]}
+        <AnimatedPressable
+          style={[styles.adminCard, surfaceShadow, { backgroundColor: colors.primary }]}
           onPress={() => router.push('/admin-dashboard')}
-          activeOpacity={0.8}
         >
           <View style={styles.adminCardContent}>
             <Shield size={32} color="#FFFFFF" strokeWidth={2} />
@@ -207,7 +225,7 @@ export default function ProfileScreen() {
               </Text>
             </View>
           </View>
-        </TouchableOpacity>
+        </AnimatedPressable>
       )}
 
       {/* Bio */}
@@ -222,20 +240,41 @@ export default function ProfileScreen() {
         <Text style={styles.sectionTitle}>Impact Statistics</Text>
         {isOfficialMember ? (
           <View style={styles.statsGrid}>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{user.totalHours}</Text>
-              <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit={true}>Hours</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{user.activitiesCompleted}</Text>
-              <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit={true}>
+            <LinearGradient
+              colors={[colors.card, colors.background]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+            >
+              <Text style={[styles.statValue, { color: colors.primary }]}>{user.totalHours}</Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>
+                Hours
+              </Text>
+            </LinearGradient>
+
+            <LinearGradient
+              colors={[colors.card, colors.background]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+            >
+              <Text style={[styles.statValue, { color: colors.primary }]}>{user.activitiesCompleted}</Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>
                 {user.activitiesCompleted === 1 ? 'Activity' : 'Activities'}
               </Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{user.organizationsHelped}</Text>
-              <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit={true}>Entity/Org</Text>
-            </View>
+            </LinearGradient>
+
+            <LinearGradient
+              colors={[colors.card, colors.background]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+            >
+              <Text style={[styles.statValue, { color: colors.primary }]}>{user.organizationsHelped}</Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>
+                Entity/Org
+              </Text>
+            </LinearGradient>
           </View>
         ) : (
           <View style={[styles.membershipPrompt, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -246,13 +285,12 @@ export default function ProfileScreen() {
             <Text style={[styles.membershipPromptText, { color: colors.textSecondary }]}>
               Unlock your Impact Statistics and see your volunteer contributions
             </Text>
-            <TouchableOpacity
-              style={[styles.becomeMemberButton, { backgroundColor: colors.tint }]}
+            <AnimatedPressable
+              style={[styles.becomeMemberButton, surfaceShadow, { backgroundColor: colors.tint }]}
               onPress={() => router.push('/membership/subscribe')}
-              activeOpacity={0.8}
             >
               <Text style={styles.becomeMemberButtonText}>Become a Member</Text>
-            </TouchableOpacity>
+            </AnimatedPressable>
           </View>
         )}
       </View>
@@ -304,22 +342,20 @@ export default function ProfileScreen() {
       {/* Actions */}
       <View style={styles.section}>
         <View style={styles.actionButtonsContainer}>
-          <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+          <AnimatedPressable
+            style={[styles.actionButton, surfaceShadow, { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() => router.push('/edit-profile')}
-            activeOpacity={0.7}
           >
             <View style={[styles.actionButtonIcon, { backgroundColor: colors.primary + '15' }]}>
               <Edit size={20} color={colors.primary} />
             </View>
             <Text style={[styles.actionButtonText, { color: colors.text }]}>Edit Profile</Text>
-          </TouchableOpacity>
+          </AnimatedPressable>
 
           {!isAdmin && (
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+            <AnimatedPressable
+              style={[styles.actionButton, surfaceShadow, { backgroundColor: colors.card, borderColor: colors.border }]}
               onPress={() => router.push('/propose-opportunity')}
-              activeOpacity={0.7}
             >
               <View style={[styles.actionButtonIcon, { backgroundColor: colors.primary + '15' }]}>
                 <Plus size={20} color={colors.primary} />
@@ -333,36 +369,33 @@ export default function ProfileScreen() {
                   </View>
                 )}
               </View>
-            </TouchableOpacity>
+            </AnimatedPressable>
           )}
 
-          <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+          <AnimatedPressable
+            style={[styles.actionButton, surfaceShadow, { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() => router.push('/vi-shopp-screen')}
-            activeOpacity={0.7}
           >
             <View style={[styles.actionButtonIcon, { backgroundColor: colors.primary + '15' }]}>
               <ShoppingBag size={20} color={colors.primary} />
             </View>
             <Text style={[styles.actionButtonText, { color: colors.text }]}>VI Shopp</Text>
-          </TouchableOpacity>
+          </AnimatedPressable>
 
-          <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+          <AnimatedPressable
+            style={[styles.actionButton, surfaceShadow, { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() => router.push('/settings')}
-            activeOpacity={0.7}
           >
             <View style={[styles.actionButtonIcon, { backgroundColor: colors.primary + '15' }]}>
               <Settings size={20} color={colors.primary} />
             </View>
             <Text style={[styles.actionButtonText, { color: colors.text }]}>Settings</Text>
-          </TouchableOpacity>
+          </AnimatedPressable>
 
           {/* My Donations */}
-          <TouchableOpacity
-            style={[styles.menuItem, { backgroundColor: colors.card, borderColor: colors.border }]}
+          <AnimatedPressable
+            style={[styles.menuItem, surfaceShadow, { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() => router.push('/donation-history')}
-            activeOpacity={0.7}
           >
             <View style={[styles.menuIconContainer, { backgroundColor: '#E91E63' + '15' }]}>
               <Heart size={22} color="#E91E63" />
@@ -374,13 +407,12 @@ export default function ProfileScreen() {
               </Text>
             </View>
             <ChevronRight size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
+          </AnimatedPressable>
 
           {/* My Events */}
-          <TouchableOpacity
-            style={[styles.menuItem, { backgroundColor: colors.card, borderColor: colors.border }]}
+          <AnimatedPressable
+            style={[styles.menuItem, surfaceShadow, { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() => router.push('/my-events')}
-            activeOpacity={0.7}
           >
             <View style={[styles.menuIconContainer, { backgroundColor: colors.primary + '15' }]}>
               <Calendar size={22} color={colors.primary} />
@@ -392,13 +424,12 @@ export default function ProfileScreen() {
               </Text>
             </View>
             <ChevronRight size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
+          </AnimatedPressable>
 
           {/* Membership / Partner Membership */}
-          <TouchableOpacity
-            style={[styles.menuItem, { backgroundColor: colors.card, borderColor: colors.border }]}
+          <AnimatedPressable
+            style={[styles.menuItem, surfaceShadow, { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() => router.push('/membership')}
-            activeOpacity={0.7}
           >
             <View style={[styles.menuIconContainer, { backgroundColor: user?.account_type === 'organization' ? '#FFC107' + '15' : '#38B6FF' + '15' }]}>
               <Crown size={22} color={user?.account_type === 'organization' ? '#FFC107' : '#38B6FF'} />
@@ -424,15 +455,15 @@ export default function ProfileScreen() {
               </Text>
             </View>
             <ChevronRight size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
+          </AnimatedPressable>
         </View>
       </View>
 
       {/* Logout Button */}
       <View style={styles.logoutSection}>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+        <AnimatedPressable style={[styles.logoutButton, surfaceShadow]} onPress={handleLogout}>
           <Text style={styles.logoutButtonText}>Logout</Text>
-        </TouchableOpacity>
+        </AnimatedPressable>
       </View>
 
       {/* Member Since */}

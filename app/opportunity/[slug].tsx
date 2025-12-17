@@ -262,7 +262,7 @@ export default function OpportunityDetailsScreen() {
   const colors = Colors[colorScheme];
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isSup } = useAuth();
   const { shareOpportunityToFeed } = useFeed();
   const params = useLocalSearchParams();
   
@@ -520,13 +520,13 @@ export default function OpportunityDetailsScreen() {
 
     try {
       setSubmitting(true);
-      await supabase.from('opportunity_signups').insert({
-        opportunity_id: opportunity.id,
-        user_id: user.id,
-        status: 'confirmed',
-        signed_up_at: new Date().toISOString(),
+      const { data: result, error } = await supabase.rpc('sign_up_for_opportunity', {
+        p_opportunity_id: opportunity.id,
       });
-      await supabase.from('opportunities').update({ spots_available: opportunity.spotsAvailable - 1 }).eq('id', opportunity.id);
+      if (error) throw error;
+      if (result?.success === false) {
+        throw new Error(result?.error || 'Failed to sign up');
+      }
       setIsSignedUp(true);
       setSignupStatus('confirmed');
       showAlert('Success!', 'You have successfully signed up for this opportunity', 'success');
@@ -544,8 +544,13 @@ export default function OpportunityDetailsScreen() {
     if (!user || !opportunity) return;
     try {
       setSubmitting(true);
-      await supabase.from('opportunity_signups').delete().eq('opportunity_id', opportunity.id).eq('user_id', user.id);
-      await supabase.from('opportunities').update({ spots_available: opportunity.spotsAvailable + 1 }).eq('id', opportunity.id);
+      const { data: result, error } = await supabase.rpc('cancel_opportunity_signup', {
+        p_opportunity_id: opportunity.id,
+      });
+      if (error) throw error;
+      if (result?.success === false) {
+        throw new Error(result?.error || 'Failed to cancel signup');
+      }
       setIsSignedUp(false);
       setSignupStatus(null);
       showAlert('Cancelled', 'Your signup has been cancelled', 'success');
@@ -769,19 +774,7 @@ export default function OpportunityDetailsScreen() {
           <TouchableOpacity onPress={() => setShowShareModal(true)} style={[styles.headerBtn, { backgroundColor: colors.primary + '15' }]}>
             <Share2 size={20} color={colors.primary} />
           </TouchableOpacity>
-          {isAdmin && (
-            <>
-              <TouchableOpacity onPress={() => router.push(`/edit-opportunity/${opportunity.id}`)} style={[styles.headerBtn, { backgroundColor: colors.primary + '15' }]}>
-                <Edit size={20} color={colors.primary} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setQrModalVisible(true)} style={[styles.headerBtn, { backgroundColor: colors.success + '15' }]}>
-                <QrCode size={20} color={colors.success} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleDelete} disabled={submitting} style={[styles.headerBtn, { backgroundColor: colors.error + '15' }]}>
-                <Trash2 size={20} color={colors.error} />
-              </TouchableOpacity>
-            </>
-          )}
+          {/* Admin edit/delete/QR moved to Admin Dashboard -> Opportunities */}
         </View>
       </View>
 
@@ -1014,7 +1007,14 @@ export default function OpportunityDetailsScreen() {
           <View style={{ paddingHorizontal: 16 }}>
             <AnimatedTabBar activeTab={activeTab} onTabChange={setActiveTab} chatBadge={chatMessageCount} colors={colors} />
           </View>
-          <ParticipantsList opportunityId={opportunity.id} isAdmin={isAdmin || false} onCheckInApproved={() => { loadOpportunityDetails(); if (isAdmin && opportunity?.id) loadAdminStats(opportunity.id); }} />
+          <ParticipantsList
+            opportunityId={opportunity.id}
+            isAdmin={(isAdmin || isSup) || false}
+            onCheckInApproved={() => {
+              loadOpportunityDetails();
+              if ((isAdmin || isSup) && opportunity?.id) loadAdminStats(opportunity.id);
+            }}
+          />
         </View>
       )}
 

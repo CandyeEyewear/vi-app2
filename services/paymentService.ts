@@ -75,14 +75,16 @@ const getApiBaseUrl = (): string => {
     // Trim whitespace
     let cleaned = envUrl.trim();
     
-    // Remove any trailing characters that aren't valid URL characters
-    // This fixes cases where env vars get concatenated (e.g., "https://example.comEXPO_PUBLIC_...")
-    // Match: ends with valid URL chars (letters, numbers, /, ., -, :) followed by invalid chars
-    cleaned = cleaned.replace(/(https?:\/\/[a-z0-9.\-:]+)([^a-z0-9.\-\/:].*)$/i, '$1');
+    // Extract the first http(s) URL token.
+    // This is safer than trying to "trim" concatenated env vars, and avoids accidentally
+    // chopping valid domains like ".org" (seen in mobile where ".org" became ".or").
+    const match = cleaned.match(/https?:\/\/[^\s"'<>]+/i);
+    if (match && match[0]) {
+      cleaned = match[0];
+    }
     
-    // Also remove any trailing letters that might be from concatenated variable names
-    // If it ends with uppercase letters (likely a variable name), remove them
-    cleaned = cleaned.replace(/(https?:\/\/[a-z0-9.\-:]+)([A-Z_]+)$/i, '$1');
+    // Remove trailing punctuation that might be included from logs/copy-paste
+    cleaned = cleaned.replace(/[)\],.]+$/, '');
     
     // Validate it's a proper URL format
     if (cleaned.startsWith('http://') || cleaned.startsWith('https://')) {

@@ -60,6 +60,26 @@ const getCardShadowStyle = (colors: ThemeColors) =>
     },
   });
 
+const getButtonShadowStyle = (colors: ThemeColors) =>
+  Platform.select({
+    ios: {
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.12,
+      shadowRadius: 8,
+    },
+    android: {
+      elevation: 2,
+      shadowColor: colors.shadow,
+    },
+    default: {
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.1,
+      shadowRadius: 10,
+    },
+  });
+
 export const useThemeStyles = () => {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
@@ -67,6 +87,7 @@ export const useThemeStyles = () => {
 
   const responsive = useMemo(() => buildResponsiveValues(width), [width]);
   const cardShadow = useMemo(() => getCardShadowStyle(colors), [colors]);
+  const buttonShadow = useMemo(() => getButtonShadowStyle(colors), [colors]);
 
   const cardStyle = useMemo(
     () => ({
@@ -85,6 +106,7 @@ export const useThemeStyles = () => {
     colors,
     responsive,
     cardShadow,
+    buttonShadow,
     cardStyle,
     getChipStyle: (isSelected: boolean) => ({
       borderRadius: 9999,

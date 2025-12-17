@@ -39,6 +39,62 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Targeted announcements should only be visible to eligible users.
+  const getEligibleTargetedAnnouncementPostIds = async (userId: string): Promise<Set<string>> => {
+    try {
+      const [{ data: oppSignups }, { data: eventRegs }, { data: donations }] = await Promise.all([
+        supabase.from('opportunity_signups').select('opportunity_id,status').eq('user_id', userId),
+        supabase.from('event_registrations').select('event_id').eq('user_id', userId),
+        supabase.from('donations').select('cause_id,payment_status').eq('user_id', userId).eq('payment_status', 'completed'),
+      ]);
+
+      const opportunityIds = (oppSignups || [])
+        .filter((s: any) => (s.status ?? '') !== 'cancelled')
+        .map((s: any) => s.opportunity_id)
+        .filter(Boolean);
+      const eventIds = (eventRegs || []).map((r: any) => r.event_id).filter(Boolean);
+      const causeIds = (donations || []).map((d: any) => d.cause_id).filter(Boolean);
+
+      if (opportunityIds.length === 0 && eventIds.length === 0 && causeIds.length === 0) {
+        return new Set<string>();
+      }
+
+      const postIds = new Set<string>();
+
+      if (opportunityIds.length > 0) {
+        const { data } = await supabase
+          .from('announcement_targets')
+          .select('post_id')
+          .eq('target_type', 'opportunity')
+          .in('target_id', opportunityIds);
+        (data || []).forEach((r: any) => r.post_id && postIds.add(r.post_id));
+      }
+
+      if (eventIds.length > 0) {
+        const { data } = await supabase
+          .from('announcement_targets')
+          .select('post_id')
+          .eq('target_type', 'event')
+          .in('target_id', eventIds);
+        (data || []).forEach((r: any) => r.post_id && postIds.add(r.post_id));
+      }
+
+      if (causeIds.length > 0) {
+        const { data } = await supabase
+          .from('announcement_targets')
+          .select('post_id')
+          .eq('target_type', 'cause')
+          .in('target_id', causeIds);
+        (data || []).forEach((r: any) => r.post_id && postIds.add(r.post_id));
+      }
+
+      return postIds;
+    } catch (e) {
+      console.error('[FEED] Error computing eligible targeted announcements:', e);
+      return new Set<string>();
+    }
+  };
+
   // Load feed on mount
   useEffect(() => {
     if (user) {
@@ -788,11 +844,21 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
 
       if (postsError) throw postsError;
 
-      console.log('[FEED] ✅ Loaded', postsData.length, 'posts');
+      // Filter targeted announcements to only show eligible ones
+      const eligibleTargeted = user?.id ? await getEligibleTargetedAnnouncementPostIds(user.id) : new Set<string>();
+      const visiblePostsData = (postsData || []).filter((p: any) => {
+        const isAnnouncement = !!p.is_announcement;
+        const scope = (p.announcement_scope || 'general') as string;
+        if (!isAnnouncement) return true;
+        if (scope !== 'targeted') return true;
+        return eligibleTargeted.has(p.id);
+      });
+
+      console.log('[FEED] ✅ Loaded', visiblePostsData.length, 'visible posts');
 
       // Fetch comments and reactions for each post
       const postsWithDetails = await Promise.all(
-        postsData.map(async (post) => {
+        visiblePostsData.map(async (post) => {
           // Fetch comments
           const { data: commentsData } = await supabase
             .from('comments')
@@ -946,6 +1012,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
             eventId: post.event_id,
             isAnnouncement: post.is_announcement || false,
             isPinned: post.is_pinned || false,
+            announcementScope: post.announcement_scope || 'general',
             reactions, // ✅ Add reactions
             reactionSummary: calculateReactionSummary(reactions, user?.id), // ✅ Add summary
             sharedPostId: post.shared_post_id || null,

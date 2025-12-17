@@ -8,10 +8,10 @@ import {
   View,
   Text,
   ScrollView,
-  TouchableOpacity,
   StyleSheet,
   useColorScheme,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -33,6 +33,8 @@ import {
 } from 'lucide-react-native';
 import { supabase } from '../services/supabase';
 import { calculateTotalRaisedAllCauses } from '../services/causesService';
+import { LinearGradient } from 'expo-linear-gradient';
+import { AnimatedPressable } from '../components/AnimatedPressable';
 
 interface DashboardStats {
   totalVolunteers: number;
@@ -54,6 +56,23 @@ export default function AdminDashboardScreen() {
   const { user, isAdmin } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const surfaceShadow = Platform.select({
+    ios: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.12,
+      shadowRadius: 18,
+    },
+    android: { elevation: 6 },
+    web: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.12,
+      shadowRadius: 18,
+    },
+    default: {},
+  });
 
   useEffect(() => {
     loadDashboardStats();
@@ -132,9 +151,9 @@ export default function AdminDashboardScreen() {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <AnimatedPressable onPress={() => router.back()} style={styles.backButton}>
             <ChevronLeft size={24} color={colors.text} />
-          </TouchableOpacity>
+          </AnimatedPressable>
         </View>
         <View style={styles.errorContainer}>
           <Shield size={64} color={colors.error} />
@@ -153,9 +172,9 @@ export default function AdminDashboardScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <AnimatedPressable onPress={() => router.back()} style={styles.backButton}>
           <ChevronLeft size={24} color={colors.text} />
-        </TouchableOpacity>
+        </AnimatedPressable>
         <View style={styles.headerContent}>
           <Shield size={28} color={colors.primary} />
           <Text style={[styles.headerTitle, { color: colors.text }]}>
@@ -190,7 +209,12 @@ export default function AdminDashboardScreen() {
         ) : (
           <View style={styles.statsGrid}>
             {/* Total Volunteers */}
-            <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <LinearGradient
+              colors={[colors.card, colors.background]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+            >
               <View style={[styles.statIconContainer, { backgroundColor: colors.primary + '15' }]}>
                 <Users size={24} color={colors.primary} />
               </View>
@@ -200,10 +224,15 @@ export default function AdminDashboardScreen() {
               <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
                 Total Volunteers
               </Text>
-            </View>
+            </LinearGradient>
 
             {/* Active Opportunities */}
-            <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <LinearGradient
+              colors={[colors.card, colors.background]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+            >
               <View style={[styles.statIconContainer, { backgroundColor: '#10B981' + '15' }]}>
                 <Calendar size={24} color="#10B981" />
               </View>
@@ -213,10 +242,15 @@ export default function AdminDashboardScreen() {
               <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
                 Active Opportunities
               </Text>
-            </View>
+            </LinearGradient>
 
             {/* Total Posts */}
-            <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <LinearGradient
+              colors={[colors.card, colors.background]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+            >
               <View style={[styles.statIconContainer, { backgroundColor: '#F59E0B' + '15' }]}>
                 <MessageSquare size={24} color="#F59E0B" />
               </View>
@@ -226,10 +260,15 @@ export default function AdminDashboardScreen() {
               <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
                 Total Posts
               </Text>
-            </View>
+            </LinearGradient>
 
             {/* Total Volunteer Hours */}
-            <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <LinearGradient
+              colors={[colors.card, colors.background]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+            >
               <View style={[styles.statIconContainer, { backgroundColor: '#8B5CF6' + '15' }]}>
                 <Clock size={24} color="#8B5CF6" />
               </View>
@@ -239,10 +278,15 @@ export default function AdminDashboardScreen() {
               <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
                 Volunteer Hours
               </Text>
-            </View>
+            </LinearGradient>
 
             {/* Total Causes */}
-            <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <LinearGradient
+              colors={[colors.card, colors.background]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+            >
               <View style={[styles.statIconContainer, { backgroundColor: '#E91E63' + '15' }]}>
                 <Heart size={24} color="#E91E63" />
               </View>
@@ -252,10 +296,15 @@ export default function AdminDashboardScreen() {
               <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
                 Active Causes
               </Text>
-            </View>
+            </LinearGradient>
 
             {/* Total Raised */}
-            <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <LinearGradient
+              colors={[colors.card, colors.background]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+            >
               <View style={[styles.statIconContainer, { backgroundColor: '#4CAF50' + '15' }]}>
                 <TrendingUp size={24} color="#4CAF50" />
               </View>
@@ -265,10 +314,15 @@ export default function AdminDashboardScreen() {
               <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
                 Total Raised
               </Text>
-            </View>
+            </LinearGradient>
 
             {/* Pending Organizations */}
-            <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <LinearGradient
+              colors={[colors.card, colors.background]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
+            >
               <View style={[styles.statIconContainer, { backgroundColor: '#FFC107' + '15' }]}>
                 <Users size={24} color="#FFC107" />
               </View>
@@ -278,7 +332,7 @@ export default function AdminDashboardScreen() {
               <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
                 Pending Organizations
               </Text>
-            </View>
+            </LinearGradient>
           </View>
         )}
 
@@ -288,90 +342,68 @@ export default function AdminDashboardScreen() {
             Quick Actions
           </Text>
 
-          {/* Create Opportunity */}
-          <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-            onPress={() => router.push('/create-opportunity')}
-            activeOpacity={0.7}
+          {/* Opportunities */}
+          <AnimatedPressable
+            style={[styles.actionCard, surfaceShadow, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/admin-opportunity')}
           >
             <View style={[styles.actionIconContainer, { backgroundColor: colors.primary + '15' }]}>
               <Calendar size={24} color={colors.primary} />
             </View>
             <View style={styles.actionContent}>
               <Text style={[styles.actionTitle, { color: colors.text }]}>
-                Create Opportunity
+                Opportunities
               </Text>
               <Text style={[styles.actionSubtitle, { color: colors.textSecondary }]}>
-                Add a new volunteering opportunity
+                Manage or create volunteering opportunities
               </Text>
             </View>
-          </TouchableOpacity>
+          </AnimatedPressable>
 
-          {/* Create Cause */}
-          <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-            onPress={() => router.push('/causes/create')}
-            activeOpacity={0.7}
+          {/* Causes */}
+          <AnimatedPressable
+            style={[styles.actionCard, surfaceShadow, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/admin-cause')}
           >
             <View style={[styles.actionIconContainer, { backgroundColor: '#E91E63' + '15' }]}>
               <Heart size={24} color="#E91E63" />
             </View>
             <View style={styles.actionContent}>
               <Text style={[styles.actionTitle, { color: colors.text }]}>
-                Create Cause
+                Causes
               </Text>
               <Text style={[styles.actionSubtitle, { color: colors.textSecondary }]}>
-                Start a new fundraising campaign
+                Manage or create fundraising campaigns
               </Text>
             </View>
-          </TouchableOpacity>
+          </AnimatedPressable>
 
-          {/* Manage Causes */}
-          <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-            onPress={() => router.push('/causes')}
-            activeOpacity={0.7}
+          {/* Events */}
+          <AnimatedPressable
+            style={[styles.actionCard, surfaceShadow, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/admin-event')}
           >
             <View style={[styles.actionIconContainer, { backgroundColor: '#9C27B0' + '15' }]}>
-              <FileText size={24} color="#9C27B0" />
-            </View>
-            <View style={styles.actionContent}>
-              <Text style={[styles.actionTitle, { color: colors.text }]}>
-                Manage Causes
-              </Text>
-              <Text style={[styles.actionSubtitle, { color: colors.textSecondary }]}>
-                Edit, pause, or delete fundraising campaigns
-              </Text>
-            </View>
-          </TouchableOpacity>
-
-          {/* Manage Events */}
-          <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-            onPress={() => router.push('/events')}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.actionIconContainer, { backgroundColor: '#FF9800' + '15' }]}>
               <Calendar size={24} color="#FF9800" />
             </View>
             <View style={styles.actionContent}>
               <Text style={[styles.actionTitle, { color: colors.text }]}>
-                Manage Events
+                Events
               </Text>
               <Text style={[styles.actionSubtitle, { color: colors.textSecondary }]}>
-                Edit, delete, or manage community events
+                Manage or create community events
               </Text>
             </View>
-          </TouchableOpacity>
+          </AnimatedPressable>
 
           {/* Post Moderation */}
-          <TouchableOpacity
-  style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-  onPress={() => router.push('/moderation-dashboard')}
->
-  <View style={[styles.actionIcon, { backgroundColor: colors.error + '15' }]}>
-    <Shield size={28} color={colors.error} />
-  </View>
+          <AnimatedPressable
+            style={[styles.actionCard, surfaceShadow, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/moderation-dashboard')}
+          >
+            <View style={[styles.actionIconContainer, { backgroundColor: colors.error + '15' }]}>
+              <Shield size={28} color={colors.error} />
+            </View>
             <View style={styles.actionContent}>
               <Text style={[styles.actionTitle, { color: colors.text }]}>
                 Post Moderation
@@ -380,13 +412,12 @@ export default function AdminDashboardScreen() {
                 Review and manage community posts
               </Text>
             </View>
-          </TouchableOpacity>
+          </AnimatedPressable>
 
           {/* Create Announcement */}
-          <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+          <AnimatedPressable
+            style={[styles.actionCard, surfaceShadow, { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() => router.push('/create-announcement')}
-            activeOpacity={0.7}
           >
             <View style={[styles.actionIconContainer, { backgroundColor: '#10B981' + '15' }]}>
               <Megaphone size={24} color="#10B981" />
@@ -399,13 +430,12 @@ export default function AdminDashboardScreen() {
                 Post important updates to all volunteers
               </Text>
             </View>
-          </TouchableOpacity>
+          </AnimatedPressable>
 
           {/* Opportunity Reviews */}
-          <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+          <AnimatedPressable
+            style={[styles.actionCard, surfaceShadow, { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() => router.push('/(admin)/opportunity-reviews')}
-            activeOpacity={0.7}
           >
             <View style={[styles.actionIconContainer, { backgroundColor: '#F59E0B' + '15' }]}>
               <FileText size={24} color="#F59E0B" />
@@ -430,16 +460,16 @@ export default function AdminDashboardScreen() {
                 )}
               </Text>
             </View>
-          </TouchableOpacity>
+          </AnimatedPressable>
 
           {/* User Management */}
-          <TouchableOpacity
-  style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-  onPress={() => router.push('/user-management')}
->
-  <View style={[styles.actionIconContainer, { backgroundColor: colors.primary + '15' }]}>
-    <Users size={24} color={colors.primary} />
-  </View>
+          <AnimatedPressable
+            style={[styles.actionCard, surfaceShadow, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/user-management')}
+          >
+            <View style={[styles.actionIconContainer, { backgroundColor: colors.primary + '15' }]}>
+              <Users size={24} color={colors.primary} />
+            </View>
             <View style={styles.actionContent}>
               <Text style={[styles.actionTitle, { color: colors.text }]}>
                 User Management
@@ -448,13 +478,12 @@ export default function AdminDashboardScreen() {
                 Manage volunteer accounts and permissions
               </Text>
             </View>
-          </TouchableOpacity>
+          </AnimatedPressable>
 
           {/* Organization Applications */}
-          <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+          <AnimatedPressable
+            style={[styles.actionCard, surfaceShadow, { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() => router.push('/(admin)/organization-applications')}
-            activeOpacity={0.7}
           >
             <View style={[styles.actionIconContainer, { backgroundColor: '#FFC107' + '15' }]}>
               <Users size={24} color="#FFC107" />
@@ -479,7 +508,7 @@ export default function AdminDashboardScreen() {
                 )}
               </Text>
             </View>
-          </TouchableOpacity>
+          </AnimatedPressable>
         </View>
       </ScrollView>
     </View>
