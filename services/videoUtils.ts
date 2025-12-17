@@ -7,7 +7,9 @@ import * as VideoThumbnails from 'expo-video-thumbnails';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
+import { Upload as TusUpload, DetailedError as TusDetailedError } from 'tus-js-client';
 import { supabase } from './supabase';
+import { supabaseConfig } from '../config/supabase.config';
 
 export const MAX_VIDEO_SIZE_BYTES = 150 * 1024 * 1024; // 150MB (Facebook-like, but still reasonable for mobile)
 export const MAX_VIDEO_DURATION_MINUTES = 15;
@@ -43,6 +45,96 @@ async function ensureFileUri(uri: string, fileExtension: string = 'mp4'): Promis
     console.error('❌ [VIDEO] Failed to convert URI:', error);
     throw new Error(`Cannot read video file: ${String(error)}`);
   }
+}
+
+type TusFileInput = {
+  uri: string; // must be a file:// URI that expo-file-system can read
+  size: number;
+};
+
+class ExpoTusFileReader {
+  async openFile(input: TusFileInput, _chunkSize: number) {
+    if (!input?.uri || !input.uri.startsWith('file://')) {
+      throw new Error('tus: expected a file:// URI for upload');
+    }
+
+    return {
+      size: input.size,
+      slice: async (start: number, end: number) => {
+        const length = Math.max(0, end - start);
+        const base64Chunk = await FileSystem.readAsStringAsync(input.uri, {
+          encoding: FileSystem.EncodingType.Base64,
+          position: start,
+          length,
+        });
+
+        return {
+          value: decode(base64Chunk), // ArrayBuffer
+          done: false,
+        };
+      },
+      close: () => {},
+    };
+  }
+}
+
+async function uploadResumableToSupabase(params: {
+  bucket: string;
+  objectName: string; // storage path inside bucket
+  fileUri: string; // file://
+  size: number;
+  contentType: string;
+  upsert?: boolean;
+  onProgress?: (percent: number) => void;
+}): Promise<void> {
+  const { bucket, objectName, fileUri, size, contentType, upsert = false, onProgress } = params;
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const endpoint = `${supabaseConfig.url}/storage/v1/upload/resumable`;
+  const token = session?.access_token;
+
+  const headers: Record<string, string> = {
+    apikey: supabaseConfig.anonKey,
+    'x-upsert': upsert ? 'true' : 'false',
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  await new Promise<void>((resolve, reject) => {
+    const upload = new TusUpload(
+      { uri: fileUri, size } satisfies TusFileInput,
+      {
+        endpoint,
+        uploadSize: size,
+        chunkSize: 6 * 1024 * 1024, // 6MB
+        retryDelays: [0, 1000, 3000, 5000, 10000],
+        headers,
+        metadata: {
+          bucketName: bucket,
+          objectName,
+          contentType,
+          cacheControl: '3600',
+        },
+        // Use our chunked reader to avoid loading whole video into memory
+        fileReader: new ExpoTusFileReader() as any,
+        onProgress: (bytesSent, bytesTotal) => {
+          if (bytesTotal > 0) {
+            onProgress?.(Math.round((bytesSent / bytesTotal) * 100));
+          }
+        },
+        onError: (err: Error | TusDetailedError) => {
+          reject(err);
+        },
+        onSuccess: () => {
+          resolve();
+        },
+      }
+    );
+
+    upload.start();
+  });
 }
 
 interface VideoUploadResult {
@@ -134,9 +226,15 @@ export async function uploadVideo(
 ): Promise<VideoUploadResult> {
   try {
     console.log('🎥 [VIDEO] Starting video upload...');
+
+    const fileExt = videoUri.split('.').pop()?.toLowerCase() || 'mp4';
+    console.log('📤 [VIDEO] Normalizing video URI...');
+    const localVideoUri = await ensureFileUri(videoUri, fileExt);
     
     // Check file size
-    const fileSize = await getVideoSize(videoUri);
+    const info = await FileSystem.getInfoAsync(localVideoUri, { size: true });
+    // @ts-expect-error: size is available when { size: true } is passed
+    const fileSize = info.exists && typeof info.size === 'number' ? info.size : 0;
     console.log('📊 [VIDEO] File size:', formatFileSize(fileSize));
     
     if (isVideoTooLarge(fileSize)) {
@@ -147,7 +245,7 @@ export async function uploadVideo(
     }
 
     // Generate thumbnail
-    const thumbnailUri = await generateVideoThumbnail(videoUri);
+    const thumbnailUri = await generateVideoThumbnail(localVideoUri);
     let thumbnailUrl: string | undefined;
 
     // Upload thumbnail first (faster feedback)
@@ -189,63 +287,60 @@ export async function uploadVideo(
     console.log('📤 [VIDEO] Uploading video file...');
     onProgress?.(10);
 
-    const fileExt = videoUri.split('.').pop()?.toLowerCase() || 'mp4';
-
-    // Ensure we have a readable file:// URI
-    console.log('📤 [VIDEO] Normalizing video URI...');
-    const localVideoUri = await ensureFileUri(videoUri, fileExt);
-
-    onProgress?.(20);
-
-    // Read file directly as base64 (no fetch, no blob, no FileReader)
-    console.log('📤 [VIDEO] Reading video as base64...');
-    let videoBase64: string;
-    try {
-      videoBase64 = await FileSystem.readAsStringAsync(localVideoUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      console.log('✅ [VIDEO] Video read successfully, base64 length:', videoBase64.length);
-    } catch (readError: any) {
-      console.error('❌ [VIDEO] Failed to read video file:', readError);
-      return {
-        success: false,
-        error: `Cannot read video file: ${readError?.message || 'Unknown error'}`,
-      };
-    }
-
-    onProgress?.(50);
-
-    onProgress?.(30);
-
     const fileName = `${Date.now()}-video.${fileExt}`;
     const filePath = `${userId}/${folder}/${fileName}`;
 
     const contentType = fileExt === 'mov' ? 'video/quicktime' : 'video/mp4';
     
-    onProgress?.(50);
-
     console.log('📤 [VIDEO] Uploading to Supabase...');
     console.log('📤 [VIDEO] Path:', filePath);
     console.log('📤 [VIDEO] Content-Type:', contentType);
 
-    onProgress?.(60);
+    onProgress?.(15);
 
-    const { data, error } = await supabase.storage
-      .from('post-images')
-      .upload(filePath, decode(videoBase64), {
+    try {
+      await uploadResumableToSupabase({
+        bucket: 'post-images',
+        objectName: filePath,
+        fileUri: localVideoUri,
+        size: fileSize,
         contentType,
         upsert: false,
+        onProgress: (pct) => {
+          // Map resumable progress into overall progress range (15% -> 95%)
+          const mapped = 15 + Math.round((pct / 100) * 80);
+          onProgress?.(mapped);
+        },
       });
+    } catch (e: any) {
+      console.error('❌ [VIDEO] Resumable upload failed:', e);
+
+      // Fallback: for small videos, try the simpler base64 upload.
+      // (Avoid doing this for large files due to memory usage.)
+      const FALLBACK_MAX_BYTES = 12 * 1024 * 1024; // 12MB
+      if (fileSize > 0 && fileSize <= FALLBACK_MAX_BYTES) {
+        console.warn('⚠️ [VIDEO] Falling back to base64 upload (small file)');
+        const videoBase64 = await FileSystem.readAsStringAsync(localVideoUri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        const { error } = await supabase.storage
+          .from('post-images')
+          .upload(filePath, decode(videoBase64), {
+            contentType,
+            upsert: false,
+          });
+
+        if (error) {
+          return { success: false, error: `Upload failed: ${error.message}` };
+        }
+      } else {
+        const msg = e?.message || String(e);
+        return { success: false, error: `Resumable upload failed: ${msg}` };
+      }
+    }
 
     onProgress?.(90);
-
-    if (error) {
-      console.error('❌ [VIDEO] Upload error:', error);
-      return {
-        success: false,
-        error: `Upload failed: ${error.message}`
-      };
-    }
 
     const { data: { publicUrl } } = supabase.storage
       .from('post-images')
