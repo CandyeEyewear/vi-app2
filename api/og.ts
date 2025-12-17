@@ -16,6 +16,14 @@ const supabase = createClient(
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+/**
+ * Convert mention markup to display text
+ * @[Full Name](userId) -> @Full Name
+ */
+function mentionToDisplayText(text: string): string {
+  return text.replace(/@\[([^\]]+)\]\([^)]+\)/g, '@$1');
+}
+
 export default async function handler(req: any, res: any) {
   const { type, id, slug } = req.query;
   const userAgent = req.headers['user-agent'] || '';
@@ -66,7 +74,9 @@ async function handlePost(req: any, res: any, id: string, isCrawler: boolean) {
   const user = Array.isArray(post.user) ? post.user[0] : post.user;
   const userName = user?.full_name || 'VIbe User';
   const previewImage = post.media_urls?.[0] || user?.avatar_url || 'https://vibe.volunteersinc.org/assets/default-og-image.png';
-  const description = post.text?.substring(0, 200) || 'Check out this post on VIbe';
+  // Clean mention format before using in OG tags
+  const cleanText = mentionToDisplayText(post.text || '');
+  const description = cleanText.substring(0, 200) || 'Check out this post on VIbe';
   const title = `${userName} on VIbe`;
   const url = `https://vibe.volunteersinc.org/post/${id}`;
 
