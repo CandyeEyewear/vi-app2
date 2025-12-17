@@ -137,6 +137,50 @@ async function uploadResumableToSupabase(params: {
   });
 }
 
+function getApiBaseUrl(): string {
+  const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  if (envUrl) {
+    let cleaned = envUrl.trim();
+    const match = cleaned.match(/https?:\/\/[^\s"'<>]+/i);
+    if (match && match[0]) cleaned = match[0];
+    cleaned = cleaned.replace(/[)\],.]+$/, '');
+    if (cleaned.startsWith('http://') || cleaned.startsWith('https://')) {
+      return cleaned.replace(/\/+$/, '');
+    }
+  }
+  return 'https://vibe.volunteersinc.org';
+}
+
+async function transcodeOnServer(params: {
+  bucket: string;
+  inputPath: string;
+  outputPath: string;
+  maxWidth?: number;
+  crf?: number;
+  deleteInput?: boolean;
+}): Promise<{ publicUrl: string }> {
+  const { bucket, inputPath, outputPath, maxWidth = 1280, crf = 28, deleteInput = false } = params;
+
+  const apiBase = getApiBaseUrl();
+  const { data: { session } } = await supabase.auth.getSession();
+
+  const res = await fetch(`${apiBase}/api/transcode-video`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
+    body: JSON.stringify({ bucket, inputPath, outputPath, maxWidth, crf, deleteInput }),
+  });
+
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json?.success || !json?.publicUrl) {
+    throw new Error(json?.error || `Transcode failed (${res.status})`);
+  }
+
+  return { publicUrl: json.publicUrl };
+}
+
 interface VideoUploadResult {
   success: boolean;
   videoUrl?: string;
@@ -287,8 +331,8 @@ export async function uploadVideo(
     console.log('📤 [VIDEO] Uploading video file...');
     onProgress?.(10);
 
-    const fileName = `${Date.now()}-video.${fileExt}`;
-    const filePath = `${userId}/${folder}/${fileName}`;
+    const rawFileName = `${Date.now()}-video.${fileExt}`;
+    const rawPath = `${userId}/${folder}/raw/${rawFileName}`;
 
     const contentType = fileExt === 'mov' ? 'video/quicktime' : 'video/mp4';
     
@@ -301,7 +345,7 @@ export async function uploadVideo(
     try {
       await uploadResumableToSupabase({
         bucket: 'post-images',
-        objectName: filePath,
+        objectName: rawPath,
         fileUri: localVideoUri,
         size: fileSize,
         contentType,
@@ -326,7 +370,7 @@ export async function uploadVideo(
 
         const { error } = await supabase.storage
           .from('post-images')
-          .upload(filePath, decode(videoBase64), {
+          .upload(rawPath, decode(videoBase64), {
             contentType,
             upsert: false,
           });
@@ -340,18 +384,37 @@ export async function uploadVideo(
       }
     }
 
-    onProgress?.(90);
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('post-images')
-      .getPublicUrl(filePath);
+    // Try server-side compression/transcoding to reduce size.
+    // If it fails, we still return the raw URL as a fallback.
+    let finalUrl: string;
+    try {
+      onProgress?.(92);
+      const outFileName = rawFileName.replace(/\.[^.]+$/, '.mp4');
+      const outPath = `${userId}/${folder}/processed/${outFileName}`;
+      const { publicUrl: processedUrl } = await transcodeOnServer({
+        bucket: 'post-images',
+        inputPath: rawPath,
+        outputPath: outPath,
+        maxWidth: 1280,
+        crf: 28,
+        deleteInput: true,
+      });
+      finalUrl = processedUrl;
+      onProgress?.(98);
+    } catch (err) {
+      console.warn('⚠️ [VIDEO] Server transcode failed, using raw upload:', err);
+      const { data: { publicUrl } } = supabase.storage
+        .from('post-images')
+        .getPublicUrl(rawPath);
+      finalUrl = publicUrl;
+    }
 
     onProgress?.(100);
     console.log('✅ [VIDEO] Video uploaded successfully!');
 
     return {
       success: true,
-      videoUrl: publicUrl,
+      videoUrl: finalUrl,
       thumbnailUrl,
     };
 
