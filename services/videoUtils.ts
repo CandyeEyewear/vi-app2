@@ -5,7 +5,7 @@
 
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { Upload as TusUpload, DetailedError as TusDetailedError } from 'tus-js-client';
 import { supabase } from './supabase';
