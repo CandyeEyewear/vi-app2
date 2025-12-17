@@ -6,8 +6,9 @@
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
+import { File } from 'expo-file-system';
+import { decode } from 'base64-arraybuffer';
 import { supabase } from './supabase';
-import { supabaseConfig } from '../config/supabase.config';
 
 export const MAX_VIDEO_SIZE_BYTES = 150 * 1024 * 1024; // 150MB (Facebook-like, but still reasonable for mobile)
 export const MAX_VIDEO_DURATION_MINUTES = 15;
@@ -57,15 +58,6 @@ export async function getVideoSize(uri: string): Promise<number> {
       return typeof info.size === 'number' ? info.size : 0;
     }
 
-    // Some platforms still support size for non-file URIs
-    try {
-      const info = await FileSystem.getInfoAsync(uri, { size: true });
-      // @ts-expect-error: size is available when { size: true } is passed
-      if (typeof info.size === 'number') return info.size;
-    } catch {
-      // ignore and fallback
-    }
-
     // Fallback: fetch -> blob (may be memory-heavy; avoid for large files if possible)
     const response = await fetch(uri);
     if (!response.ok) return 0;
@@ -73,59 +65,6 @@ export async function getVideoSize(uri: string): Promise<number> {
     return blob.size || 0;
   } catch {
     return 0;
-  }
-}
-
-function encodeStoragePath(path: string): string {
-  // Encode each path segment, preserving slashes
-  return path
-    .split('/')
-    .map(seg => encodeURIComponent(seg))
-    .join('/');
-}
-
-async function ensureLocalFileUri(uri: string, fallbackExt: string): Promise<string> {
-  if (uri.startsWith('file://')) return uri;
-
-  // Copy to cache to get a stable file:// URI (works for many content:// / ph:// sources)
-  const dest = `${FileSystem.cacheDirectory}upload-${Date.now()}-${Math.random().toString(36).slice(2)}.${fallbackExt}`;
-  await FileSystem.copyAsync({ from: uri, to: dest });
-  return dest;
-}
-
-async function uploadFileToSupabaseStorage(params: {
-  bucket: string;
-  path: string;
-  fileUri: string;
-  contentType: string;
-  upsert?: boolean;
-}): Promise<void> {
-  const { bucket, path, fileUri, contentType, upsert = false } = params;
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  const headers: Record<string, string> = {
-    apikey: supabaseConfig.anonKey,
-    'Content-Type': contentType,
-    'x-upsert': upsert ? 'true' : 'false',
-  };
-  if (session?.access_token) {
-    headers.Authorization = `Bearer ${session.access_token}`;
-  }
-
-  const url = `${supabaseConfig.url}/storage/v1/object/${bucket}/${encodeStoragePath(path)}`;
-
-  const result = await FileSystem.uploadAsync(url, fileUri, {
-    httpMethod: 'POST',
-    uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-    headers,
-  });
-
-  if (result.status < 200 || result.status >= 300) {
-    const bodyPreview = typeof result.body === 'string' ? result.body.slice(0, 300) : '';
-    throw new Error(`Storage upload failed (${result.status})${bodyPreview ? `: ${bodyPreview}` : ''}`);
   }
 }
 
@@ -159,11 +98,8 @@ export async function uploadVideo(
   try {
     console.log('🎥 [VIDEO] Starting video upload...');
     
-    const fileExt = videoUri.split('.').pop()?.toLowerCase() || 'mp4';
-    const localVideoUri = await ensureLocalFileUri(videoUri, fileExt);
-    
     // Check file size
-    const fileSize = await getVideoSize(localVideoUri);
+    const fileSize = await getVideoSize(videoUri);
     console.log('📊 [VIDEO] File size:', formatFileSize(fileSize));
     
     if (isVideoTooLarge(fileSize)) {
@@ -174,7 +110,7 @@ export async function uploadVideo(
     }
 
     // Generate thumbnail
-    const thumbnailUri = await generateVideoThumbnail(localVideoUri);
+    const thumbnailUri = await generateVideoThumbnail(videoUri);
     let thumbnailUrl: string | undefined;
 
     // Upload thumbnail first (faster feedback)
@@ -184,22 +120,31 @@ export async function uploadVideo(
       const thumbFileName = `${Date.now()}-thumb.jpg`;
       const thumbPath = `${userId}/${folder}/${thumbFileName}`;
       
-      try {
-        await uploadFileToSupabaseStorage({
-          bucket: 'post-images',
-          path: thumbPath,
-          fileUri: thumbnailUri,
+      const thumbResp = await fetch(thumbnailUri);
+      const thumbBlob = await thumbResp.blob();
+      const thumbBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          const base64Data = result.split(',')[1];
+          resolve(base64Data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(thumbBlob);
+      });
+      
+      const { error: thumbError } = await supabase.storage
+        .from('post-images')
+        .upload(thumbPath, decode(thumbBase64), {
           contentType: 'image/jpeg',
-          upsert: false,
         });
-
+      
+      if (!thumbError) {
         const { data: { publicUrl } } = supabase.storage
           .from('post-images')
           .getPublicUrl(thumbPath);
         thumbnailUrl = publicUrl;
         console.log('✅ [VIDEO] Thumbnail uploaded');
-      } catch (e) {
-        console.warn('⚠️ [VIDEO] Thumbnail upload failed (continuing without it):', e);
       }
     }
 
@@ -207,8 +152,22 @@ export async function uploadVideo(
     console.log('📤 [VIDEO] Uploading video file...');
     onProgress?.(10);
 
+    const videoResp = await fetch(videoUri);
+    const videoBlob = await videoResp.blob();
+    const videoBase64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        const base64Data = result.split(',')[1];
+        resolve(base64Data);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(videoBlob);
+    });
+    
     onProgress?.(30);
 
+    const fileExt = videoUri.split('.').pop()?.toLowerCase() || 'mp4';
     const fileName = `${Date.now()}-video.${fileExt}`;
     const filePath = `${userId}/${folder}/${fileName}`;
 
@@ -216,15 +175,22 @@ export async function uploadVideo(
     
     onProgress?.(50);
 
+    const { data, error } = await supabase.storage
+      .from('post-images')
+      .upload(filePath, decode(videoBase64), {
+        contentType,
+        upsert: false,
+      });
+
     onProgress?.(90);
 
-    await uploadFileToSupabaseStorage({
-      bucket: 'post-images',
-      path: filePath,
-      fileUri: localVideoUri,
-      contentType,
-      upsert: false,
-    });
+    if (error) {
+      console.error('❌ [VIDEO] Upload error:', error);
+      return {
+        success: false,
+        error: `Upload failed: ${error.message}`
+      };
+    }
 
     const { data: { publicUrl } } = supabase.storage
       .from('post-images')
