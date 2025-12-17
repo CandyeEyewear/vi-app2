@@ -7,8 +7,12 @@
  * Query params:
  * - address: string (required)
  *
- * Env vars:
- * - GOOGLE_MAPS_API_KEY (required)  // keep this in Vercel env, not EXPO_PUBLIC_*
+ * Env vars (either one works):
+ * - GOOGLE_MAPS_API_KEY
+ * - EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
+ *
+ * Note: Prefer GOOGLE_MAPS_API_KEY to avoid implying the key is safe to ship to clients,
+ * but this route supports both names for compatibility with existing setups.
  */
 
 const corsHeaders = {
@@ -31,7 +35,7 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY || process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
   if (!apiKey) {
     return res.status(500).json({ error: 'Geocoding API key not configured' });
   }
