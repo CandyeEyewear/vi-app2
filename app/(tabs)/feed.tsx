@@ -20,6 +20,7 @@ import {
   Alert,
   Platform,
   useWindowDimensions,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -35,6 +36,7 @@ import CustomAlert from '../../components/CustomAlert';
 import { FeedSkeleton } from '../../components/SkeletonLayouts';
 import OrganizationPaymentBanner from '../../components/OrganizationPaymentBanner';
 import MentionInput from '../../components/MentionInput';
+import useMobileWebViewport from '../../hooks/useMobileWebViewport';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
@@ -68,6 +70,7 @@ export default function FeedScreen() {
   
   // Detect mobile web (web but not desktop)
   const isMobileWeb = Platform.OS === 'web' && !isDesktop;
+  const mobileWebViewport = useMobileWebViewport();
   const { user } = useAuth();
   const { posts, loading, createPost, refreshFeed } = useFeed();
   
@@ -643,7 +646,18 @@ const renderTabs = () => (
         onRequestClose={() => setShowCreateModal(false)}
       >
         <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
+          <KeyboardAvoidingView
+            // Match native behavior; on web we rely on visualViewport sizing instead
+            behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined}
+            style={[
+              styles.modalContent,
+              // On mobile web the browser keyboard can cover fixed-height content; use
+              // visualViewport (via useMobileWebViewport) to match the visible height.
+              isMobileWeb && mobileWebViewport.height > 0
+                ? { height: mobileWebViewport.height }
+                : null,
+            ]}
+          >
             <View style={styles.modalHeader}>
               <TouchableOpacity onPress={() => setShowCreateModal(false)}>
                 <Text style={styles.modalCancel}>Cancel</Text>
@@ -667,6 +681,7 @@ const renderTabs = () => (
 
             <View style={styles.modalBody}>
               <ScrollView
+                style={styles.modalScroll}
                 contentContainerStyle={styles.modalScrollContent}
                 keyboardShouldPersistTaps="handled"
               >
@@ -716,11 +731,11 @@ const renderTabs = () => (
                   editable={!submitting}
                 />
 
-              {selectedMedia.length > 0 && (
+                {selectedMedia.length > 0 && (
                   <View style={styles.mediaPreview}>
-                  {selectedMedia.map((item, index) => (
+                    {selectedMedia.map((item, index) => (
                       <View key={index} style={styles.mediaItem}>
-                      <Image source={{ uri: item.uri }} style={styles.mediaImage} />
+                        <Image source={{ uri: item.uri }} style={styles.mediaImage} />
                         <TouchableOpacity
                           style={styles.mediaRemove}
                           onPress={() =>
@@ -745,7 +760,7 @@ const renderTabs = () => (
                 )}
               </ScrollView>
 
-              {/* Footer stays visible even with long captions (and above the bottom safe area) */}
+              {/* Footer (native-style): pinned to bottom of modal, not overlaying input */}
               <View style={[styles.modalFooter, { paddingBottom: Math.max(insets.bottom, 12) }]}>
                 <View style={styles.mediaButtonsContainer}>
                   <TouchableOpacity
@@ -767,7 +782,7 @@ const renderTabs = () => (
                 </View>
               </View>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -914,6 +929,9 @@ headerRight: {
   },
   modalScrollContent: {
     paddingBottom: 12,
+  },
+  modalScroll: {
+    flex: 1,
   },
   modalFooter: {
     paddingTop: 12,
