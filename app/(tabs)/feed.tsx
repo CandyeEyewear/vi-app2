@@ -41,7 +41,7 @@ import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../../services/supabase';
 import { uploadMultipleImages } from '../../services/imageUpload';
-import { uploadVideo, getVideoSize, formatFileSize, isVideoTooLarge, MAX_VIDEO_DURATION_SECONDS, MAX_VIDEO_SIZE_BYTES } from '../../services/videoUtils';
+import { uploadVideo, getVideoSize, formatFileSize, isVideoTooLarge, MAX_VIDEO_DURATION_MINUTES, MAX_VIDEO_DURATION_SECONDS, MAX_VIDEO_SIZE_BYTES } from '../../services/videoUtils';
 import { extractMentionedUserIds } from '../../utils/mentions';
 import { extractHashtagIds } from '../../utils/hashtags';
 
@@ -202,7 +202,7 @@ const loadNotificationCount = async () => {
             if (typeof mediaItem.duration === 'number' && mediaItem.duration > MAX_VIDEO_DURATION_SECONDS) {
               showAlert(
                 'Video Too Long',
-                `Video ${i + 1} is ${Math.round(mediaItem.duration)}s. Maximum is ${MAX_VIDEO_DURATION_SECONDS}s. Please choose a shorter video.`,
+                `Video ${i + 1} is ${Math.round(mediaItem.duration)}s. Maximum is ${MAX_VIDEO_DURATION_MINUTES} minutes. Please choose a shorter video.`,
                 'error'
               );
               return;
@@ -443,7 +443,7 @@ const loadNotificationCount = async () => {
 
         const tooLong = normalized.find(m => m.type === 'video' && typeof m.duration === 'number' && m.duration > MAX_VIDEO_DURATION_SECONDS);
         if (tooLong) {
-          showAlert('Video too long', `Max video length is ${MAX_VIDEO_DURATION_SECONDS} seconds.`, 'error');
+          showAlert('Video too long', `Max video length is ${MAX_VIDEO_DURATION_MINUTES} minutes.`, 'error');
           return;
         }
 

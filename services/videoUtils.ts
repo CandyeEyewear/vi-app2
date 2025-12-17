@@ -11,7 +11,8 @@ import { decode } from 'base64-arraybuffer';
 import { supabase } from './supabase';
 
 export const MAX_VIDEO_SIZE_BYTES = 150 * 1024 * 1024; // 150MB (Facebook-like, but still reasonable for mobile)
-export const MAX_VIDEO_DURATION_SECONDS = 180; // 3 minutes (adjust as desired)
+export const MAX_VIDEO_DURATION_MINUTES = 15;
+export const MAX_VIDEO_DURATION_SECONDS = MAX_VIDEO_DURATION_MINUTES * 60;
 
 interface VideoUploadResult {
   success: boolean;
