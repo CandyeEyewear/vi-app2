@@ -257,6 +257,11 @@ export async function getVideoSize(uri: string): Promise<number> {
   try {
     console.log('📊 [VIDEO] Getting video size...');
 
+    // Web: read size from Blob
+    if (Platform.OS === 'web') {
+      return await fetchBlobSize(uri);
+    }
+
     // Ensure we have a readable file:// URI
     const fileExt = uri.split('.').pop()?.toLowerCase() || 'mp4';
     const fileUri = await ensureFileUri(uri, fileExt);
@@ -379,7 +384,7 @@ export async function uploadVideo(
     const contentType = fileExt === 'mov' ? 'video/quicktime' : 'video/mp4';
     
     console.log('📤 [VIDEO] Uploading to Supabase...');
-    console.log('📤 [VIDEO] Path:', filePath);
+    console.log('📤 [VIDEO] Path:', rawPath);
     console.log('📤 [VIDEO] Content-Type:', contentType);
 
     onProgress?.(15);
