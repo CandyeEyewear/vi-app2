@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 import CustomAlert from '../components/CustomAlert';
 import { useAuth } from '../contexts/AuthContext';
+import CountryPicker from '../components/CountryPicker';
 
 export default function RegisterOrganizationScreen() {
   const router = useRouter();
@@ -64,6 +65,14 @@ export default function RegisterOrganizationScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [selectedFocus, setSelectedFocus] = useState<string[]>([]);
 
+  const isValidPhone = (phone: string) => {
+    const trimmed = phone.trim();
+    if (!trimmed) return false;
+    if (!/^\+?[\d\s().-]+$/.test(trimmed)) return false;
+    const digits = trimmed.replace(/\D/g, '');
+    return digits.length >= 7 && digits.length <= 15;
+  };
+
   // Industry focus options
   const industryOptions = [
     'Education',
@@ -87,7 +96,7 @@ export default function RegisterOrganizationScreen() {
     // Validation
     if (!formData.email || !formData.password || !formData.organizationName || 
         !formData.registrationNumber || !formData.organizationDescription ||
-        !formData.contactPersonName || !formData.phone || !formData.location) {
+        !formData.contactPersonName || !formData.phone || !formData.location || !formData.country) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
@@ -106,6 +115,11 @@ export default function RegisterOrganizationScreen() {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
       Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+
+    if (!isValidPhone(formData.phone)) {
+      Alert.alert('Error', 'Please enter a valid phone number (7–15 digits)');
       return;
     }
 
@@ -454,6 +468,23 @@ export default function RegisterOrganizationScreen() {
               value={formData.location}
               onChangeText={(value) => updateField('location', value)}
               editable={!loading}
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <CountryPicker
+              label="Country*"
+              value={formData.country}
+              onChange={(country) => updateField('country', country)}
+              disabled={loading}
+              colors={{
+                background: colors.background,
+                card: colors.card,
+                border: colors.border,
+                text: colors.text,
+                textSecondary: colors.textSecondary,
+                primary: colors.primary,
+              }}
             />
           </View>
         </View>
