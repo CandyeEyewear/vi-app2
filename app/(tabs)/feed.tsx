@@ -683,12 +683,24 @@ const renderTabs = () => (
         onRequestClose={() => setShowCreateModal(false)}
       >
         <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={() => setShowCreateModal(false)}>
-                <Text style={styles.modalCancel}>Cancel</Text>
+          <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
+            {/* HEADER - Fixed at top, NOT inside ScrollView */}
+            <View
+              style={[
+                styles.modalHeader,
+                { borderBottomColor: colors.border, backgroundColor: colors.background },
+              ]}
+            >
+              <TouchableOpacity
+                onPress={() => {
+                  setShowCreateModal(false);
+                  setPostText('');
+                  setSelectedMedia([]);
+                }}
+              >
+                <Text style={[styles.modalCancel, { color: colors.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
-              <Text style={styles.modalTitle}>Create Post</Text>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Create Post</Text>
               <TouchableOpacity
                 onPress={handleSubmitPost}
                 disabled={submitting || (!postText.trim() && selectedMedia.length === 0)}
@@ -696,6 +708,7 @@ const renderTabs = () => (
                 <Text
                   style={[
                     styles.modalPost,
+                    { color: colors.primary },
                     (submitting || (!postText.trim() && selectedMedia.length === 0)) &&
                       styles.modalPostDisabled,
                   ]}
@@ -968,6 +981,7 @@ headerRight: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: Platform.OS === 'web' ? ('95vh' as any) : undefined,
+    flexDirection: 'column',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -976,6 +990,10 @@ headerRight: {
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: Colors.light.border,
+    backgroundColor: Colors.light.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    flexShrink: 0,
   },
   modalCancel: {
     fontSize: 16,
@@ -997,6 +1015,7 @@ headerRight: {
   modalBody: {
     flex: 1,
     padding: 16,
+    overflow: 'hidden',
   },
   modalScrollContent: {
     paddingBottom: 24,
