@@ -50,6 +50,7 @@ export default function CreateAnnouncementScreen() {
   const [text, setText] = useState('');
   const [isPinned, setIsPinned] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [autoCropImage, setAutoCropImage] = useState(false);
   const [announcementScope, setAnnouncementScope] = useState<'general' | 'targeted'>('general');
   const [targetText, setTargetText] = useState('');
 
@@ -81,7 +82,8 @@ export default function CreateAnnouncementScreen() {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
+        allowsEditing: autoCropImage,
+        ...(autoCropImage ? { aspect: [4, 3] as [number, number] } : {}),
         quality: 0.8,
       });
 
@@ -560,9 +562,30 @@ export default function CreateAnnouncementScreen() {
           <Text style={[styles.label, { color: colors.text }]}>
             Image (Optional)
           </Text>
+          <View style={[styles.pinSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.pinContent}>
+              <ImageIcon size={20} color={autoCropImage ? colors.primary : colors.textSecondary} />
+              <View style={styles.pinText}>
+                <Text style={[styles.pinTitle, { color: colors.text }]}>Auto-crop image</Text>
+                <Text style={[styles.pinSubtitle, { color: colors.textSecondary }]}>
+                  Off = upload full image • On = crop to 4:3
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={autoCropImage}
+              onValueChange={setAutoCropImage}
+              trackColor={{ false: colors.border, true: colors.primary + '40' }}
+              thumbColor={autoCropImage ? colors.primary : colors.textSecondary}
+            />
+          </View>
           {imageUri ? (
             <View style={styles.imagePreviewContainer}>
-              <Image source={{ uri: imageUri }} style={styles.imagePreview} />
+              <Image
+                source={{ uri: imageUri }}
+                style={styles.imagePreview}
+                resizeMode={autoCropImage ? 'cover' : 'contain'}
+              />
               <TouchableOpacity
                 style={styles.removeImageButton}
                 onPress={() => setImageUri(null)}
