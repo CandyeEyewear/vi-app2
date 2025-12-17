@@ -23,8 +23,22 @@ import CrossPlatformDateTimePicker from '../components/CrossPlatformDateTimePick
 import CustomAlert from '../components/CustomAlert';
 import { supabase } from '../services/supabase';
 import Button from '../components/Button';
+import CountryPicker from '../components/CountryPicker';
 
 type AccountType = 'individual' | 'organization';
+
+const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+
+// Basic international phone validation:
+// - allows +, spaces, parentheses, dots and dashes
+// - requires 7–15 digits total (E.164 max is 15)
+const isValidPhone = (phone: string) => {
+  const trimmed = phone.trim();
+  if (!trimmed) return false;
+  if (!/^\+?[\d\s().-]+$/.test(trimmed)) return false;
+  const digits = trimmed.replace(/\D/g, '');
+  return digits.length >= 7 && digits.length <= 15;
+};
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -140,9 +154,13 @@ export default function RegisterScreen() {
       return;
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
+    if (!isValidEmail(formData.email)) {
       showAlert('Error', 'Please enter a valid email address');
+      return;
+    }
+
+    if (!isValidPhone(formData.phone)) {
+      showAlert('Error', 'Please enter a valid phone number (7–15 digits)');
       return;
     }
 
@@ -230,7 +248,7 @@ export default function RegisterScreen() {
     // Validation
     if (!formData.email || !formData.password || !formData.organizationName || 
         !formData.registrationNumber || !formData.organizationDescription ||
-        !formData.contactPersonName || !formData.phone || !formData.location) {
+        !formData.contactPersonName || !formData.phone || !formData.location || !formData.country) {
       showAlert('Error', 'Please fill in all required fields');
       return;
     }
@@ -245,9 +263,13 @@ export default function RegisterScreen() {
       return;
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
+    if (!isValidEmail(formData.email)) {
       showAlert('Error', 'Please enter a valid email address');
+      return;
+    }
+
+    if (!isValidPhone(formData.phone)) {
+      showAlert('Error', 'Please enter a valid phone number (7–15 digits)');
       return;
     }
 
@@ -608,14 +630,19 @@ export default function RegisterScreen() {
               </View>
 
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>Country*</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Jamaica"
-                  placeholderTextColor={Colors.light.textSecondary}
+                <CountryPicker
+                  label="Country*"
                   value={individualFormData.country}
-                  onChangeText={(value) => updateIndividualField('country', value)}
-                  editable={!loading}
+                  onChange={(country) => updateIndividualField('country', country)}
+                  disabled={loading}
+                  colors={{
+                    background: Colors.light.background,
+                    card: Colors.light.card,
+                    border: Colors.light.border,
+                    text: Colors.light.text,
+                    textSecondary: Colors.light.textSecondary,
+                    primary: Colors.light.primary,
+                  }}
                 />
               </View>
 
@@ -906,14 +933,19 @@ export default function RegisterScreen() {
               </View>
 
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>Country*</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Jamaica"
-                  placeholderTextColor={Colors.light.textSecondary}
+                <CountryPicker
+                  label="Country*"
                   value={organizationFormData.country}
-                  onChangeText={(value) => updateOrganizationField('country', value)}
-                  editable={!loading}
+                  onChange={(country) => updateOrganizationField('country', country)}
+                  disabled={loading}
+                  colors={{
+                    background: Colors.light.background,
+                    card: Colors.light.card,
+                    border: Colors.light.border,
+                    text: Colors.light.text,
+                    textSecondary: Colors.light.textSecondary,
+                    primary: Colors.light.primary,
+                  }}
                 />
               </View>
 
