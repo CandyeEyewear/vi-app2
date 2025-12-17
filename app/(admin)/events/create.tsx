@@ -86,6 +86,7 @@ export default function CreateEventScreen() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [autoCropImage, setAutoCropImage] = useState(false);
   
   // Location
   const [isVirtual, setIsVirtual] = useState(false);
@@ -176,8 +177,8 @@ export default function CreateEventScreen() {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [16, 9],
+        allowsEditing: autoCropImage,
+        ...(autoCropImage ? { aspect: [16, 9] as [number, number] } : {}),
         quality: 0.8,
       });
 
@@ -188,7 +189,7 @@ export default function CreateEventScreen() {
       console.error('Error picking image:', error);
       showAlert('error', 'Error', 'Failed to pick image. Please try again.');
     }
-  }, []);
+  }, [autoCropImage, showAlert]);
 
   // Upload image to Supabase Storage
   const uploadImageToStorage = useCallback(async (uri: string): Promise<string | null> => {
@@ -605,6 +606,23 @@ export default function CreateEventScreen() {
             {/* Image Upload */}
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.text }]}>Cover Image</Text>
+              <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.toggleInfo}>
+                  <ImageIcon size={20} color={autoCropImage ? colors.primary : colors.textSecondary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.toggleLabel, { color: colors.text }]}>Auto-crop image</Text>
+                    <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
+                      Off = upload full image • On = crop to 16:9
+                    </Text>
+                  </View>
+                </View>
+                <Switch
+                  value={autoCropImage}
+                  onValueChange={setAutoCropImage}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor={colors.textOnPrimary}
+                />
+              </View>
               {!imageUri && !imageUrl ? (
                 <TouchableOpacity
                   style={[styles.uploadButton, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -625,7 +643,7 @@ export default function CreateEventScreen() {
                   <Image
                     source={{ uri: imageUri || imageUrl }}
                     style={styles.imagePreview}
-                    resizeMode="cover"
+                    resizeMode={autoCropImage ? 'cover' : 'contain'}
                   />
                   <TouchableOpacity
                     style={styles.removeImageButton}
