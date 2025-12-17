@@ -71,12 +71,6 @@ export default function FeedScreen() {
   // Detect mobile web (web but not desktop)
   const isMobileWeb = Platform.OS === 'web' && !isDesktop;
   const mobileWebViewport = useMobileWebViewport();
-  const mobileWebKeyboardInset =
-    isMobileWeb &&
-    mobileWebViewport.isKeyboardVisible &&
-    typeof window !== 'undefined'
-      ? Math.max(0, window.innerHeight - mobileWebViewport.height)
-      : 0;
   const { user } = useAuth();
   const { posts, loading, createPost, refreshFeed } = useFeed();
   
@@ -95,7 +89,6 @@ export default function FeedScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [notificationCount, setNotificationCount] = useState(0);
-  const [createPostFooterHeight, setCreatePostFooterHeight] = useState(0);
 
   // Load notification count on mount and refresh periodically
    useEffect(() => {
@@ -654,7 +647,8 @@ const renderTabs = () => (
       >
         <View style={styles.modalContainer}>
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            // Match native behavior; on web we rely on visualViewport sizing instead
+            behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined}
             style={[
               styles.modalContent,
               // On mobile web the browser keyboard can cover fixed-height content; use
@@ -688,13 +682,7 @@ const renderTabs = () => (
             <View style={styles.modalBody}>
               <ScrollView
                 style={styles.modalScroll}
-                contentContainerStyle={[
-                  styles.modalScrollContent,
-                  {
-                    paddingBottom:
-                      Math.max(createPostFooterHeight, 96) + 16,
-                  },
-                ]}
+                contentContainerStyle={styles.modalScrollContent}
                 keyboardShouldPersistTaps="handled"
               >
                 <View style={styles.modalUserInfo}>
@@ -772,20 +760,8 @@ const renderTabs = () => (
                 )}
               </ScrollView>
 
-              {/* Floating footer so actions aren't hidden by the mobile web keyboard */}
-              <View
-                style={[
-                  styles.modalFooter,
-                  styles.modalFooterFloating,
-                  {
-                    paddingBottom: Math.max(insets.bottom, 12),
-                    bottom: isMobileWeb ? mobileWebKeyboardInset : 0,
-                    backgroundColor: colors.background,
-                    borderTopColor: colors.border,
-                  },
-                ]}
-                onLayout={(e) => setCreatePostFooterHeight(e.nativeEvent.layout.height)}
-              >
+              {/* Footer (native-style): pinned to bottom of modal, not overlaying input */}
+              <View style={[styles.modalFooter, { paddingBottom: Math.max(insets.bottom, 12) }]}>
                 <View style={styles.mediaButtonsContainer}>
                   <TouchableOpacity
                     style={styles.mediaButtonHalf}
@@ -949,11 +925,9 @@ headerRight: {
   },
   modalBody: {
     flex: 1,
-    position: 'relative',
+    padding: 16,
   },
   modalScrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
     paddingBottom: 12,
   },
   modalScroll: {
@@ -964,13 +938,6 @@ headerRight: {
     borderTopWidth: 1,
     borderTopColor: Colors.light.border,
     backgroundColor: Colors.light.background,
-  },
-  modalFooterFloating: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    paddingHorizontal: 16,
-    zIndex: 10,
   },
   modalUserInfo: {
     flexDirection: 'row',
