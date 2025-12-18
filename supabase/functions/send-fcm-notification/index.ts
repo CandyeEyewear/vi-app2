@@ -51,6 +51,25 @@ type JsonResponse = {
   hint?: string;
 };
 
+function base64UrlDecode(input: string): string {
+  // base64url -> base64
+  const padded = input.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(input.length / 4) * 4, '=');
+  return atob(padded);
+}
+
+function getJwtClaimsFromAuthHeader(authHeader: string): Record<string, any> | null {
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice('Bearer '.length).trim() : authHeader?.trim();
+  if (!token) return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const payloadJson = base64UrlDecode(parts[1]);
+    return JSON.parse(payloadJson);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Parse PEM private key and convert to format needed for JWT signing
  */
@@ -261,6 +280,7 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
     const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || '';
+    const claims = getJwtClaimsFromAuthHeader(authHeader);
     
     if (!supabaseUrl || !supabaseKey || !supabaseServiceKey) {
       const missing = [
@@ -276,34 +296,43 @@ serve(async (req) => {
       });
     }
 
-    // Identify caller via JWT (verify_jwt=true also enforces this at the platform layer,
-    // but we still verify here so we can return a clear error payload.)
-    const supabaseAuthed = createClient(supabaseUrl, supabaseKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
-
-    const { data: authData, error: authErr } = await supabaseAuthed.auth.getUser();
-    const callerId = authData?.user?.id;
-    if (authErr || !callerId) {
-      return json({ success: false, userId, error: 'Unauthorized' });
-    }
-
     // Privileged service role client for DB reads (RLS-safe)
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
+    // Identify caller:
+    // - If invoked by a DB trigger/cron with service_role JWT, there is no "user" to fetch.
+    // - If invoked by the app, use auth.getUser() to get callerId and enforce permissions.
+    const tokenRole = claims?.role || claims?.['https://hasura.io/jwt/claims']?.['x-hasura-role'];
+    const isServiceRole = tokenRole === 'service_role';
+    let callerId: string | null = null;
+    if (!isServiceRole) {
+      // Identify caller via user JWT
+      const supabaseAuthed = createClient(supabaseUrl, supabaseKey, {
+        global: { headers: { Authorization: authHeader } },
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      });
+
+      const { data: authData, error: authErr } = await supabaseAuthed.auth.getUser();
+      callerId = authData?.user?.id || null;
+      if (authErr || !callerId) {
+        return json({ success: false, userId, error: 'Unauthorized' });
+      }
+    } else {
+      callerId = 'service_role';
+    }
+
     // Authorization: users may only send to themselves unless staff.
-    if (callerId !== userId) {
+    if (!isServiceRole && callerId !== userId) {
       const { data: callerProfile, error: callerProfileErr } = await supabaseAdmin
         .from('users')
         .select('id, role')
         .eq('id', callerId)
-        .single();
+        .maybeSingle();
 
       const callerRole = (callerProfile as any)?.role;
       const isStaff = callerRole === 'admin' || callerRole === 'sup';
@@ -324,7 +353,7 @@ serve(async (req) => {
       .from('users')
       .select('push_token')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
 
     if (userError) {
       return json({

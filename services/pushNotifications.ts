@@ -117,6 +117,13 @@ export async function savePushToken(userId: string, token: string): Promise<bool
   console.log('[PUSH] Token (first 20 chars):', token.substring(0, 20) + '...');
   
   try {
+    // Guard against accidentally storing Expo tokens in the FCM token slot.
+    // Expo tokens look like "ExponentPushToken[...]" / "ExpoPushToken[...]" and are not valid for FCM HTTP v1.
+    if (token.startsWith('ExponentPushToken[') || token.startsWith('ExpoPushToken[')) {
+      console.error('[PUSH] ❌ Refusing to save Expo push token into users.push_token (expected FCM token)');
+      return false;
+    }
+
     const timestamp = new Date().toISOString();
     console.log('[PUSH] Timestamp:', timestamp);
     
