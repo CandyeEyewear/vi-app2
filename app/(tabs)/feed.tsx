@@ -4,7 +4,7 @@
  * Shows announcements with special styling and sorts pinned announcements to top
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -20,7 +20,8 @@ import {
   Alert,
   Platform,
   useWindowDimensions,
-  KeyboardAvoidingView,
+  Keyboard,
+  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -88,8 +89,15 @@ export default function FeedScreen() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [notificationCount, setNotificationCount] = useState(0);
 
+  // Refs for scroll and input handling
+  const modalScrollViewRef = useRef<ScrollView>(null);
+  const mentionInputRef = useRef<any>(null);
+
   // Keyboard visibility detection for mobile web
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  
+  // Keyboard height animation (more reliable than KeyboardAvoidingView)
+  const keyboardHeight = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -127,6 +135,57 @@ export default function FeedScreen() {
     window.addEventListener('resize', computeKeyboardOpen);
     return () => window.removeEventListener('resize', computeKeyboardOpen);
   }, []);
+
+  // Handle keyboard show/hide with smooth animations (more reliable approach)
+  useEffect(() => {
+    if (!showCreateModal) {
+      // Reset keyboard height when modal closes
+      Animated.timing(keyboardHeight, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: false,
+      }).start();
+      return;
+    }
+
+    if (Platform.OS === 'web') return; // Web handles keyboard differently
+
+    const showSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        const height = e.endCoordinates.height;
+        
+        // Smooth animation when keyboard appears
+        Animated.timing(keyboardHeight, {
+          toValue: height,
+          duration: Platform.OS === 'ios' ? 250 : 150,
+          useNativeDriver: false,
+        }).start();
+        
+        // Scroll to end (where input is) when keyboard appears
+        setTimeout(() => {
+          modalScrollViewRef.current?.scrollToEnd({ animated: true });
+        }, Platform.OS === 'ios' ? 100 : 150);
+      }
+    );
+
+    const hideSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        // Smooth animation when keyboard hides
+        Animated.timing(keyboardHeight, {
+          toValue: 0,
+          duration: Platform.OS === 'ios' ? 250 : 150,
+          useNativeDriver: false,
+        }).start();
+      }
+    );
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [showCreateModal, keyboardHeight]);
 
   // Load notification count on mount and refresh periodically
    useEffect(() => {
@@ -683,12 +742,16 @@ const renderTabs = () => (
         transparent={true}
         onRequestClose={() => setShowCreateModal(false)}
       >
-        <KeyboardAvoidingView
-          style={styles.modalContainer}
-          behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'padding' : undefined}
-          keyboardVerticalOffset={0}
-        >
-          <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
+        <View style={styles.modalContainer}>
+          <Animated.View
+            style={[
+              styles.modalContent,
+              { backgroundColor: colors.background },
+              Platform.OS !== 'web' && {
+                marginBottom: keyboardHeight,
+              },
+            ]}
+          >
             {/* HEADER - Fixed at top, NOT inside ScrollView */}
             <View
               style={[
@@ -724,16 +787,19 @@ const renderTabs = () => (
             </View>
 
             <ScrollView
+              ref={modalScrollViewRef}
               style={styles.modalBody}
               contentContainerStyle={[
                 styles.modalScrollContent,
                 {
-                  paddingBottom: 24 + Math.max(insets.bottom, 12),
+                  paddingBottom: Platform.OS === 'web' 
+                    ? (isMobileWeb && isKeyboardVisible ? 120 : 24) + Math.max(insets.bottom, 12)
+                    : 24 + Math.max(insets.bottom, 12) + 300, // Extra padding for keyboard space
                 },
-                isMobileWeb && isKeyboardVisible && { paddingBottom: 120 + Math.max(insets.bottom, 12) },
               ]}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
+              nestedScrollEnabled={true}
             >
               {/* User Info */}
               <View style={styles.modalUserInfo}>
@@ -852,6 +918,7 @@ const renderTabs = () => (
 
               {/* Text Input - larger */}
               <MentionInput
+                ref={mentionInputRef}
                 value={postText}
                 onChangeText={setPostText}
                 placeholder="What's happening in your volunteer journey? Use @ to mention someone"
@@ -868,10 +935,16 @@ const renderTabs = () => (
                 multiline
                 autoFocus={!isMobileWeb}
                 editable={!submitting}
+                onFocus={() => {
+                  // Scroll to input when focused (especially on mobile)
+                  setTimeout(() => {
+                    modalScrollViewRef.current?.scrollToEnd({ animated: true });
+                  }, Platform.OS === 'ios' ? 100 : 150);
+                }}
               />
             </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
+          </Animated.View>
+        </View>
       </Modal>
 
       {/* Custom Alert */}
