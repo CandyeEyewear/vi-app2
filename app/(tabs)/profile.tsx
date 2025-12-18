@@ -244,22 +244,6 @@ export default function ProfileScreen() {
         </AnimatedPressable>
       )}
 
-      {/* Debug: Show role info temporarily */}
-      {__DEV__ && (
-        <View style={[styles.section, { backgroundColor: colors.card, padding: 12, borderRadius: 8 }]}>
-          <Text style={[styles.sectionTitle, { color: colors.text, fontSize: 12 }]}>Debug Info:</Text>
-          <Text style={[styles.bio, { color: colors.textSecondary, fontSize: 11 }]}>
-            Role: {user?.role || 'undefined'}
-          </Text>
-          <Text style={[styles.bio, { color: colors.textSecondary, fontSize: 11 }]}>
-            isSup: {isSup ? 'true' : 'false'}
-          </Text>
-          <Text style={[styles.bio, { color: colors.textSecondary, fontSize: 11 }]}>
-            isAdmin: {isAdmin ? 'true' : 'false'}
-          </Text>
-        </View>
-      )}
-
       {/* Admin Dashboard Access - Only visible to supervisors */}
       {isSup && (
         <AnimatedPressable

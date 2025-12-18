@@ -17,6 +17,10 @@ class CacheService {
    * Get data from cache if it exists and hasn't expired
    */
   get<T>(key: string): T | null {
+    if (!this.cache) {
+      console.warn('[CACHE] Cache not initialized');
+      return null;
+    }
     const entry = this.cache.get(key);
     if (!entry) return null;
 
@@ -84,8 +88,15 @@ class CacheService {
   }
 }
 
-// Export singleton instance
-export const cache = new CacheService();
+// Export singleton instance with safety check
+let cacheInstance: CacheService | null = null;
+
+export const cache: CacheService = (() => {
+  if (!cacheInstance) {
+    cacheInstance = new CacheService();
+  }
+  return cacheInstance;
+})();
 
 // Cache key generators
 export const CacheKeys = {
