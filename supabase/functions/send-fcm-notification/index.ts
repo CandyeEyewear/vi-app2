@@ -42,6 +42,15 @@ interface ServiceAccount {
   client_x509_cert_url: string;
 }
 
+type JsonResponse = {
+  success: boolean;
+  error?: string;
+  userId?: string;
+  callerId?: string;
+  // Helpful debug hints (safe to share)
+  hint?: string;
+};
+
 /**
  * Parse PEM private key and convert to format needed for JWT signing
  */
@@ -203,72 +212,138 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  const json = (payload: JsonResponse) =>
+    // Always 200 so supabase-js can reliably read the body (it treats non-2xx as errors)
+    new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+
   try {
+    if (req.method !== 'POST') {
+      return json({ success: false, error: 'Method not allowed' });
+    }
+
     // Parse request body
     const requestData: FCMRequest = await req.json();
     const { userId, title, body, data } = requestData;
 
     // Validate required fields
     if (!userId || !title || !body) {
-      return new Response(
-        JSON.stringify({ error: 'Missing required fields: userId, title, body' }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+      return json({ success: false, error: 'Missing required fields: userId, title, body' });
     }
 
     // Get Firebase service account from environment
     const serviceAccountJson = Deno.env.get('FIREBASE_SERVICE_ACCOUNT');
     if (!serviceAccountJson) {
-      throw new Error('FIREBASE_SERVICE_ACCOUNT environment variable not set');
+      return json({
+        success: false,
+        userId,
+        error: 'Server not configured',
+        hint: 'Missing FIREBASE_SERVICE_ACCOUNT in Edge Function environment',
+      });
     }
 
     let serviceAccount: ServiceAccount;
     try {
       serviceAccount = JSON.parse(serviceAccountJson);
     } catch (error) {
-      throw new Error(`Invalid FIREBASE_SERVICE_ACCOUNT JSON: ${error.message}`);
+      return json({
+        success: false,
+        userId,
+        error: 'Server not configured',
+        hint: `Invalid FIREBASE_SERVICE_ACCOUNT JSON: ${error.message}`,
+      });
     }
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    const authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || '';
     
-    if (!supabaseUrl || !supabaseKey) {
-      throw new Error('SUPABASE_URL and SUPABASE_ANON_KEY must be set');
+    if (!supabaseUrl || !supabaseKey || !supabaseServiceKey) {
+      const missing = [
+        !supabaseUrl ? 'SUPABASE_URL' : null,
+        !supabaseKey ? 'SUPABASE_ANON_KEY' : null,
+        !supabaseServiceKey ? 'SUPABASE_SERVICE_ROLE_KEY' : null,
+      ].filter(Boolean);
+      return json({
+        success: false,
+        userId,
+        error: 'Server not configured',
+        hint: `Missing env: ${missing.join(', ')}`,
+      });
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey, {
+    // Identify caller via JWT (verify_jwt=true also enforces this at the platform layer,
+    // but we still verify here so we can return a clear error payload.)
+    const supabaseAuthed = createClient(supabaseUrl, supabaseKey, {
+      global: { headers: { Authorization: authHeader } },
       auth: {
         autoRefreshToken: false,
         persistSession: false,
       },
     });
 
+    const { data: authData, error: authErr } = await supabaseAuthed.auth.getUser();
+    const callerId = authData?.user?.id;
+    if (authErr || !callerId) {
+      return json({ success: false, userId, error: 'Unauthorized' });
+    }
+
+    // Privileged service role client for DB reads (RLS-safe)
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    // Authorization: users may only send to themselves unless staff.
+    if (callerId !== userId) {
+      const { data: callerProfile, error: callerProfileErr } = await supabaseAdmin
+        .from('users')
+        .select('id, role')
+        .eq('id', callerId)
+        .single();
+
+      const callerRole = (callerProfile as any)?.role;
+      const isStaff = callerRole === 'admin' || callerRole === 'sup';
+
+      if (callerProfileErr || !isStaff) {
+        return json({
+          success: false,
+          userId,
+          callerId,
+          error: 'Forbidden',
+          hint: 'Can only send push notifications to yourself unless you are admin/sup',
+        });
+      }
+    }
+
     // Get user's push token from database
-    const { data: userData, error: userError } = await supabase
+    const { data: userData, error: userError } = await supabaseAdmin
       .from('users')
       .select('push_token')
       .eq('id', userId)
       .single();
 
     if (userError) {
-      throw new Error(`Failed to fetch user: ${userError.message}`);
+      return json({
+        success: false,
+        userId,
+        callerId,
+        error: `Failed to fetch user: ${userError.message}`,
+      });
     }
 
     if (!userData || !userData.push_token) {
-      return new Response(
-        JSON.stringify({ 
-          error: 'User not found or has no push token registered',
-          userId 
-        }),
-        {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+      return json({
+        success: false,
+        userId,
+        callerId,
+        error: 'User not found or has no push token registered',
+        hint:
+          'Make sure the app ran token registration on a real device and saved it to public.users.push_token',
+      });
     }
 
     const fcmToken = userData.push_token;
@@ -288,28 +363,16 @@ serve(async (req) => {
       data
     );
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: 'Notification sent successfully',
-        userId,
-      }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
+    return json({
+      success: true,
+      userId,
+      callerId,
+    });
   } catch (error) {
     console.error('Error sending FCM notification:', error);
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: error.message || 'Unknown error occurred',
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
+    return json({
+      success: false,
+      error: error?.message || 'Unknown error occurred',
+    });
   }
 });
