@@ -6,7 +6,7 @@ export * from './reactions';
 
 // ==================== USER TYPES ====================
 
-export type UserRole = 'volunteer' | 'admin';
+export type UserRole = 'volunteer' | 'admin' | 'sup';
 
 export interface User {
   id: string;

@@ -1,0 +1,118 @@
+warning: in the working copy of 'contexts/AuthContext.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'services/supabase.ts', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/contexts/AuthContext.tsx b/contexts/AuthContext.tsx[m
+[1mindex fd0a9e2..6790fbe 100644[m
+[1m--- a/contexts/AuthContext.tsx[m
+[1m+++ b/contexts/AuthContext.tsx[m
+[36m@@ -27,7 +27,9 @@[m [minterface AuthContextType {[m
+   forgotPassword: (email: string) => Promise<ApiResponse<void>>;[m
+   resetPassword: (newPassword: string) => Promise<ApiResponse<void>>;[m
+   refreshUser: () => Promise<void>;[m
+[32m+[m[32m  refreshSession: () => Promise<boolean>;[m
+   isAdmin: boolean;[m
+[32m+[m[32m  isSup: boolean;[m
+ }[m
+ [m
+ const AuthContext = createContext<AuthContextType | undefined>(undefined);[m
+[36m@@ -38,6 +40,7 @@[m [mexport function AuthProvider({ children }: { children: React.ReactNode }) {[m
+   const [initialAuthComplete, setInitialAuthComplete] = useState(false); // Prevents race condition during initial boot[m
+   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);[m
+   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);[m
+[32m+[m[32m  const [sessionAppRole, setSessionAppRole] = useState<string | null>(null);[m
+   const profileLoadInProgress = useRef<string | null>(null); // Tracks which userId is being loaded[m
+ [m
+   // Initialize auth state on mount[m
+[36m@@ -194,6 +197,7 @@[m [mexport function AuthProvider({ children }: { children: React.ReactNode }) {[m
+         if (session) {[m
+           console.log('[AUTH] Session active - User ID:', session.user.id);[m
+           setNeedsPasswordSetup(session?.user?.user_metadata?.needs_password_setup === true);[m
+[32m+[m[32m          setSessionAppRole((session.user as any)?.app_metadata?.app_role ?? null);[m
+           await loadUserProfile(session.user.id);[m
+           // Set up real-time subscription after session is confirmed[m
+           setupRealtimeSubscription().catch((error) => {[m
+[36m@@ -217,6 +221,7 @@[m [mexport function AuthProvider({ children }: { children: React.ReactNode }) {[m
+ [m
+           setUser(null);[m
+           setNeedsPasswordSetup(false);[m
+[32m+[m[32m          setSessionAppRole(null);[m
+           setLoading(false);[m
+           // Clean up real-time subscription on logout[m
+           if (userChannel) {[m
+[36m@@ -712,12 +717,21 @@[m [mexport function AuthProvider({ children }: { children: React.ReactNode }) {[m
+       console.log('[AUTH] Phone:', metadata.phone);[m
+       console.log('[AUTH] Location:', metadata.location);[m
+       [m
+[32m+[m[32m      // Determine signup confirmation redirect URL based on platform.[m
+[32m+[m[32m      // If Supabase email confirmations are enabled, this is where the "Confirm your email" link sends users.[m
+[32m+[m[32m      // - Web: send to hosted web app[m
+[32m+[m[32m      // - Native: send to deep link handled by Expo/React Navigation[m
+[32m+[m[32m      const emailRedirectTo = isWeb[m
+[32m+[m[32m        ? 'https://vibe.volunteersinc.org/login'[m
+[32m+[m[32m        : 'vibe://login';[m
+[32m+[m
+       // Sign up with Supabase Auth - pass ALL data as metadata[m
+       const { data: authData, error: authError } = await supabase.auth.signUp({[m
+         email: data.email,[m
+         password: data.password,[m
+         options: {[m
+[31m-          data: metadata[m
+[32m+[m[32m          data: metadata,[m
+[32m+[m[32m          emailRedirectTo,[m
+         }[m
+       });[m
+ [m
+[36m@@ -1085,7 +1099,28 @@[m [mexport function AuthProvider({ children }: { children: React.ReactNode }) {[m
+     console.log('[AUTH] ✅ User profile refreshed');[m
+   };[m
+ [m
+[31m-  const isAdmin = user?.role === 'admin';[m
+[32m+[m[32m  const refreshSession = async (): Promise<boolean> => {[m
+[32m+[m[32m    try {[m
+[32m+[m[32m      const { data, error } = await supabase.auth.refreshSession();[m
+[32m+[m[32m      if (error) {[m
+[32m+[m[32m        console.warn('[AUTH] ⚠️ refreshSession failed:', error.message);[m
+[32m+[m[32m        return false;[m
+[32m+[m[32m      }[m
+[32m+[m[32m      const appRole = (data?.session?.user as any)?.app_metadata?.app_role ?? null;[m
+[32m+[m[32m      setSessionAppRole(appRole);[m
+[32m+[m[32m      // Re-fetch profile as well (role may have changed)[m
+[32m+[m[32m      if (data?.session?.user?.id) {[m
+[32m+[m[32m        await loadUserProfile(data.session.user.id, true);[m
+[32m+[m[32m      }[m
+[32m+[m[32m      return true;[m
+[32m+[m[32m    } catch (e: any) {[m
+[32m+[m[32m      console.warn('[AUTH] ⚠️ refreshSession exception:', e?.message);[m
+[32m+[m[32m      return false;[m
+[32m+[m[32m    }[m
+[32m+[m[32m  };[m
+[32m+[m
+[32m+[m[32m  const isAdmin = sessionAppRole === 'admin' || user?.role === 'admin';[m
+[32m+[m[32m  const isSup = sessionAppRole === 'sup' || user?.role === 'sup';[m
+ [m
+   return ([m
+     <AuthContext.Provider[m
+[36m@@ -1102,7 +1137,9 @@[m [mexport function AuthProvider({ children }: { children: React.ReactNode }) {[m
+         forgotPassword,[m
+         resetPassword,[m
+         refreshUser,[m
+[32m+[m[32m        refreshSession,[m
+         isAdmin,[m
+[32m+[m[32m        isSup,[m
+       }}[m
+     >[m
+       {children}[m
+[1mdiff --git a/services/supabase.ts b/services/supabase.ts[m
+[1mindex 0e48121..238a79e 100644[m
+[1m--- a/services/supabase.ts[m
+[1m+++ b/services/supabase.ts[m
+[36m@@ -218,7 +218,9 @@[m [mexport const supabase = createClient([m
+       storage: storage,[m
+       autoRefreshToken: true,[m
+       persistSession: true,[m
+[31m-      detectSessionInUrl: false,[m
+[32m+[m[32m      // Web-based auth flows (email confirmation, magic links, OAuth) return sessions via URL.[m
+[32m+[m[32m      // Keep this off for native apps, but on for web so confirmations can complete.[m
+[32m+[m[32m      detectSessionInUrl: isWeb,[m
+     },[m
+   }[m
+ );[m

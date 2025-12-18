@@ -478,9 +478,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AUTH] ✅ Profile data retrieved from database');
       console.log('[AUTH] Email:', profileData.email);
       console.log('[AUTH] Full Name:', profileData.full_name);
-      console.log('[AUTH] Role:', profileData.role);
+      console.log('[AUTH] Role (from DB):', profileData.role);
+      console.log('[AUTH] Role type:', typeof profileData.role);
 
       const userData: User = mapDbUserToUser(profileData as DbUser);
+      console.log('[AUTH] Role (after transform):', userData.role);
+      console.log('[AUTH] isSup check:', userData.role === 'sup');
 
       const cacheTTL = 1 * 60 * 1000;
       cache.set(cacheKey, userData, cacheTTL);
@@ -1093,6 +1096,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     console.log('[AUTH] 🔄 Refreshing user profile...');
     console.log('[AUTH] User ID:', user.id);
+    console.log('[AUTH] Current role before refresh:', user.role);
+    
+    // Clear cache explicitly
+    const cacheKey = CacheKeys.userProfile(user.id);
+    cache.delete(cacheKey);
+    console.log('[AUTH] 🗑️ Cache cleared for user profile');
     
     // Reload profile with force refresh flag
     await loadUserProfile(user.id, true);
@@ -1121,6 +1130,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isAdmin = sessionAppRole === 'admin' || user?.role === 'admin';
   const isSup = sessionAppRole === 'sup' || user?.role === 'sup';
+  
+  // Debug logging for role checks
+  if (__DEV__ && user) {
+    console.log('[AUTH] Role Debug:', {
+      sessionAppRole,
+      userRole: user.role,
+      isAdmin,
+      isSup,
+    });
+  }
 
   return (
     <AuthContext.Provider

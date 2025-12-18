@@ -9,7 +9,7 @@ import { Text, StyleSheet, Linking, type TextProps } from 'react-native';
 import { Colors } from '../constants/colors';
 
 interface LinkTextProps {
-  text: string;
+  text: string | undefined | null;
   style?: any;
   linkStyle?: any;
   numberOfLines?: number;
@@ -43,6 +43,15 @@ export default function LinkText({
   selectable = false,
   onLongPress,
 }: LinkTextProps) {
+  // Handle undefined/null/empty text
+  if (!text || typeof text !== 'string') {
+    return (
+      <Text style={style} numberOfLines={numberOfLines} selectable={selectable} onLongPress={onLongPress}>
+        {''}
+      </Text>
+    );
+  }
+
   const parts: Array<{ text: string; isLink: boolean; url?: string }> = [];
   let lastIndex = 0;
   let match;

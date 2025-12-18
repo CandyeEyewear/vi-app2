@@ -3,7 +3,7 @@
  * User's profile with stats, achievements, and settings
  */
 
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
   useColorScheme,
   Platform,
   useWindowDimensions,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -60,10 +61,17 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 992;
-  const { user, signOut, isAdmin } = useAuth();
+  const { user, signOut, isAdmin, isSup, refreshUser } = useAuth();
   const isPremium = user?.membershipTier === 'premium' && user?.membershipStatus === 'active';
   const isOfficialMember = isPremium || isAdmin;
   const hasProposeAccess = isOfficialMember;
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refreshUser();
+    setRefreshing(false);
+  }, [refreshUser]);
 
   const handleLogout = () => {
     showConfirm(
@@ -146,6 +154,14 @@ export default function ProfileScreen() {
     <ScrollView 
       style={[styles.container, { backgroundColor: colors.card }]} 
       contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={colors.primary}
+          colors={[colors.primary]}
+        />
+      }
     >
       <Head>
         <title>Profile | VIbe</title>
@@ -210,7 +226,7 @@ export default function ProfileScreen() {
         </View>
       )}
 
-      {/* Admin Dashboard Access - Only visible to admins */}
+      {/* Super Admin Dashboard Access - Only visible to super admins */}
       {isAdmin && (
         <AnimatedPressable
           style={[styles.adminCard, surfaceShadow, { backgroundColor: colors.primary }]}
@@ -219,9 +235,43 @@ export default function ProfileScreen() {
           <View style={styles.adminCardContent}>
             <Shield size={32} color="#FFFFFF" strokeWidth={2} />
             <View style={styles.adminCardText}>
-              <Text style={styles.adminCardTitle}>Admin Dashboard</Text>
+              <Text style={styles.adminCardTitle}>Super Admin Dashboard</Text>
               <Text style={styles.adminCardSubtitle}>
                 Manage opportunities, posts, and users
+              </Text>
+            </View>
+          </View>
+        </AnimatedPressable>
+      )}
+
+      {/* Debug: Show role info temporarily */}
+      {__DEV__ && (
+        <View style={[styles.section, { backgroundColor: colors.card, padding: 12, borderRadius: 8 }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text, fontSize: 12 }]}>Debug Info:</Text>
+          <Text style={[styles.bio, { color: colors.textSecondary, fontSize: 11 }]}>
+            Role: {user?.role || 'undefined'}
+          </Text>
+          <Text style={[styles.bio, { color: colors.textSecondary, fontSize: 11 }]}>
+            isSup: {isSup ? 'true' : 'false'}
+          </Text>
+          <Text style={[styles.bio, { color: colors.textSecondary, fontSize: 11 }]}>
+            isAdmin: {isAdmin ? 'true' : 'false'}
+          </Text>
+        </View>
+      )}
+
+      {/* Admin Dashboard Access - Only visible to supervisors */}
+      {isSup && (
+        <AnimatedPressable
+          style={[styles.adminCard, surfaceShadow, { backgroundColor: '#10B981' }]}
+          onPress={() => router.push('/supervisor-dashboard')}
+        >
+          <View style={styles.adminCardContent}>
+            <Shield size={32} color="#FFFFFF" strokeWidth={2} />
+            <View style={styles.adminCardText}>
+              <Text style={styles.adminCardTitle}>Admin Dashboard</Text>
+              <Text style={styles.adminCardSubtitle}>
+                Manage opportunities, events, and announcements
               </Text>
             </View>
           </View>

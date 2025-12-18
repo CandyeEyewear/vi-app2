@@ -77,7 +77,7 @@ async function handlePost(req: any, res: any, id: string, isCrawler: boolean) {
   // Clean mention format before using in OG tags
   const cleanText = mentionToDisplayText(post.text || '');
   const description = cleanText.substring(0, 200) || 'Check out this post on VIbe';
-  const title = `${userName} on VIbe`;
+  const title = `${userName}'s post on VIbe`;
   const url = `https://vibe.volunteersinc.org/post/${id}`;
 
   return sendOGHtml(res, { title, description, image: previewImage, url, type: 'article', deepLink: `vibe://post/${id}` });

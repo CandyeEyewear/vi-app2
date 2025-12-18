@@ -36,7 +36,6 @@ export default function LoginScreen() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [pendingError, setPendingError] = useState<{ title: string; message: string } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertConfig, setAlertConfig] = useState({
@@ -57,18 +56,6 @@ export default function LoginScreen() {
     setAlertConfig({ title, message, type });
     setAlertVisible(true);
   };
-
-  // Show pending auth errors after re-renders stabilize (mobile web can remount on auth state changes)
-  useEffect(() => {
-    if (pendingError && !loading) {
-      const { title, message } = pendingError;
-      setPendingError(null);
-      // Small delay to ensure component is stable
-      setTimeout(() => {
-        showAlert(title, message, 'error');
-      }, 100);
-    }
-  }, [pendingError, loading]);
 
   // Don't render login form if user is already authenticated
   if (!loading && user) {
@@ -125,6 +112,7 @@ export default function LoginScreen() {
       if (response.error) {
         const errorLower = response.error.toLowerCase();
         if (errorLower.includes('invalid login credentials') || 
+            errorLower.includes('invalid_credentials') ||
             errorLower.includes('email not confirmed') ||
             errorLower.includes('invalid password') ||
             errorLower.includes('user not found')) {
@@ -138,8 +126,10 @@ export default function LoginScreen() {
         }
       }
       
-      // Use state so the alert reliably triggers after async sign-in completes
-      setPendingError({ title: 'Login Failed', message: errorMessage });
+      // Show alert immediately instead of using pendingError to avoid navigation issues
+      setTimeout(() => {
+        showAlert('Login Failed', errorMessage, 'error');
+      }, 100);
     }
   };
 

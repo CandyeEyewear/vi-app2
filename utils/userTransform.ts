@@ -66,7 +66,9 @@ export interface DbUser {
 }
 
 function coerceUserRole(role: unknown): UserRole {
-  return role === 'admin' ? 'admin' : 'volunteer';
+  if (role === 'admin') return 'admin';
+  if (role === 'sup') return 'sup';
+  return 'volunteer';
 }
 
 function coerceAccountType(accountType: unknown): User['account_type'] {
