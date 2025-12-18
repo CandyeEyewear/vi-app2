@@ -4,7 +4,8 @@
  */
 
 import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
-import { registerForFCMNotifications, setupFCMHandlers } from '../services/fcmNotifications';
+import { Platform } from 'react-native';
+import { registerForFCMNotifications, setupFCMHandlers, subscribeToFCMTokenRefresh } from '../services/fcmNotifications';
 import { savePushToken, removePushToken } from '../services/pushNotifications';
 import { syncContactToHubSpot } from '../services/hubspotService';
 import { sendWelcomeEmail, sendPasswordResetEmail } from '../services/resendService';
@@ -42,6 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const [sessionAppRole, setSessionAppRole] = useState<string | null>(null);
   const profileLoadInProgress = useRef<string | null>(null); // Tracks which userId is being loaded
+  const tokenRefreshCleanupRef = useRef<(() => void) | null>(null);
 
   // Initialize auth state on mount
   useEffect(() => {
@@ -292,6 +294,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
   }, []);
+
+  // Keep push token current (FCM token can rotate)
+  useEffect(() => {
+    // Only mobile
+    if (Platform.OS === 'web') return;
+
+    // Clear prior subscription
+    if (tokenRefreshCleanupRef.current) {
+      tokenRefreshCleanupRef.current();
+      tokenRefreshCleanupRef.current = null;
+    }
+
+    if (!user?.id) return;
+
+    const cleanup = subscribeToFCMTokenRefresh(async (newToken) => {
+      try {
+        await savePushToken(user.id, newToken);
+        console.log('[AUTH] ✅ Updated push token after refresh');
+      } catch (e: any) {
+        console.warn('[AUTH] ⚠️ Failed to update push token after refresh:', e?.message);
+      }
+    });
+
+    tokenRefreshCleanupRef.current = cleanup;
+
+    return () => {
+      if (tokenRefreshCleanupRef.current) {
+        tokenRefreshCleanupRef.current();
+        tokenRefreshCleanupRef.current = null;
+      }
+    };
+  }, [user?.id]);
 
   const loadUserProfile = async (userId: string, forceRefresh: boolean = false) => {
     // GUARD: Prevent concurrent calls for the same user

@@ -21,6 +21,7 @@ import CustomAlert from '../components/CustomAlert';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
 import { supabase } from '../services/supabase';
+import { sendTestPushToSelf } from '../services/pushNotifications';
 import { useEffect } from 'react';
 import { useReminderSettings } from '../hooks/useReminderSettings';
 
@@ -43,6 +44,7 @@ const insets = useSafeAreaInsets();
 
    const [loading, setLoading] = useState(true);
    const [updatingNotificationField, setUpdatingNotificationField] = useState<string | null>(null);
+   const [sendingTestPush, setSendingTestPush] = useState(false);
 
 // Change Password Modal State
    const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
@@ -484,6 +486,42 @@ const handleDeleteAccount = async () => {
          />
        </View>
      )}
+
+     <TouchableOpacity
+       style={[
+         styles.testPushButton,
+         (loading || sendingTestPush) && { opacity: 0.6 },
+       ]}
+       disabled={loading || sendingTestPush}
+       onPress={async () => {
+         if (!user?.id) {
+           showAlert('Error', 'You must be signed in to send a test push.', 'error');
+           return;
+         }
+         try {
+           setSendingTestPush(true);
+           const result = await sendTestPushToSelf(user.id);
+           if (result.success) {
+             showAlert('Success', 'Test push request sent. Check your device notifications.', 'success');
+           } else {
+             showAlert(
+               'Test push failed',
+               result.error ||
+                 'Failed to send test push. Check that your device has a push token saved and the server has Firebase credentials.',
+               'error'
+             );
+           }
+         } catch (e: any) {
+           showAlert('Test push failed', e?.message || 'Unknown error', 'error');
+         } finally {
+           setSendingTestPush(false);
+         }
+       }}
+     >
+       <Text style={styles.testPushButtonText}>
+         {sendingTestPush ? 'Sending test push…' : 'Send test push to my device'}
+       </Text>
+     </TouchableOpacity>
    </View>
 
         {/* Reminder Preferences */}
@@ -1016,6 +1054,20 @@ const styles = StyleSheet.create({
   settingDescription: {
     fontSize: 14,
     color: Colors.light.textSecondary,
+  },
+  testPushButton: {
+    marginTop: 12,
+    marginHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.light.primary,
+  },
+  testPushButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
   },
   menuItem: {
     flexDirection: 'row',
