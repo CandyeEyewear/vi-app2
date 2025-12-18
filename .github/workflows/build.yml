@@ -1,0 +1,40 @@
+name: EAS Build
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers on tags like v1.0.2, v1.0.3, etc.
+
+jobs:
+  build:
+    name: Build Android Production AAB
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Android Production AAB
+        run: eas build --platform android --profile production --non-interactive --no-wait
+
+      - name: Comment on commit with build info
+        run: |
+          echo "🚀 Build started for ${{ github.ref_name }}"
+          echo "📱 Platform: Android"
+          echo "📦 Profile: Production (AAB)"
+          echo "🔗 Check build status: https://expo.dev/accounts/viadim/projects/vibe-volunteer-app/builds"
