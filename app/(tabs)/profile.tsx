@@ -185,10 +185,9 @@ export default function ProfileScreen() {
           membershipTier={user.membershipTier || 'free'}
           membershipStatus={user.membershipStatus || 'inactive'}
           isPartnerOrganization={user.is_partner_organization}
-          nameStyle={[styles.name, { color: colors.text }]}
-          badgeSize={20}
+          nameStyle={{ ...styles.name, color: colors.text }}
         />
-        <Text style={[styles.email, { color: colors.textSecondary }]}>{user.email}</Text>
+        <Text style={{ ...styles.email, color: colors.textSecondary }}>{user.email}</Text>
         {user.location && (
           <Text style={[styles.location, { color: colors.textSecondary }]}>{user.location}</Text>
         )}
@@ -216,11 +215,11 @@ export default function ProfileScreen() {
       )}
 
       {/* 🔥 STREAK BADGE - Shows if user has a streak */}
-      {user.currentStreak && user.currentStreak > 0 && (
+      {(user.currentStreak ?? 0) > 0 && (
         <View style={styles.streakSection}>
           <StreakBadge 
-            currentStreak={user.currentStreak}
-            longestStreak={user.longestStreak}
+            currentStreak={user.currentStreak ?? 0}
+            longestStreak={user.longestStreak ?? 0}
             size="medium"
           />
         </View>
@@ -280,7 +279,7 @@ export default function ProfileScreen() {
               end={{ x: 1, y: 1 }}
               style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
             >
-              <Text style={[styles.statValue, { color: colors.primary }]}>{user.totalHours}</Text>
+              <Text style={[styles.statValue, { color: colors.primary }]}>{user.totalHours ?? 0}</Text>
               <Text style={[styles.statLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>
                 Hours
               </Text>
@@ -292,7 +291,7 @@ export default function ProfileScreen() {
               end={{ x: 1, y: 1 }}
               style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
             >
-              <Text style={[styles.statValue, { color: colors.primary }]}>{user.activitiesCompleted}</Text>
+              <Text style={[styles.statValue, { color: colors.primary }]}>{user.activitiesCompleted ?? 0}</Text>
               <Text style={[styles.statLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>
                 {user.activitiesCompleted === 1 ? 'Activity' : 'Activities'}
               </Text>
@@ -304,7 +303,7 @@ export default function ProfileScreen() {
               end={{ x: 1, y: 1 }}
               style={[styles.statCard, surfaceShadow, { borderColor: colors.border }]}
             >
-              <Text style={[styles.statValue, { color: colors.primary }]}>{user.organizationsHelped}</Text>
+              <Text style={[styles.statValue, { color: colors.primary }]}>{user.organizationsHelped ?? 0}</Text>
               <Text style={[styles.statLabel, { color: colors.textSecondary }]} numberOfLines={1} adjustsFontSizeToFit>
                 Entity/Org
               </Text>
