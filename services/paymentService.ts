@@ -309,26 +309,54 @@ export async function createPayment(params: CreatePaymentParams): Promise<Paymen
 
     console.log('🔵 [PAYMENT] Response status:', response.status);
     console.log('🔵 [PAYMENT] Response ok:', response.ok);
+    console.log('🔵 [PAYMENT] Response headers:', Object.fromEntries(response.headers.entries()));
 
-    // Try to parse JSON, but handle errors gracefully
-    let data;
-    try {
-      const responseText = await response.text();
-      console.log('🔵 [PAYMENT] Response text:', responseText);
-      data = JSON.parse(responseText);
-    } catch (parseError) {
-      console.error('🔵 [PAYMENT] Failed to parse response as JSON:', parseError);
+    // Read response text once (can only be read once)
+    const responseText = await response.text();
+    console.log('🔵 [PAYMENT] Response text length:', responseText.length);
+    console.log('🔵 [PAYMENT] Response text preview (first 500 chars):', responseText.substring(0, 500));
+    
+    // Check if response is HTML (error page) instead of JSON
+    if (responseText.trim().startsWith('<!DOCTYPE') || responseText.trim().startsWith('<html')) {
+      console.error('🔴 [PAYMENT] Server returned HTML instead of JSON - likely an error page');
+      console.error('🔴 [PAYMENT] Full HTML response:', responseText);
       return {
         success: false,
-        error: `Invalid response from server (status: ${response.status}). Please check your API configuration.`,
+        error: `Invalid response from server. The server returned an HTML error page instead of JSON. This usually indicates a server configuration issue. Status: ${response.status}`,
+        details: Platform.OS === 'web' 
+          ? 'This error occurred on web. Check browser console for more details.'
+          : 'This error occurred in the mobile app. Check server logs for more details.',
+      };
+    }
+
+    // Try to parse JSON
+    let data;
+    try {
+      data = JSON.parse(responseText);
+      console.log('🔵 [PAYMENT] Parsed JSON data:', data);
+    } catch (parseError) {
+      console.error('🔴 [PAYMENT] Failed to parse response as JSON:', parseError);
+      console.error('🔴 [PAYMENT] Response that failed to parse (first 1000 chars):', responseText.substring(0, 1000));
+      return {
+        success: false,
+        error: `Invalid response from server (status: ${response.status}). The response could not be parsed as JSON.`,
+        details: Platform.OS === 'web'
+          ? 'This may indicate a server error or network issue. Check the browser console for the full response.'
+          : 'This may indicate a server error or network issue. The server may be returning an error page instead of JSON.',
       };
     }
 
     if (!response.ok) {
-      console.error('🔵 [PAYMENT] API error response:', data);
+      console.error('🔴 [PAYMENT] API error response:', data);
+      // Log debug info if available
+      if (data.debug) {
+        console.error('🔴 [PAYMENT] Debug info from server:', JSON.stringify(data.debug, null, 2));
+      }
       return {
         success: false,
         error: data.error || data.message || `Failed to create payment (status: ${response.status})`,
+        details: data.details || data.debug || undefined,
+        debug: data.debug, // Include debug info in response
       };
     }
 

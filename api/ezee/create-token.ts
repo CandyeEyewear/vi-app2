@@ -79,6 +79,14 @@ export default async function handler(req: any, res: any) {
  }
 
  try {
+   // Log request details for debugging
+   const userAgent = req.headers['user-agent'] || 'unknown';
+   console.log('🔵 [CREATE-TOKEN] Request received:', {
+     userAgent,
+     hasBody: !!req.body,
+     bodyKeys: req.body ? Object.keys(req.body) : [],
+   });
+
    const {
      amount,
      orderId,
@@ -91,6 +99,13 @@ export default async function handler(req: any, res: any) {
      platform,  // 'web' or 'app'
      returnPath,  // Path to redirect to after successful payment
     } = req.body;
+
+   // Log platform info after destructuring
+   const isMobileApp = platform === 'app';
+   console.log('🔵 [CREATE-TOKEN] Platform info:', {
+     platform,
+     isMobileApp,
+   });
 
    // Validate required fields
    if (!amount || !orderId || !orderType || !customerEmail) {
@@ -124,19 +139,28 @@ export default async function handler(req: any, res: any) {
    // Build return URL with returnPath if provided
    // NOTE: eZeePayments requires HTTPS URLs, so we always use HTTPS baseUrl even for app platform
    // The app can handle deep link redirects on the success page itself
+   // CRITICAL: Never add platform=app to URLs sent to eZeePayments - it causes rejection!
+   // We'll detect mobile app in the success page using User-Agent or other methods
    const returnParams = new URLSearchParams({ orderId: uniqueOrderId });
    if (returnPath) {
      returnParams.append('returnPath', returnPath);
    }
-   if (isApp) {
-     returnParams.append('platform', 'app'); // Add platform flag for app-specific handling
-   }
+   // DO NOT add platform=app - eZeePayments rejects URLs with this parameter
    const returnUrl = `${baseUrl}/payment/success?${returnParams.toString()}`;
+   
    const cancelParams = new URLSearchParams({ orderId: uniqueOrderId });
-   if (isApp) {
-     cancelParams.append('platform', 'app');
+   if (returnPath) {
+     cancelParams.append('returnPath', returnPath);
    }
+   // DO NOT add platform=app - eZeePayments rejects URLs with this parameter
    const cancelUrl = `${baseUrl}/payment/cancel?${cancelParams.toString()}`;
+   
+   // Verify URLs don't contain platform=app (safety check)
+   if (returnUrl.includes('platform=app') || cancelUrl.includes('platform=app')) {
+     console.error('🔴 [CREATE-TOKEN] ERROR: URLs still contain platform=app! This will cause eZeePayments to reject the request.');
+     console.error('🔴 [CREATE-TOKEN] returnUrl:', returnUrl);
+     console.error('🔴 [CREATE-TOKEN] cancelUrl:', cancelUrl);
+   }
 
    // Debug logging - log the URLs being sent
    console.log('🔵 [CREATE-TOKEN] URL Debug:', {
@@ -172,36 +196,177 @@ export default async function handler(req: any, res: any) {
 
    // Create token with eZeePayments
     // licence_key and site MUST be in headers, not body
-   const tokenResponse = await fetch(`${EZEE_API_URL}/v1/custom_token/`, {
+   console.log('🔵 [CREATE-TOKEN] Calling eZeePayments API:', {
+     url: `${EZEE_API_URL}/v1/custom_token/`,
+     hasLicenceKey: !!EZEE_LICENCE_KEY,
+     hasSite: !!EZEE_SITE,
+     formDataKeys: Array.from(formData.keys()),
+     platform: platform || 'unknown',
+     isMobileApp,
+     returnUrl,
+     cancelUrl,
+   });
+
+   // Try without custom User-Agent first (eZeePayments might reject custom User-Agents)
+   // If that fails, we can try with a standard browser User-Agent
+   const fetchOptions: RequestInit = {
      method: 'POST',
      headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'licence_key': EZEE_LICENCE_KEY,
-        'site': EZEE_SITE,
+        'licence_key': EZEE_LICENCE_KEY!,
+        'site': EZEE_SITE!,
+        // Don't send custom User-Agent - eZeePayments might reject it
+        // 'User-Agent': `VIbe-App/${platform === 'app' ? 'mobile' : 'web'}`,
       },
       body: formData.toString(),
-    });
+    };
+
+   console.log('🔵 [CREATE-TOKEN] Fetch options:', {
+     url: `${EZEE_API_URL}/v1/custom_token/`,
+     method: fetchOptions.method,
+     hasBody: !!fetchOptions.body,
+     bodyLength: fetchOptions.body?.toString().length,
+     headers: Object.keys(fetchOptions.headers || {}),
+   });
+
+   let tokenResponse: Response;
+   try {
+     tokenResponse = await fetch(`${EZEE_API_URL}/v1/custom_token/`, fetchOptions);
+   } catch (fetchError: any) {
+     console.error('🔴 [CREATE-TOKEN] FETCH ERROR (network/connection issue):', {
+       error: fetchError?.message,
+       name: fetchError?.name,
+       stack: fetchError?.stack,
+       url: `${EZEE_API_URL}/v1/custom_token/`,
+     });
+     return res.status(500).json({
+       error: 'Failed to connect to payment provider',
+       details: fetchError?.message || 'Network error when calling eZeePayments API',
+       debug: process.env.NODE_ENV === 'development' ? {
+         errorMessage: fetchError?.message,
+         apiUrl: `${EZEE_API_URL}/v1/custom_token/`,
+       } : undefined,
+     });
+   }
 
     // Get raw response text first
     const responseText = await tokenResponse.text();
+    const responseHeaders = Object.fromEntries(tokenResponse.headers.entries());
+    
+    console.log('🔵 [CREATE-TOKEN] eZeePayments response:', {
+      status: tokenResponse.status,
+      statusText: tokenResponse.statusText,
+      headers: responseHeaders,
+      responseLength: responseText.length,
+      responsePreview: responseText.substring(0, 500),
+      isAppRequest: isMobileApp,
+      platform: platform,
+    });
+
+    // Check for empty response
+    if (!responseText || responseText.trim().length === 0) {
+      console.error('🔴 [CREATE-TOKEN] eZeePayments returned EMPTY response:', {
+        status: tokenResponse.status,
+        statusText: tokenResponse.statusText,
+        headers: responseHeaders,
+        isAppRequest: isMobileApp,
+        platform: platform,
+        returnUrl,
+        cancelUrl,
+        formDataSent: {
+          amount: formData.get('amount'),
+          currency: formData.get('currency'),
+          order_id: formData.get('order_id'),
+          return_url: formData.get('return_url'),
+          cancel_url: formData.get('cancel_url'),
+        },
+      });
+      
+      // Return the actual status code and details - this is critical for debugging
+      // Return detailed error with HTTP status - this is critical for debugging
+      const errorResponse: any = {
+        error: 'Invalid response from payment provider. The payment service returned an empty response.',
+        details: `HTTP ${tokenResponse.status}: ${tokenResponse.statusText}. This may indicate an authentication issue, invalid request parameters, or a problem with the eZeePayments service.`,
+        httpStatus: tokenResponse.status,
+        httpStatusText: tokenResponse.statusText,
+        rawResponse: '', // Explicitly empty
+      };
+      
+      // Always include debug info in error response (not just in development)
+      // This helps diagnose the issue without needing server logs
+      errorResponse.debug = {
+        status: tokenResponse.status,
+        statusText: tokenResponse.statusText,
+        headers: responseHeaders,
+        isAppRequest: isMobileApp,
+        platform: platform,
+        returnUrl,
+        cancelUrl,
+        apiUrl: `${EZEE_API_URL}/v1/custom_token/`,
+        formDataSent: {
+          hasAmount: !!formData.get('amount'),
+          hasCurrency: !!formData.get('currency'),
+          hasOrderId: !!formData.get('order_id'),
+          hasReturnUrl: !!formData.get('return_url'),
+          hasCancelUrl: !!formData.get('cancel_url'),
+          hasPostBackUrl: !!formData.get('post_back_url'),
+          returnUrlValue: formData.get('return_url'),
+          cancelUrlValue: formData.get('cancel_url'),
+        },
+      };
+      
+      console.error('🔴 [CREATE-TOKEN] Returning error response:', JSON.stringify(errorResponse, null, 2));
+      return res.status(500).json(errorResponse);
+    }
+
+    // Check if response is HTML (error page) instead of JSON
+    if (responseText.trim().startsWith('<!DOCTYPE') || responseText.trim().startsWith('<html')) {
+      console.error('🔴 [CREATE-TOKEN] eZeePayments returned HTML instead of JSON - likely an error page');
+      return res.status(500).json({ 
+        error: 'Invalid response from payment provider. The payment service returned an error page instead of a valid response.',
+        details: 'This usually indicates a configuration issue with eZeePayments credentials or API endpoint.',
+        responsePreview: responseText.substring(0, 1000),
+      });
+    }
 
     let tokenData;
     try {
       tokenData = JSON.parse(responseText);
     } catch (jsonError) {
-      console.error('FAILED TO PARSE JSON:', jsonError);
+      console.error('🔴 [CREATE-TOKEN] FAILED TO PARSE JSON:', {
+        error: jsonError,
+        responseStatus: tokenResponse.status,
+        responseText: responseText.substring(0, 1000),
+        isAppRequest: isMobileApp,
+      });
       return res.status(500).json({ 
-        error: 'Invalid response from payment provider',
-        rawResponse: responseText 
+        error: 'Invalid response from payment provider. The response could not be parsed as JSON.',
+        details: tokenResponse.status >= 400 
+          ? `HTTP ${tokenResponse.status}: ${tokenResponse.statusText}`
+          : 'The payment service may be experiencing issues.',
+        responsePreview: responseText.substring(0, 1000),
+        rawResponse: responseText.length > 0 ? responseText : '(empty)',
       });
     }
 
     // Check response - note the "result" wrapper
     if (!tokenData.result || tokenData.result.status !== 1) {
-     console.error('TOKEN CREATION FAILED:', tokenData.result?.message);
+     console.error('🔴 [CREATE-TOKEN] TOKEN CREATION FAILED:', {
+       fullResponse: tokenData,
+       result: tokenData.result,
+       message: tokenData.result?.message,
+       status: tokenData.result?.status,
+     });
       return res.status(500).json({ 
         error: tokenData.result?.message || 'Failed to create payment token',
-        details: tokenData 
+        details: tokenData.result || tokenData,
+        debug: process.env.NODE_ENV === 'development' ? {
+          apiUrl: `${EZEE_API_URL}/v1/custom_token/`,
+          hasCredentials: {
+            licenceKey: !!EZEE_LICENCE_KEY,
+            site: !!EZEE_SITE,
+          },
+        } : undefined,
       });
     }
 
@@ -292,7 +457,19 @@ export default async function handler(req: any, res: any) {
       },
     });
   } catch (error: any) {
-   console.error('CREATE TOKEN ERROR:', error?.message);
-    return res.status(500).json({ error: 'Internal server error' });
+   console.error('🔴 [CREATE-TOKEN] UNEXPECTED ERROR:', {
+     error: error?.message,
+     stack: error?.stack,
+     name: error?.name,
+     type: typeof error,
+   });
+    return res.status(500).json({ 
+      error: 'Internal server error',
+      details: error?.message || 'An unexpected error occurred while creating the payment token.',
+      debug: process.env.NODE_ENV === 'development' ? {
+        errorMessage: error?.message,
+        errorName: error?.name,
+      } : undefined,
+    });
  }
 }

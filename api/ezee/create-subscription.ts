@@ -172,32 +172,79 @@ export default async function handler(req: any, res: any) {
     }
     subscriptionFormData.append('post_back_url', postBackUrl);
 
+    console.log('🔵 [CREATE-SUBSCRIPTION] Calling eZeePayments API:', {
+      url: `${EZEE_API_URL}/v1.1/subscription/create/`,
+      hasLicenceKey: !!EZEE_LICENCE_KEY,
+      hasSite: !!EZEE_SITE,
+      formDataKeys: Array.from(subscriptionFormData.keys()),
+    });
+
     const subscriptionResponse = await fetch(`${EZEE_API_URL}/v1.1/subscription/create/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'licence_key': EZEE_LICENCE_KEY,
-        'site': EZEE_SITE,
+        'licence_key': EZEE_LICENCE_KEY!,
+        'site': EZEE_SITE!,
       },
       body: subscriptionFormData.toString(),
     });
 
+    // Get raw response text first
+    const responseText = await subscriptionResponse.text();
+    console.log('🔵 [CREATE-SUBSCRIPTION] eZeePayments response:', {
+      status: subscriptionResponse.status,
+      statusText: subscriptionResponse.statusText,
+      headers: Object.fromEntries(subscriptionResponse.headers.entries()),
+      responseLength: responseText.length,
+      responsePreview: responseText.substring(0, 500),
+    });
+
+    // Check if response is HTML (error page) instead of JSON
+    if (responseText.trim().startsWith('<!DOCTYPE') || responseText.trim().startsWith('<html')) {
+      console.error('🔴 [CREATE-SUBSCRIPTION] eZeePayments returned HTML instead of JSON - likely an error page');
+      return res.status(500).json({ 
+        error: 'Invalid response from payment provider. The payment service returned an error page instead of a valid response.',
+        details: 'This usually indicates a configuration issue with eZeePayments credentials or API endpoint.',
+        responsePreview: responseText.substring(0, 1000),
+      });
+    }
+
     let subscriptionData;
     try {
-      subscriptionData = await subscriptionResponse.json();
+      subscriptionData = JSON.parse(responseText);
     } catch (jsonError) {
-      console.error('Failed to parse eZeePayments subscription response:', jsonError);
-      const textResponse = await subscriptionResponse.text();
-      console.error('Response text:', textResponse);
-      return res.status(500).json({ error: 'Invalid response from payment provider' });
+      console.error('🔴 [CREATE-SUBSCRIPTION] FAILED TO PARSE JSON:', {
+        error: jsonError,
+        responseStatus: subscriptionResponse.status,
+        responseText: responseText.substring(0, 1000),
+      });
+      return res.status(500).json({ 
+        error: 'Invalid response from payment provider. The response could not be parsed as JSON.',
+        details: subscriptionResponse.status >= 400 
+          ? `HTTP ${subscriptionResponse.status}: ${subscriptionResponse.statusText}`
+          : 'The payment service may be experiencing issues.',
+        responsePreview: responseText.substring(0, 1000),
+      });
     }
 
     // Check response - note the "result" wrapper
     if (!subscriptionData.result || subscriptionData.result.status !== 1) {
-      console.error('eZeePayments subscription error:', subscriptionData);
+      console.error('🔴 [CREATE-SUBSCRIPTION] SUBSCRIPTION CREATION FAILED:', {
+        fullResponse: subscriptionData,
+        result: subscriptionData.result,
+        message: subscriptionData.result?.message,
+        status: subscriptionData.result?.status,
+      });
       return res.status(500).json({ 
         error: subscriptionData.result?.message || 'Failed to create subscription',
-        details: subscriptionData 
+        details: subscriptionData.result || subscriptionData,
+        debug: process.env.NODE_ENV === 'development' ? {
+          apiUrl: `${EZEE_API_URL}/v1.1/subscription/create/`,
+          hasCredentials: {
+            licenceKey: !!EZEE_LICENCE_KEY,
+            site: !!EZEE_SITE,
+          },
+        } : undefined,
       });
     }
 

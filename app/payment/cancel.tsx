@@ -1,14 +1,47 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { XCircle } from 'lucide-react-native';
 import { useColorScheme } from 'react-native';
 import { Colors } from '../../constants/colors';
 
 export default function PaymentCancelScreen() {
-  const { orderId } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const orderId = Array.isArray(params.orderId) ? params.orderId[0] : params.orderId;
+  const returnPathRaw = params.returnPath || params.return_path;
+  const platformParam = params.platform;
+  const returnPath = Array.isArray(returnPathRaw) ? returnPathRaw[0] : returnPathRaw;
+  const [redirectAttempted, setRedirectAttempted] = useState(false);
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
+
+  useEffect(() => {
+    // If this is opened in a mobile browser (not in the app), try to redirect to the app
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(window.navigator.userAgent);
+      const isInApp = window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+      
+      // If on mobile browser (not in app), try to open the app
+      if (isMobile && !isInApp && !redirectAttempted) {
+        setRedirectAttempted(true);
+        const deepLinkParams = new URLSearchParams();
+        if (orderId) deepLinkParams.append('orderId', orderId);
+        if (returnPath) deepLinkParams.append('returnPath', returnPath);
+        
+        const deepLink = `vibe://payment/cancel?${deepLinkParams.toString()}`;
+        console.log('[PAYMENT CANCEL] Attempting to redirect to app:', deepLink);
+        
+        // Try to open the app
+        window.location.href = deepLink;
+        
+        // Fallback: if app doesn't open within 2 seconds, show the page
+        setTimeout(() => {
+          // If we're still here, the app didn't open, so continue with normal flow
+          console.log('[PAYMENT CANCEL] App redirect failed, showing web page');
+        }, 2000);
+      }
+    }
+  }, [orderId, returnPath, redirectAttempted]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -25,7 +58,10 @@ export default function PaymentCancelScreen() {
         )}
         <TouchableOpacity 
           style={[styles.button, { backgroundColor: '#38B6FF' }]}
-          onPress={() => router.replace('/feed')}
+          onPress={() => {
+            const redirectPath = returnPath && typeof returnPath === 'string' ? returnPath : '/feed';
+            router.replace(redirectPath);
+          }}
           activeOpacity={0.8}
         >
           <Text style={styles.buttonText}>Return Home</Text>

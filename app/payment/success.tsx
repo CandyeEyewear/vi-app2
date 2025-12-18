@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { CheckCircle } from 'lucide-react-native';
 import { useColorScheme } from 'react-native';
@@ -9,14 +9,43 @@ export default function PaymentSuccessScreen() {
   const params = useLocalSearchParams();
   const orderId = Array.isArray(params.orderId) ? params.orderId[0] : params.orderId;
   const returnPathRaw = params.returnPath || params.return_path;
+  const platformParam = params.platform;
   // Handle both string and array formats from useLocalSearchParams
   const returnPath = Array.isArray(returnPathRaw) ? returnPathRaw[0] : returnPathRaw;
+  const isAppPlatform = platformParam === 'app' || (!Platform.OS || Platform.OS !== 'web');
   
   const [countdown, setCountdown] = useState(5);
+  const [redirectAttempted, setRedirectAttempted] = useState(false);
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
 
   useEffect(() => {
+    // If this is opened in a mobile browser (not in the app), try to redirect to the app
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(window.navigator.userAgent);
+      const isInApp = window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+      
+      // If on mobile browser (not in app), try to open the app
+      if (isMobile && !isInApp && !redirectAttempted) {
+        setRedirectAttempted(true);
+        const deepLinkParams = new URLSearchParams();
+        if (orderId) deepLinkParams.append('orderId', orderId);
+        if (returnPath) deepLinkParams.append('returnPath', returnPath);
+        
+        const deepLink = `vibe://payment/success?${deepLinkParams.toString()}`;
+        console.log('[PAYMENT SUCCESS] Attempting to redirect to app:', deepLink);
+        
+        // Try to open the app
+        window.location.href = deepLink;
+        
+        // Fallback: if app doesn't open within 2 seconds, show the page
+        setTimeout(() => {
+          // If we're still here, the app didn't open, so continue with normal flow
+          console.log('[PAYMENT SUCCESS] App redirect failed, showing web page');
+        }, 2000);
+      }
+    }
+
     const timer = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
@@ -34,7 +63,7 @@ export default function PaymentSuccessScreen() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [returnPath, router]);
+  }, [returnPath, router, orderId, redirectAttempted]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
