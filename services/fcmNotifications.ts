@@ -18,6 +18,7 @@ if (Platform.OS !== 'web') {
 let handlersInitialized = false;
 let messageUnsubscribe: (() => void) | null = null;
 let openedAppUnsubscribe: (() => void) | null = null;
+let tokenRefreshUnsubscribe: (() => void) | null = null;
 
 // Request FCM permission and get token
 export async function registerForFCMNotifications(): Promise<string | null> {
@@ -193,8 +194,45 @@ export function cleanupFCMHandlers() {
     openedAppUnsubscribe();
     openedAppUnsubscribe = null;
   }
+  if (tokenRefreshUnsubscribe) {
+    tokenRefreshUnsubscribe();
+    tokenRefreshUnsubscribe = null;
+  }
   handlersInitialized = false;
   console.log('[FCM] 🧹 Cleaned up FCM handlers');
+}
+
+/**
+ * Subscribe to token refresh events.
+ * Use this to keep the server-side stored token up to date.
+ */
+export function subscribeToFCMTokenRefresh(onToken: (token: string) => void): (() => void) | null {
+  if (Platform.OS === 'web' || !messaging) {
+    return null;
+  }
+
+  try {
+    // Ensure only one active subscription (helps with dev/hot reload)
+    if (tokenRefreshUnsubscribe) {
+      tokenRefreshUnsubscribe();
+      tokenRefreshUnsubscribe = null;
+    }
+
+    tokenRefreshUnsubscribe = messaging().onTokenRefresh((token: string) => {
+      console.log('[FCM] 🔄 Token refreshed:', token ? token.substring(0, 20) + '...' : 'null');
+      if (token) onToken(token);
+    });
+
+    return () => {
+      if (tokenRefreshUnsubscribe) {
+        tokenRefreshUnsubscribe();
+        tokenRefreshUnsubscribe = null;
+      }
+    };
+  } catch (e) {
+    console.warn('[FCM] ⚠️ Failed to subscribe to token refresh');
+    return null;
+  }
 }
 
 // ✅ GUARD: Only set up background handler on mobile
