@@ -185,7 +185,7 @@ export default function ProfileScreen() {
           membershipTier={user.membershipTier || 'free'}
           membershipStatus={user.membershipStatus || 'inactive'}
           isPartnerOrganization={user.is_partner_organization}
-          style={[styles.name, { color: colors.text }]}
+          nameStyle={[styles.name, { color: colors.text }]}
           badgeSize={20}
         />
         <Text style={[styles.email, { color: colors.textSecondary }]}>{user.email}</Text>

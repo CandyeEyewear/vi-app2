@@ -20,6 +20,7 @@ import {
   Alert,
   Platform,
   useWindowDimensions,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -682,7 +683,11 @@ const renderTabs = () => (
         transparent={true}
         onRequestClose={() => setShowCreateModal(false)}
       >
-        <View style={styles.modalContainer}>
+        <KeyboardAvoidingView
+          style={styles.modalContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'padding' : undefined}
+          keyboardVerticalOffset={0}
+        >
           <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
             {/* HEADER - Fixed at top, NOT inside ScrollView */}
             <View
@@ -866,7 +871,7 @@ const renderTabs = () => (
               />
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Custom Alert */}
@@ -994,6 +999,8 @@ headerRight: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     flexShrink: 0,
+    zIndex: 10,
+    position: 'relative',
   },
   modalCancel: {
     fontSize: 16,
