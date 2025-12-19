@@ -47,6 +47,9 @@ export default {
         backgroundColor: "#2196F3"
       },
       permissions: [
+        // Android 13+ runtime permission required for notifications.
+        // NOTE: Defining `android.permissions` overrides Expo defaults, so we must include this explicitly.
+        "android.permission.POST_NOTIFICATIONS",
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",

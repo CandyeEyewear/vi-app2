@@ -10,7 +10,10 @@ if (Platform.OS !== 'web') {
   try {
     messaging = require('@react-native-firebase/messaging').default;
   } catch (error) {
-    console.warn('[FCM] Firebase messaging not available on this platform');
+    // Common causes:
+    // - Running in Expo Go (native Firebase modules are not available)
+    // - Missing/incorrect native Firebase config (e.g. google-services.json not applied in the build)
+    console.warn('[FCM] Firebase messaging not available on this platform:', error);
   }
 }
 
