@@ -277,6 +277,7 @@ export default function ConversationScreen() {
           filter: `conversation_id=eq.${id}`,
         },
         (payload) => {
+          // Update the message (including if it was deleted - we'll show "This message was deleted")
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === payload.new.id
@@ -290,6 +291,11 @@ export default function ConversationScreen() {
                 : msg
             )
           );
+          
+          // If message was deleted, refresh conversations to update the last message in chat list
+          if (payload.new.deleted_at) {
+            refreshConversations();
+          }
         }
       )
       .subscribe();

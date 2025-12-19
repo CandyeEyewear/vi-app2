@@ -3,7 +3,7 @@
  * Conversational inbox with search, filters, and rich previews
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,11 +14,13 @@ import {
   RefreshControl,
   useColorScheme,
   Platform,
+  Alert,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { Search, Plus, X, Inbox } from 'lucide-react-native';
+import { Swipeable } from 'react-native-gesture-handler';
+import { Search, Plus, X, Inbox, Trash2 } from 'lucide-react-native';
 
 import { Colors } from '../../constants/colors';
 import { useMessaging } from '../../contexts/MessagingContext';
@@ -220,11 +222,12 @@ export default function MessagesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { conversations, loading, refreshConversations, isUserOnline } = useMessaging();
+  const { conversations, loading, refreshConversations, isUserOnline, deleteConversation } = useMessaging();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'unread'>('all');
   const [refreshing, setRefreshing] = useState(false);
+  const swipeableRefs = useRef<Map<string, Swipeable | null>>(new Map());
 
   useFocusEffect(
     useCallback(() => {
@@ -263,16 +266,67 @@ export default function MessagesScreen() {
 
   const showSkeleton = loading && conversations.length === 0;
 
+  const handleDeleteConversation = useCallback(async (conversationId: string) => {
+    Alert.alert(
+      'Delete Conversation',
+      'Are you sure you want to delete this conversation? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const result = await deleteConversation(conversationId);
+            if (!result.success) {
+              Alert.alert('Error', result.error || 'Failed to delete conversation');
+            }
+            // Close swipeable if open
+            swipeableRefs.current.get(conversationId)?.close();
+          },
+        },
+      ]
+    );
+  }, [deleteConversation]);
+
+  const renderRightActions = useCallback((conversationId: string) => {
+    return (
+      <View style={styles.rightAction}>
+        <Pressable
+          style={[styles.deleteButton, { backgroundColor: colors.error || '#FF3B30' }]}
+          onPress={() => handleDeleteConversation(conversationId)}
+        >
+          <Trash2 size={20} color="#FFFFFF" />
+          <Text style={styles.deleteButtonText}>Delete</Text>
+        </Pressable>
+      </View>
+    );
+  }, [colors, handleDeleteConversation]);
+
   const renderConversation = ({ item }: { item: Conversation }) => (
-    <ConversationRow
-      conversation={item}
-      colors={colors}
-      currentUserId={user?.id}
-      isUserOnline={isUserOnline}
-      onPress={(conversationId) =>
-        router.push({ pathname: '/conversation/[id]', params: { id: conversationId } })
-      }
-    />
+    <Swipeable
+      ref={(ref) => {
+        if (ref) {
+          swipeableRefs.current.set(item.id, ref);
+        } else {
+          swipeableRefs.current.delete(item.id);
+        }
+      }}
+      renderRightActions={() => renderRightActions(item.id)}
+      rightThreshold={40}
+      overshootRight={false}
+    >
+      <ConversationRow
+        conversation={item}
+        colors={colors}
+        currentUserId={user?.id}
+        isUserOnline={isUserOnline}
+        onPress={(conversationId) => {
+          // Close any open swipeables before navigating
+          swipeableRefs.current.forEach((ref) => ref.close());
+          router.push({ pathname: '/conversation/[id]', params: { id: conversationId } });
+        }}
+      />
+    </Swipeable>
   );
 
   return (
@@ -595,5 +649,24 @@ const styles = StyleSheet.create({
   textSkeleton: {
     height: 14,
     borderRadius: 7,
+  },
+  rightAction: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    paddingRight: 16,
+  },
+  deleteButton: {
+    width: 100,
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 20,
+    gap: 4,
+  },
+  deleteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

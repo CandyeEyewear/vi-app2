@@ -292,11 +292,12 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
             updatedAt: u.updated_at,
           })) || [];
 
-          // Get last message
+          // Get last message (excluding deleted messages)
           const { data: messagesData } = await supabase
             .from('messages')
             .select('*')
             .eq('conversation_id', conv.id)
+            .is('deleted_at', null) // Only get non-deleted messages
             .order('created_at', { ascending: false })
             .limit(1);
 
