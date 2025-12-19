@@ -54,6 +54,7 @@ import { formatCurrency } from '../../../services/causesService';
 import { useAuth } from '../../../contexts/AuthContext';
 import CustomAlert from '../../../components/CustomAlert';
 import { ShimmerSkeleton } from '../../../components/ShimmerSkeleton';
+import AssignmentManager from '../../../components/AssignmentManager';
 
 // Responsive System
 const getResponsiveValues = () => {
@@ -507,6 +508,15 @@ function EventItem({ event, colors, onView, onEdit, onDelete, onRegistrations, o
 
       {/* Summary Card */}
       <EventSummaryCard event={event} colors={colors} />
+
+      {/* Assignment Manager */}
+      <View style={styles.assignmentSection}>
+        <AssignmentManager
+          type="event"
+          itemId={event.id}
+          itemTitle={event.title}
+        />
+      </View>
 
       {/* Actions Dropdown */}
       {showActions && (
@@ -1174,5 +1184,9 @@ const styles = StyleSheet.create({
   },
   noRegistrationsText: {
     fontSize: 13,
+  },
+  assignmentSection: {
+    marginTop: 12,
+    marginBottom: 8,
   },
 });

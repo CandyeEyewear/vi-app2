@@ -27,6 +27,7 @@ import { useMessaging } from '../../contexts/MessagingContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { EmptyState } from '../../components/EmptyState';
 import { UserAvatar, UserNameWithBadge, OnlineStatusDot, MessageStatus } from '../../components';
+import CustomAlert from '../../components/CustomAlert';
 import type { Conversation } from '../../types';
 
 const FILTERS: { id: 'all' | 'unread'; label: string }[] = [
@@ -228,6 +229,8 @@ export default function MessagesScreen() {
   const [activeFilter, setActiveFilter] = useState<'all' | 'unread'>('all');
   const [refreshing, setRefreshing] = useState(false);
   const swipeableRefs = useRef<Map<string, Swipeable | null>>(new Map());
+  const [deleteAlertVisible, setDeleteAlertVisible] = useState(false);
+  const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -266,27 +269,26 @@ export default function MessagesScreen() {
 
   const showSkeleton = loading && conversations.length === 0;
 
-  const handleDeleteConversation = useCallback(async (conversationId: string) => {
-    Alert.alert(
-      'Delete Conversation',
-      'Are you sure you want to delete this conversation? This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const result = await deleteConversation(conversationId);
-            if (!result.success) {
-              Alert.alert('Error', result.error || 'Failed to delete conversation');
-            }
-            // Close swipeable if open
-            swipeableRefs.current.get(conversationId)?.close();
-          },
-        },
-      ]
-    );
-  }, [deleteConversation]);
+  const handleDeleteConversation = useCallback((conversationId: string) => {
+    setConversationToDelete(conversationId);
+    setDeleteAlertVisible(true);
+    // Close swipeable if open
+    swipeableRefs.current.get(conversationId)?.close();
+  }, []);
+
+  const confirmDeleteConversation = useCallback(async () => {
+    if (!conversationToDelete) return;
+
+    setDeleteAlertVisible(false);
+    const conversationId = conversationToDelete;
+    setConversationToDelete(null);
+
+    const result = await deleteConversation(conversationId);
+    if (!result.success) {
+      // Show error alert if delete fails
+      Alert.alert('Error', result.error || 'Failed to delete conversation');
+    }
+  }, [conversationToDelete, deleteConversation]);
 
   const renderRightActions = useCallback((conversationId: string) => {
     return (
@@ -465,6 +467,20 @@ export default function MessagesScreen() {
             }
           />
         )}
+
+        {/* Delete Confirmation Alert */}
+        <CustomAlert
+          visible={deleteAlertVisible}
+          type="error"
+          title="Delete Conversation"
+          message="Are you sure you want to delete this conversation? This action cannot be undone."
+          showCancel
+          onClose={() => {
+            setDeleteAlertVisible(false);
+            setConversationToDelete(null);
+          }}
+          onConfirm={confirmDeleteConversation}
+        />
       </View>
     </>
   );
