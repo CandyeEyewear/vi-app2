@@ -337,7 +337,7 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
         if (embedVideos.length === 0 && embedImages.length === 0) return null;
 
         return (
-          <View style={styles.mediaContainer}>
+          <View style={[styles.mediaContainer, isAnnouncement && styles.announcementMediaContainer]}>
             {embedVideos.map((url, index) => (
               <VideoPlayer
                 key={`embed-video-${index}`}
@@ -397,7 +397,7 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
 
       {/* Media - Videos and Images */}
       {!post.sharedPost && !post.opportunity && !post.cause && !post.event && post.mediaUrls && post.mediaUrls.length > 0 && (
-        <View style={styles.mediaContainer}>
+        <View style={[styles.mediaContainer, isAnnouncement && styles.announcementMediaContainer]}>
           {post.mediaUrls.map((url, index) => {
             const mediaType = post.mediaTypes?.[index] || 'image';
             
@@ -1053,6 +1053,9 @@ const styles = StyleSheet.create({
   },
   mediaContainer: {
     marginVertical: 8,
+  },
+  announcementMediaContainer: {
+    paddingHorizontal: 16,
   },
   actionIconsRow: {
     flexDirection: 'row',
