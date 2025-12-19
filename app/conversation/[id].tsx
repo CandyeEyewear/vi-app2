@@ -61,7 +61,7 @@ export default function ConversationScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const { conversations, sendMessage, markAsRead, markMessageDelivered, deleteMessage } = useMessaging();
+  const { conversations, sendMessage, markAsRead, markMessageDelivered, deleteMessage, refreshConversations } = useMessaging();
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -827,7 +827,25 @@ export default function ConversationScreen() {
           const result = await deleteMessage(message.id);
           if (!result.success) {
             Alert.alert('Error', result.error || 'Failed to delete message');
+            return;
           }
+
+          // Optimistic UI: update local list immediately (realtime UPDATE can be partial/missing fields)
+          const deletedAt = new Date().toISOString();
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === message.id
+                ? {
+                    ...m,
+                    deletedAt,
+                    text: 'This message was deleted',
+                  }
+                : m
+            )
+          );
+
+          // Ensure inbox preview updates even if you navigate back quickly
+          refreshConversations();
         },
       },
     ]);

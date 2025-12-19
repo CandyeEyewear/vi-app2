@@ -58,35 +58,61 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user) return;
 
-    // Subscribe to new messages
+    // Subscribe to message changes that can affect previews/unreads (INSERT/UPDATE/DELETE)
+    // Note: UPDATE is required for "soft delete" (deleted_at/text change) to reflect in the inbox.
     const messageSubscription = supabase
       .channel('messages-changes')
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT', // Only new messages affect conversation previews/unreads
-          schema: 'public',
-          table: 'messages',
-        },
-        () => {
-          // Simply reload conversations when any message changes
-          loadConversations();
-        }
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        () => loadConversations()
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages' },
+        () => loadConversations()
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'messages' },
+        () => loadConversations()
       )
       .subscribe();
 
-    // Subscribe to conversation changes
+    // Subscribe to conversation changes (including deletes so removed/left chats disappear)
     const conversationSubscription = supabase
       .channel('conversations-changes')
       .on(
         'postgres_changes',
         {
-          event: 'UPDATE', // Creation handled by messages; updates change ordering
+          event: 'INSERT',
+          schema: 'public',
+          table: 'conversations',
+        },
+        () => {
+          loadConversations();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE', // Updates change ordering/participants
           schema: 'public',
           table: 'conversations',
         },
         () => {
           // Reload conversations when any conversation changes
+          loadConversations();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'conversations',
+        },
+        () => {
           loadConversations();
         }
       )
@@ -223,6 +249,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
 
     try {
+      setLoading(true);
       // Fetch conversations where user is a participant
       const { data: conversationsData, error: conversationsError } = await supabase
         .from('conversations')
@@ -683,21 +710,36 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      // Delete all messages in the conversation first
-      const { error: messagesError } = await supabase
-        .from('messages')
-        .delete()
-        .eq('conversation_id', conversationId);
-
-      if (messagesError) throw messagesError;
-
-      // Delete the conversation
-      const { error: convError } = await supabase
+      // "Delete" for current user by leaving the conversation (removes you from participants)
+      // This avoids RLS issues where you may not be allowed to delete messages you didn't send.
+      const { data: conv, error: convFetchError } = await supabase
         .from('conversations')
-        .delete()
-        .eq('id', conversationId);
+        .select('id, participants')
+        .eq('id', conversationId)
+        .single();
 
-      if (convError) throw convError;
+      if (convFetchError) throw convFetchError;
+
+      const nextParticipants: string[] = (conv.participants ?? []).filter((id: string) => id !== user.id);
+
+      if (nextParticipants.length === 0) {
+        // No participants left; attempt to delete the empty conversation row.
+        const { error: deleteConvError } = await supabase
+          .from('conversations')
+          .delete()
+          .eq('id', conversationId);
+        if (deleteConvError) throw deleteConvError;
+      } else {
+        const { error: updateConvError } = await supabase
+          .from('conversations')
+          .update({
+            participants: nextParticipants,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', conversationId);
+
+        if (updateConvError) throw updateConvError;
+      }
 
       // Update local state
       setConversations((prev) => prev.filter((conv) => conv.id !== conversationId));
@@ -771,7 +813,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data: message, error: fetchError } = await supabase
         .from('messages')
-        .select('sender_id, created_at')
+        .select('sender_id, created_at, conversation_id')
         .eq('id', messageId)
         .single();
 
@@ -802,6 +844,22 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         .eq('id', messageId);
 
       if (deleteError) throw deleteError;
+
+      // Optimistically update inbox preview if this was the lastMessage
+      // (realtime UPDATE payloads can be partial depending on replica identity settings)
+      setConversations((prev) =>
+        prev.map((conv) => {
+          if (conv.lastMessage?.id !== messageId) return conv;
+          return {
+            ...conv,
+            lastMessage: {
+              ...conv.lastMessage,
+              text: 'This message was deleted',
+            },
+            updatedAt: new Date().toISOString(),
+          };
+        })
+      );
 
       return { success: true };
     } catch (error: any) {
