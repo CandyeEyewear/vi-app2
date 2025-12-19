@@ -9,7 +9,7 @@ import {
   Text,
   Image,
   StyleSheet,
-  ScrollView,
+  FlatList,
   Dimensions,
 } from 'react-native';
 import { Post } from '../types';
@@ -59,16 +59,20 @@ export default function SharedPostCard({ originalPost }: SharedPostCardProps) {
 
       {/* Original Post Media */}
       {originalPost.mediaUrls && originalPost.mediaUrls.length > 0 && (
-        <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
-          {originalPost.mediaUrls.map((url, index) => (
+        <FlatList
+          data={originalPost.mediaUrls}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          keyExtractor={(item, index) => `media-${index}`}
+          renderItem={({ item: url }) => (
             <Image
-              key={index}
               source={{ uri: url }}
               style={styles.media}
               resizeMode="cover"
             />
-          ))}
-        </ScrollView>
+          )}
+        />
       )}
 
       {/* Original Post Stats */}
