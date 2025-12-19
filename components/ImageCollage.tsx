@@ -267,6 +267,11 @@ export default function ImageCollage({ images, onImagePress }: ImageCollageProps
 const styles = StyleSheet.create({
   container: {
     marginBottom: 12,
+    width: '100%',
+    alignSelf: 'stretch',
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: Colors.light.card,
   },
   // Single image
   singleImage: {
