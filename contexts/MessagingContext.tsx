@@ -269,6 +269,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         .from('conversations')
         .select('*')
         .contains('participants', [user.id])
+        .not('deleted_by', 'cs', `["${user.id}"]`)
         .order('updated_at', { ascending: false });
 
       if (conversationsError) throw conversationsError;
