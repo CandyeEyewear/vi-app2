@@ -35,8 +35,6 @@ const FILTERS: { id: 'all' | 'unread'; label: string }[] = [
   { id: 'unread', label: 'Unread' },
 ];
 
-const PLACEHOLDER_ITEMS = Array.from({ length: 6 }).map((_, index) => index);
-
 type ColorTheme = typeof Colors.light;
 
 type ConversationRowProps = {
@@ -107,18 +105,6 @@ const parseMessagePreview = (rawText?: string) => {
     hasReply,
   };
 };
-
-const ConversationSkeleton = ({ colors }: { colors: ColorTheme }) => (
-  <View style={[styles.conversationCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-    {/* avatar + text placeholder */}
-    <View style={[styles.avatarSkeleton, { backgroundColor: colors.skeleton }]} />
-    <View style={styles.skeletonContent}>
-      <View style={[styles.textSkeleton, { width: '55%', backgroundColor: colors.skeleton }]} />
-      <View style={[styles.textSkeleton, { width: '35%', backgroundColor: colors.skeleton }]} />
-      <View style={[styles.textSkeleton, { width: '80%', backgroundColor: colors.skeleton }]} />
-    </View>
-  </View>
-);
 
 const ConversationRow = ({ conversation, colors, currentUserId, isUserOnline, onPress }: ConversationRowProps) => {
   const otherUser = getOtherParticipant(conversation, currentUserId);
@@ -266,8 +252,6 @@ export default function MessagesScreen() {
       return haystack.includes(term);
     });
   }, [activeFilter, conversations, searchQuery, user?.id]);
-
-  const showSkeleton = loading && conversations.length === 0;
 
   const handleDeleteConversation = useCallback((conversationId: string) => {
     setConversationToDelete(conversationId);
@@ -419,54 +403,71 @@ export default function MessagesScreen() {
           })}
         </View>
 
-        {showSkeleton ? (
-          <View style={styles.skeletonList}>
-            {PLACEHOLDER_ITEMS.map((item) => (
-              <ConversationSkeleton colors={colors} key={`skeleton-${item}`} />
-            ))}
-          </View>
-        ) : (
-          <FlatList
-            data={filteredConversations}
-            keyExtractor={(item) => item.id}
-            renderItem={renderConversation}
-            contentContainerStyle={[
-              styles.listContent,
-              filteredConversations.length === 0 && styles.emptyListContent,
-              { paddingBottom: (filteredConversations.length === 0 ? 0 : 12) + insets.bottom },
-            ]}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={handleRefresh}
-                tintColor={colors.primary}
-                colors={[colors.primary]}
-              />
-            }
-            keyboardShouldPersistTaps="handled"
-            ListEmptyComponent={
-              <EmptyState
-                icon={Inbox}
-                title={searchQuery ? 'No results found' : 'No conversations yet'}
-                subtitle={
-                  searchQuery
-                    ? 'Try a different name or keyword.'
-                    : 'Start a conversation with a volunteer or organization.'
-                }
-                action={{
-                  label: 'Find people to message',
-                  onPress: () => router.push('/search'),
-                }}
-                suggestions={
-                  searchQuery
-                    ? ['Search by cause, organization, or name']
-                    : ['Explore the feed and tap message', 'Invite teammates to chat']
-                }
-                colors={colors}
-              />
-            }
-          />
-        )}
+        <FlatList
+          data={filteredConversations}
+          keyExtractor={(item) => item.id}
+          renderItem={renderConversation}
+          contentContainerStyle={[
+            styles.listContent,
+            filteredConversations.length === 0 && styles.emptyListContent,
+            { paddingBottom: (filteredConversations.length === 0 ? 0 : 12) + insets.bottom },
+          ]}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
+          keyboardShouldPersistTaps="handled"
+          ListEmptyComponent={
+            <EmptyState
+              icon={Inbox}
+              title={
+                loading
+                  ? 'Loading messages...'
+                  : searchQuery
+                  ? 'No results found'
+                  : activeFilter === 'unread'
+                  ? 'No unread messages'
+                  : 'No messages'
+              }
+              subtitle={
+                loading
+                  ? 'Just a moment while we load your inbox.'
+                  : searchQuery
+                  ? 'Try a different name or keyword.'
+                  : activeFilter === 'unread'
+                  ? "You're all caught up."
+                  : 'Start a conversation with a volunteer or organization.'
+              }
+              action={
+                loading
+                  ? undefined
+                  : activeFilter === 'unread'
+                  ? {
+                      label: 'View all messages',
+                      onPress: () => setActiveFilter('all'),
+                    }
+                  : {
+                      label: 'Find people to message',
+                      onPress: () => router.push('/search'),
+                    }
+              }
+              suggestions={
+                loading
+                  ? undefined
+                  : searchQuery
+                  ? ['Search by cause, organization, or name']
+                  : activeFilter === 'unread'
+                  ? ['Switch to All to see earlier chats']
+                  : ['Explore the feed and tap message', 'Invite teammates to chat']
+              }
+              colors={colors}
+            />
+          }
+        />
 
         {/* Delete Confirmation Alert */}
         <CustomAlert
@@ -647,24 +648,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
-  },
-  skeletonList: {
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingBottom: 32,
-  },
-  avatarSkeleton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-  },
-  skeletonContent: {
-    flex: 1,
-    gap: 8,
-  },
-  textSkeleton: {
-    height: 14,
-    borderRadius: 7,
   },
   rightAction: {
     flex: 1,
