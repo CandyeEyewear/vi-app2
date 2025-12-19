@@ -43,9 +43,18 @@ import TypingIndicator from '../../components/TypingIndicator';
 import OnlineStatusDot from '../../components/OnlineStatusDot';
 import SwipeableMessage from '../../components/SwipeableMessage';
 import LinkText from '../../components/LinkText';
-import * as Clipboard from 'expo-clipboard';
 import { UserAvatar, UserNameWithBadge } from '../../components/index';
 import { goBack } from '../../utils/navigation';
+
+// expo-clipboard will crash at import-time if the native module isn't present
+// (common when running an old Expo Dev Client build). Fail-soft instead.
+const Clipboard = (() => {
+  try {
+    return require('expo-clipboard') as typeof import('expo-clipboard');
+  } catch {
+    return null;
+  }
+})();
 
 export default function ConversationScreen() {
   const router = useRouter();
@@ -835,6 +844,13 @@ export default function ConversationScreen() {
     if (hasCopyableText) {
       options.push('Copy');
       actions.push(async () => {
+        if (!Clipboard?.setStringAsync) {
+          Alert.alert(
+            'Clipboard unavailable',
+            'Clipboard is not available in this build. If you are using Expo Dev Client, rebuild the dev client to include expo-clipboard.'
+          );
+          return;
+        }
         await Clipboard.setStringAsync(message.text);
       });
     }

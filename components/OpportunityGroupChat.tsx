@@ -22,8 +22,17 @@ import { Colors } from '../constants/colors';
 import CustomAlert from './CustomAlert';
 import { UserAvatar, UserNameWithBadge } from './index';
 import LinkText from './LinkText';
-import * as Clipboard from 'expo-clipboard';
 import type { OpportunityChatMessage, TypingIndicator } from '../types';
+
+// expo-clipboard will crash at import-time if the native module isn't present
+// (common when running an old Expo Dev Client build). Fail-soft instead.
+const Clipboard = (() => {
+  try {
+    return require('expo-clipboard') as typeof import('expo-clipboard');
+  } catch {
+    return null;
+  }
+})();
 
 interface OpportunityGroupChatProps {
   opportunityId: string;
@@ -73,6 +82,13 @@ export default function OpportunityGroupChat({ opportunityId, onMessageCountChan
 
   const copyToClipboard = async (text: string) => {
     if (!text?.trim()) return;
+    if (!Clipboard?.setStringAsync) {
+      Alert.alert(
+        'Clipboard unavailable',
+        'Clipboard is not available in this build. If you are using Expo Dev Client, rebuild the dev client to include expo-clipboard.'
+      );
+      return;
+    }
     await Clipboard.setStringAsync(text);
   };
 
