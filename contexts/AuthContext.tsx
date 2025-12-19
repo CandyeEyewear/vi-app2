@@ -355,6 +355,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AUTH] 🗑️ Cache cleared for forced refresh');
     }
 
+    // Hard guard: do not query/create profiles without an active session.
+    // This prevents noisy retries and "Auth session missing!" errors when we're on public routes.
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError) {
+      console.warn('[AUTH] ⚠️ Cannot read session while loading profile:', sessionError.message);
+      setUser(null);
+      profileLoadInProgress.current = null;
+      setLoading(false);
+      return;
+    }
+
+    if (!session?.user?.id) {
+      console.log('[AUTH] ℹ️ No active session - skipping profile load');
+      setUser(null);
+      profileLoadInProgress.current = null;
+      setLoading(false);
+      return;
+    }
+
+    // If a stale call comes in for a different user, ignore it to avoid loading the wrong profile.
+    if (session.user.id !== userId) {
+      console.log('[AUTH] ⚠️ Session/userId mismatch - skipping profile load', {
+        sessionUserId: session.user.id,
+        requestedUserId: userId,
+      });
+      profileLoadInProgress.current = null;
+      return;
+    }
+
     const fetchProfileWithTimeout = async (timeoutMs: number = 10000): Promise<any> => {
       console.log('[AUTH] 📊 Querying users table...');
       const timeoutPromise = new Promise((_, reject) => {
@@ -364,7 +397,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .from('users')
         .select('*')
         .eq('id', userId)
-        .single();
+        // IMPORTANT: `.single()` throws PGRST116 for 0 rows, which is expected right after signup.
+        // `.maybeSingle()` returns `data: null` when no rows match, without treating it as an error.
+        .maybeSingle();
       return Promise.race([queryPromise, timeoutPromise]);
     };
 
@@ -384,16 +419,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (error) {
             console.error('[AUTH] ❌ Query error:', error.message);
             console.error('[AUTH] Error code:', error.code);
-            if (error.code === 'PGRST116' && attempt < maxRetries) {
-              console.log(`[AUTH] ⏳ Profile not found, waiting ${retryDelayMs}ms before retry...`);
-              await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
-              continue;
-            }
             lastError = error;
             break;
           }
 
-          if (data) {
+          // With `.maybeSingle()`, "not found" is represented by `data === null` (no error).
+          if (!data) {
+            if (attempt < maxRetries) {
+              console.log(`[AUTH] ⏳ Profile not found yet, waiting ${retryDelayMs}ms before retry...`);
+              await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+              continue;
+            }
+          } else {
             profileData = data;
             console.log('[AUTH] ✅ Profile found on attempt', attempt);
             break;
@@ -415,27 +452,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!profileData) {
         console.log('[AUTH] ⚠️ Profile not found after', maxRetries, 'attempts, attempting to create from auth metadata...');
         
-        // Get the current auth user to access their metadata
-        const { data: { user: authUser }, error: authUserError } = await supabase.auth.getUser();
+        // Use the session user directly; `getUser()` can fail with "Auth session missing!" in edge cases.
+        const sessionUser = session.user;
+        console.log('[AUTH] 📧 Session user email:', sessionUser.email);
+        console.log('[AUTH] 📋 Session user metadata:', JSON.stringify(sessionUser.user_metadata, null, 2));
         
-        if (authUserError || !authUser) {
-          console.error('[AUTH] ❌ Cannot get auth user:', authUserError?.message);
-          setUser(null);
-          profileLoadInProgress.current = null;
-          setLoading(false);
-          return;
-        }
-        
-        console.log('[AUTH] 📧 Auth user email:', authUser.email);
-        console.log('[AUTH] 📋 Auth user metadata:', JSON.stringify(authUser.user_metadata, null, 2));
-        
-        const metadata = authUser.user_metadata || {};
+        const metadata = sessionUser.user_metadata || {};
         
         // Prepare profile data from metadata
         const newProfileData = {
           id: userId,
-          email: authUser.email,
-          full_name: metadata.full_name || metadata.fullName || authUser.email?.split('@')[0] || 'User',
+          email: sessionUser.email,
+          full_name: metadata.full_name || metadata.fullName || sessionUser.email?.split('@')[0] || 'User',
           phone: metadata.phone || null,
           location: metadata.location || null,
           country: metadata.country || 'Jamaica',
@@ -478,13 +506,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 .from('users')
                 .select('*')
                 .eq('id', userId)
-                .single();
+                .maybeSingle();
               
               if (retryData) {
                 profileData = retryData;
                 console.log('[AUTH] ✅ Profile found on retry after duplicate key error');
-              } else {
+              } else if (retryError) {
                 console.error('[AUTH] ❌ Still cannot fetch profile:', retryError?.message);
+                setUser(null);
+                profileLoadInProgress.current = null;
+                setLoading(false);
+                return;
+              } else {
+                console.error('[AUTH] ❌ Still cannot fetch profile: no row returned');
                 setUser(null);
                 profileLoadInProgress.current = null;
                 setLoading(false);
@@ -603,15 +637,73 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Fetch user profile
       console.log('[AUTH] 📥 Fetching user profile from database...');
-      const { data: profileData, error: profileError } = await supabase
+      let { data: profileData, error: profileError } = await supabase
         .from('users')
         .select('*')
         .eq('id', authData.user.id)
-        .single();
+        .maybeSingle();
 
       if (profileError) {
         console.error('[AUTH] ❌ Failed to fetch user profile:', profileError.message);
         return { success: false, error: profileError.message };
+      }
+
+      if (!profileData) {
+        console.log('[AUTH] ⚠️ No profile row found, creating from auth metadata...');
+        const metadata = authData.user.user_metadata || {};
+
+        const newProfileData = {
+          id: authData.user.id,
+          email: authData.user.email,
+          full_name: metadata.full_name || metadata.fullName || authData.user.email?.split('@')[0] || 'User',
+          phone: metadata.phone || null,
+          location: metadata.location || null,
+          country: metadata.country || 'Jamaica',
+          bio: metadata.bio || null,
+          areas_of_expertise: metadata.areas_of_expertise || [],
+          education: metadata.education || null,
+          date_of_birth: metadata.date_of_birth || null,
+          role: 'volunteer',
+          membership_tier: 'free',
+          membership_status: 'inactive',
+          is_private: false,
+          total_hours: 0,
+          activities_completed: 0,
+          organizations_helped: 0,
+          account_type: 'individual',
+          approval_status: 'approved',
+          is_partner_organization: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        const { data: createdProfile, error: createError } = await supabase
+          .from('users')
+          .insert(newProfileData)
+          .select()
+          .single();
+
+        if (createError) {
+          // If another client/trigger created it concurrently, refetch once.
+          if (createError.code === '23505') {
+            console.log('[AUTH] 🔄 Duplicate key - profile likely created concurrently, refetching...');
+            const { data: retryProfile, error: retryError } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', authData.user.id)
+              .maybeSingle();
+            if (retryError || !retryProfile) {
+              console.error('[AUTH] ❌ Failed to refetch profile after duplicate key:', retryError?.message);
+              return { success: false, error: retryError?.message || 'Failed to load user profile' };
+            }
+            profileData = retryProfile;
+          } else {
+            console.error('[AUTH] ❌ Failed to create profile:', createError.message);
+            return { success: false, error: createError.message };
+          }
+        } else {
+          profileData = createdProfile;
+        }
       }
 
       console.log('[AUTH] ✅ Profile fetched successfully');
