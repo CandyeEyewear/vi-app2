@@ -725,40 +725,53 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      // "Delete" for current user by leaving the conversation (removes you from participants)
-      // This avoids RLS issues where you may not be allowed to delete messages you didn't send.
-      const { data: conv, error: convFetchError } = await supabase
-        .from('conversations')
-        .select('id, participants')
-        .eq('id', conversationId)
-        .single();
+      // Prefer an RLS-safe RPC so the client doesn't need UPDATE/DELETE rights on conversations.
+      // The DB function removes the current user from participants, and deletes the row only if empty.
+      const { error: rpcError } = await supabase.rpc('leave_conversation', {
+        conversation_id: conversationId,
+      });
 
-      if (convFetchError) throw convFetchError;
+      if (rpcError) {
+        // If the function isn't deployed yet, fall back to the old behavior.
+        // Note: this may still fail under strict RLS, but gives clearer errors in dev.
+        const code = (rpcError as any)?.code as string | undefined;
+        const msg = (rpcError as any)?.message as string | undefined;
+        const isMissingFunction =
+          code === 'PGRST202' || /Could not find the function/i.test(msg || '');
 
-      const nextParticipants: string[] = (conv.participants ?? []).filter((id: string) => id !== user.id);
+        if (!isMissingFunction) throw rpcError;
 
-      if (nextParticipants.length === 0) {
-        // No participants left; attempt to delete the empty conversation row.
-        const { error: deleteConvError } = await supabase
+        const { data: conv, error: convFetchError } = await supabase
           .from('conversations')
-          .delete()
-          .eq('id', conversationId);
-        if (deleteConvError) throw deleteConvError;
-      } else {
-        const { error: updateConvError } = await supabase
-          .from('conversations')
-          .update({
-            participants: nextParticipants,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', conversationId);
+          .select('id, participants')
+          .eq('id', conversationId)
+          .single();
 
-        if (updateConvError) throw updateConvError;
+        if (convFetchError) throw convFetchError;
+
+        const nextParticipants: string[] = (conv.participants ?? []).filter((id: string) => id !== user.id);
+
+        if (nextParticipants.length === 0) {
+          const { error: deleteConvError } = await supabase
+            .from('conversations')
+            .delete()
+            .eq('id', conversationId);
+          if (deleteConvError) throw deleteConvError;
+        } else {
+          const { error: updateConvError } = await supabase
+            .from('conversations')
+            .update({
+              participants: nextParticipants,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', conversationId);
+
+          if (updateConvError) throw updateConvError;
+        }
       }
 
-      // Update local state
+      // Only remove locally after a confirmed server-side success.
       setConversations((prev) => prev.filter((conv) => conv.id !== conversationId));
-
       return { success: true };
     } catch (error: unknown) {
       // Avoid RN redbox from console.error for non-fatal failures.
