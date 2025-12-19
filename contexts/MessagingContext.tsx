@@ -719,64 +719,46 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     await loadConversations();
   };
 
-  const deleteConversation = async (conversationId: string): Promise<ApiResponse<void>> => {
-    if (!user) {
-      return { success: false, error: 'Not authenticated' };
-    }
-
+  const deleteConversation = async (conversationId: string) => {
     try {
-      // Prefer an RLS-safe RPC so the client doesn't need UPDATE/DELETE rights on conversations.
-      // The DB function removes the current user from participants, and deletes the row only if empty.
-      const { error: rpcError } = await supabase.rpc('leave_conversation', {
-        conversation_id: conversationId,
-      });
-
-      if (rpcError) {
-        // If the function isn't deployed yet, fall back to the old behavior.
-        // Note: this may still fail under strict RLS, but gives clearer errors in dev.
-        const code = (rpcError as any)?.code as string | undefined;
-        const msg = (rpcError as any)?.message as string | undefined;
-        const isMissingFunction =
-          code === 'PGRST202' || /Could not find the function/i.test(msg || '');
-
-        if (!isMissingFunction) throw rpcError;
-
-        const { data: conv, error: convFetchError } = await supabase
-          .from('conversations')
-          .select('id, participants')
-          .eq('id', conversationId)
-          .single();
-
-        if (convFetchError) throw convFetchError;
-
-        const nextParticipants: string[] = (conv.participants ?? []).filter((id: string) => id !== user.id);
-
-        if (nextParticipants.length === 0) {
-          const { error: deleteConvError } = await supabase
-            .from('conversations')
-            .delete()
-            .eq('id', conversationId);
-          if (deleteConvError) throw deleteConvError;
-        } else {
-          const { error: updateConvError } = await supabase
-            .from('conversations')
-            .update({
-              participants: nextParticipants,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', conversationId);
-
-          if (updateConvError) throw updateConvError;
-        }
+      if (!user?.id) {
+        return { success: false, error: 'User not authenticated' };
       }
 
-      // Only remove locally after a confirmed server-side success.
-      setConversations((prev) => prev.filter((conv) => conv.id !== conversationId));
+      // First, get the current deleted_by array
+      const { data: conversation, error: fetchError } = await supabase
+        .from('conversations')
+        .select('deleted_by')
+        .eq('id', conversationId)
+        .single();
+
+      if (fetchError) {
+        console.error('Error fetching conversation:', fetchError);
+        return { success: false, error: fetchError.message };
+      }
+
+      // Add current user to deleted_by array
+      const currentDeletedBy = conversation?.deleted_by || [];
+      const updatedDeletedBy = [...currentDeletedBy, user.id];
+
+      // Soft delete: Update deleted_by array
+      const { error: updateError } = await supabase
+        .from('conversations')
+        .update({ deleted_by: updatedDeletedBy })
+        .eq('id', conversationId);
+
+      if (updateError) {
+        console.error('Error soft deleting conversation:', updateError);
+        return { success: false, error: updateError.message };
+      }
+
+      // Remove from local state immediately
+      setConversations(prev => prev.filter(c => c.id !== conversationId));
+
       return { success: true };
-    } catch (error: unknown) {
-      // Avoid RN redbox from console.error for non-fatal failures.
-      logWarn('Error deleting conversation', error);
-      return { success: false, error: getErrorMessage(error) };
+    } catch (error: any) {
+      console.error('Error in deleteConversation:', error);
+      return { success: false, error: error.message };
     }
   };
 
