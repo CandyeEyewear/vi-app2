@@ -123,6 +123,10 @@ export function mapDbUserToUser(dbUser: DbUser): User {
     donationCount: dbUser.donation_count ?? undefined,
     donorBadges: (dbUser.donor_badges as User['donorBadges']) ?? undefined,
 
+    // Messaging presence (optional columns in DB)
+    onlineStatus: typeof dbUser.online_status === 'boolean' ? (dbUser.online_status as boolean) : undefined,
+    lastSeen: typeof dbUser.last_seen === 'string' ? (dbUser.last_seen as string) : undefined,
+
     createdAt: dbUser.created_at,
     updatedAt: dbUser.updated_at,
   };
