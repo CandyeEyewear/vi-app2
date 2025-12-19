@@ -3,7 +3,7 @@
  * Real-time updates for conversation list with global presence tracking
  */
 
-import React, { createContext, useState, useContext, useEffect, useMemo, useRef } from 'react';
+import React, { createContext, useState, useContext, useEffect, useMemo, useRef, useCallback } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { Conversation, Message, ApiResponse } from '../types';
 import { supabase } from '../services/supabase';
@@ -66,7 +66,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     if (user) {
       loadConversations();
     }
-  }, [user]);
+  }, [user, updateOnlineStatus]);
 
   // SIMPLE REAL-TIME SUBSCRIPTION LIKE NOTIFICATIONS (narrowed events)
   useEffect(() => {
@@ -136,7 +136,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       messageSubscription.unsubscribe();
       conversationSubscription.unsubscribe();
     };
-  }, [user]);
+  }, [user, updateOnlineStatus]);
 
   // GLOBAL PRESENCE CHANNEL - Track all online users
   useEffect(() => {
@@ -191,6 +191,10 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       .subscribe(async (status) => {
         console.log('[GlobalPresence] Subscription status:', status);
         if (status === 'SUBSCRIBED') {
+          // Persist presence state (best-effort; used for "Last seen")
+          // Fire-and-forget: presence itself is still the source of truth for "online now".
+          updateOnlineStatus(true).catch(() => {});
+
           // Track current user as online
           await globalPresenceChannel.track({
             user_id: user.id,
@@ -205,6 +209,9 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     return () => {
       console.log('[GlobalPresence] Cleaning up presence channel');
       if (globalPresenceChannelRef.current) {
+        // Persist last seen on exit (best-effort)
+        updateOnlineStatus(false).catch(() => {});
+
         globalPresenceChannelRef.current.untrack();
         globalPresenceChannelRef.current.unsubscribe();
         supabase.removeChannel(globalPresenceChannelRef.current);
@@ -229,6 +236,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         console.log('[AppState] App came to foreground, marking user as online');
         if (globalPresenceChannelRef.current) {
           try {
+            updateOnlineStatus(true).catch(() => {});
             await globalPresenceChannelRef.current.track({
               user_id: user.id,
               user_name: user.fullName,
@@ -244,6 +252,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         console.log('[AppState] App went to background, marking user as offline');
         if (globalPresenceChannelRef.current) {
           try {
+            updateOnlineStatus(false).catch(() => {});
             await globalPresenceChannelRef.current.untrack();
           } catch (error) {
             console.error('[AppState] Error untracking presence:', error);
@@ -787,21 +796,25 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const updateOnlineStatus = async (isOnline: boolean) => {
+  const updateOnlineStatus = useCallback(async (isOnline: boolean) => {
     if (!user) return;
 
     try {
-      await supabase
-        .from('users')
-        .update({
-          online_status: isOnline,
-          last_seen: new Date().toISOString(),
-        })
-        .eq('id', user.id);
+      const updates: Record<string, any> = {
+        online_status: isOnline,
+      };
+
+      // "Last seen" should represent the last time the user was active.
+      // We update it when the app goes to background/offline.
+      if (!isOnline) {
+        updates.last_seen = new Date().toISOString();
+      }
+
+      await supabase.from('users').update(updates).eq('id', user.id);
     } catch (error) {
       console.error('Error updating online status:', error);
     }
-  };
+  }, [user]);
 
   const markMessageDelivered = async (messageId: string) => {
     if (!user) return;

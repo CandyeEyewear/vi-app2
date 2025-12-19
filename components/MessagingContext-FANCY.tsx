@@ -410,7 +410,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         .from('users')
         .update({
           online_status: isOnline,
-          last_seen: new Date().toISOString(),
+          ...(isOnline ? {} : { last_seen: new Date().toISOString() }),
         })
         .eq('id', user.id);
     } catch (error) {
