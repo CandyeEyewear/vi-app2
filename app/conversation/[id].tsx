@@ -23,6 +23,7 @@ import {
   Alert,
   Modal,
   Animated,
+  Easing,
   ScrollView,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -142,10 +143,11 @@ export default function ConversationScreen() {
         const height = e.endCoordinates.height;
         setKeyboardHeight(height);
         
-        // Ultra smooth animation - no gaps
+        // Ultra smooth animation with easing - no gaps
         Animated.timing(keyboardAnim, {
           toValue: height,
-          duration: Platform.OS === 'ios' ? 250 : 150,
+          duration: Platform.OS === 'ios' ? e.duration || 300 : 200,
+          easing: Easing.bezier(0.25, 0.1, 0.25, 1), // Smooth cubic bezier easing
           useNativeDriver: false,
         }).start();
         
@@ -158,13 +160,14 @@ export default function ConversationScreen() {
 
     const hideSubscription = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => {
+      (e) => {
         setKeyboardHeight(0);
         
-        // Ultra smooth animation - smooth transition back
+        // Ultra smooth animation - smooth transition back with easing
         Animated.timing(keyboardAnim, {
           toValue: 0,
-          duration: Platform.OS === 'ios' ? 250 : 150,
+          duration: Platform.OS === 'ios' ? e.duration || 300 : 200,
+          easing: Easing.bezier(0.25, 0.1, 0.25, 1), // Smooth cubic bezier easing
           useNativeDriver: false,
         }).start();
       }
