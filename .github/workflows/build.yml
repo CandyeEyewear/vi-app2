@@ -36,5 +36,5 @@ jobs:
         run: |
           echo "🚀 Build started for ${{ github.ref_name }}"
           echo "📱 Platform: Android"
-          echo "📦 Profile: Production (AAB)"
+          echo "📦 Profile: production (AAB)"
           echo "🔗 Check build status: https://expo.dev/accounts/viadim/projects/vibe-volunteer-app/builds"
