@@ -337,7 +337,41 @@ serve(async (req) => {
       const callerRole = (callerProfile as any)?.role;
       const isStaff = callerRole === 'admin' || callerRole === 'sup';
 
-      if (callerProfileErr || !isStaff) {
+      // Exception: allow message notifications between participants of a conversation.
+      // This keeps the function locked down while enabling 1:1 chat push from the app.
+      //
+      // Expected payload shape from app:
+      // data: { type: 'message', id: <conversationId>, ... }
+      const isMessage = requestData?.data?.type === 'message';
+      const conversationId =
+        requestData?.data?.conversationId ||
+        requestData?.data?.conversation_id ||
+        requestData?.data?.id;
+
+      if (!callerProfileErr && !isStaff && isMessage && conversationId) {
+        const { data: conversation, error: convErr } = await supabaseAdmin
+          .from('conversations')
+          .select('id, participants')
+          .eq('id', conversationId)
+          .maybeSingle();
+
+        const participants: string[] = (conversation as any)?.participants || [];
+        const isCallerParticipant = participants.includes(callerId);
+        const isRecipientParticipant = participants.includes(userId);
+
+        if (!convErr && conversation && isCallerParticipant && isRecipientParticipant) {
+          // Allowed: caller is sending a message push to the other conversation participant.
+        } else {
+          return json({
+            success: false,
+            userId,
+            callerId,
+            error: 'Forbidden',
+            hint:
+              'Message push notifications are only allowed when both users are participants of the conversation',
+          });
+        }
+      } else if (callerProfileErr || !isStaff) {
         return json({
           success: false,
           userId,
