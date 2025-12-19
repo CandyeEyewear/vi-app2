@@ -1,53 +1,56 @@
 import { createClient, type SupportedStorage } from '@supabase/supabase-js';
 
+import { supabaseConfig } from '../config/supabase.config';
+
 // Detect environment: React Native, Web, or Node.js server
-// Try to detect React Native first by attempting to require it
+const isWeb = typeof window !== 'undefined' && typeof document !== 'undefined';
+
+let Platform: { OS?: string } | null = null;
 let isReactNative = false;
 try {
-  const RNPlatform = require('react-native')?.Platform;
-  isReactNative = !!RNPlatform && (RNPlatform.OS === 'ios' || RNPlatform.OS === 'android');
-} catch (e) {
-  // Not React Native
+  Platform = require('react-native')?.Platform ?? null;
+  isReactNative = !!Platform && (Platform.OS === 'ios' || Platform.OS === 'android');
+} catch {
+  // Not React Native (or react-native module not available in this runtime)
+  Platform = null;
+  isReactNative = false;
 }
 
-const isWeb = typeof window !== 'undefined' && typeof document !== 'undefined';
 const isServer = !isReactNative && !isWeb;
 
-let SecureStore: any;
-let Platform: any;
+// Storage backends (native modules may be missing in a dev-client build until rebuilt)
+let SecureStore: any = null;
+let AsyncStorage: any = null;
 
 if (isReactNative) {
-  // We're in React Native - import mobile modules
+  console.log('[SUPABASE] ✅ React Native environment detected');
+
+  // Expo SecureStore (preferred)
   try {
     SecureStore = require('expo-secure-store');
-    Platform = require('react-native').Platform;
-    console.log('[SUPABASE] ✅ React Native environment detected');
   } catch (error) {
-    console.error('[SUPABASE] ❌ Failed to load React Native modules:', error);
-    SecureStore = {
-      getItemAsync: async () => null,
-      setItemAsync: async () => {},
-      deleteItemAsync: async () => {},
-    };
-    Platform = { OS: 'unknown' };
+    console.error('[SUPABASE] ❌ expo-secure-store native module missing:', error);
+    console.error('[SUPABASE] 👉 If you use Expo Dev Client, you must rebuild the client after adding/upgrading Expo modules.');
+    SecureStore = null;
+  }
+
+  // AsyncStorage fallback (less secure, but avoids total auth persistence failure)
+  if (!SecureStore) {
+    try {
+      // Some builds export default, others export module directly
+      const mod = require('@react-native-async-storage/async-storage');
+      AsyncStorage = mod?.default ?? mod;
+      console.warn('[SUPABASE] ⚠️ Falling back to AsyncStorage for session persistence (SecureStore unavailable)');
+    } catch (error) {
+      console.error('[SUPABASE] ❌ AsyncStorage module missing too:', error);
+      AsyncStorage = null;
+    }
   }
 } else if (isServer) {
-  // We're in Node.js server - create mocks
-  SecureStore = {
-    getItemAsync: async () => null,
-    setItemAsync: async () => {},
-    deleteItemAsync: async () => {},
-  };
-  Platform = { OS: 'web' };
   console.log('[SUPABASE] Server environment detected');
 } else {
-  // We're in web browser
-  SecureStore = null;
-  Platform = { OS: 'web' };
   console.log('[SUPABASE] Web browser environment detected');
 }
-
-import { supabaseConfig } from '../config/supabase.config';
 
 // Create SecureStore adapter for React Native
 // Supabase expects a storage interface with getItem, setItem, removeItem methods
@@ -150,6 +153,49 @@ const createSecureStoreAdapter = (): SupportedStorage => {
   };
 };
 
+// Create AsyncStorage adapter (fallback for when SecureStore isn't available)
+const createAsyncStorageAdapter = (): SupportedStorage => {
+  const cache = new Map<string, { value: string | null; timestamp: number }>();
+  const CACHE_TTL = 100;
+
+  return {
+    getItem: async (key: string): Promise<string | null> => {
+      try {
+        const now = Date.now();
+        const cached = cache.get(key);
+        if (cached && (now - cached.timestamp) < CACHE_TTL) return cached.value;
+
+        const value = await AsyncStorage.getItem(key);
+        cache.set(key, { value, timestamp: now });
+        return value;
+      } catch (error) {
+        console.error('[SUPABASE] ❌ Error getting item from AsyncStorage:', error);
+        cache.delete(key);
+        return null;
+      }
+    },
+    setItem: async (key: string, value: string): Promise<void> => {
+      try {
+        await AsyncStorage.setItem(key, value);
+        cache.set(key, { value, timestamp: Date.now() });
+      } catch (error) {
+        console.error('[SUPABASE] ❌ Error setting item in AsyncStorage:', error);
+        cache.delete(key);
+        throw error;
+      }
+    },
+    removeItem: async (key: string): Promise<void> => {
+      try {
+        await AsyncStorage.removeItem(key);
+        cache.delete(key);
+      } catch (error) {
+        console.error('[SUPABASE] ❌ Error removing item from AsyncStorage:', error);
+        cache.delete(key);
+      }
+    },
+  };
+};
+
 // Determine storage based on platform
 // - Web: undefined (Supabase uses localStorage automatically)
 // - React Native: SecureStore adapter (required for PKCE flow with Expo SDK 54)
@@ -173,19 +219,21 @@ const getStorage = (): SupportedStorage | undefined => {
 
   // React Native environment - use SecureStore
   if (isReactNative) {
-    if (!Platform) {
-      console.error('[SUPABASE] ⚠️ Platform not available!');
-      return undefined;
-    }
-
     if (__DEV__) {
       console.log('[SUPABASE] ✅ Using SecureStore for session persistence (PKCE-compatible)');
-      console.log('[SUPABASE] Platform.OS:', Platform.OS);
+      console.log('[SUPABASE] Platform.OS:', Platform?.OS ?? 'unknown');
     }
     
     // Verify SecureStore is actually available
     if (!SecureStore || !SecureStore.getItemAsync) {
-      console.error('[SUPABASE] ⚠️ SecureStore not available! Falling back to no storage.');
+      if (AsyncStorage && AsyncStorage.getItem && AsyncStorage.setItem && AsyncStorage.removeItem) {
+        if (__DEV__) {
+          console.warn('[SUPABASE] ⚠️ SecureStore not available. Using AsyncStorage adapter.');
+        }
+        return createAsyncStorageAdapter();
+      }
+
+      console.error('[SUPABASE] ⚠️ No React Native storage backend available. Falling back to no storage.');
       return undefined;
     }
     
