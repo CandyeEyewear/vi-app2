@@ -44,12 +44,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [sessionAppRole, setSessionAppRole] = useState<string | null>(null);
   const profileLoadInProgress = useRef<string | null>(null); // Tracks which userId is being loaded
   const tokenRefreshCleanupRef = useRef<(() => void) | null>(null);
+  const userChannelRef = useRef<any>(null);
+  const userChannelUserIdRef = useRef<string | null>(null);
 
   // Initialize auth state on mount
   useEffect(() => {
     console.log('[AUTH] 🚀 Initializing AuthProvider...');
     let subscription: any;
-    let userChannel: any = null;
 
     const initializeAuth = async () => {
       console.log('[AUTH] 🔐 Starting auth initialization...');
@@ -226,10 +227,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setSessionAppRole(null);
           setLoading(false);
           // Clean up real-time subscription on logout
-          if (userChannel) {
+          if (userChannelRef.current) {
             console.log('[AUTH] 🧹 Unsubscribing from user profile changes on logout...');
-            supabase.removeChannel(userChannel);
-            userChannel = null;
+            supabase.removeChannel(userChannelRef.current);
+            userChannelRef.current = null;
+            userChannelUserIdRef.current = null;
           }
         }
       });
@@ -250,8 +252,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       const userId = session.user.id;
       console.log('[AUTH] 📡 Subscribing to user profile changes for:', userId);
+
+      // Prevent duplicate channels (this was causing multiple callbacks + repeated forced refreshes)
+      if (userChannelRef.current && userChannelUserIdRef.current === userId) {
+        console.log('[AUTH] ⏭️ User profile channel already active for this user, skipping setup');
+        return;
+      }
+
+      // Replace any existing channel (e.g. user switched accounts)
+      if (userChannelRef.current) {
+        console.log('[AUTH] 🧹 Removing previous user profile channel before re-subscribing...');
+        supabase.removeChannel(userChannelRef.current);
+        userChannelRef.current = null;
+        userChannelUserIdRef.current = null;
+      }
       
-      userChannel = supabase
+      const channel = supabase
         .channel(`user-profile-${userId}`)
         .on(
           'postgres_changes',
@@ -263,13 +279,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           },
           async (payload) => {
             console.log('[AUTH] 🔔 User profile updated in database:', payload.new);
-            // Refresh user profile when database changes
-            await loadUserProfile(userId, true);
+            // IMPORTANT: Do not force-refresh the whole profile on every UPDATE.
+            // Presence updates (online_status/last_seen) would otherwise create a feedback loop:
+            // DB UPDATE -> force refresh -> new user object -> providers re-init -> presence toggles -> DB UPDATE ...
+            try {
+              const nextDbUser = payload.new as DbUser | null;
+              if (!nextDbUser) return;
+              const mappedUpdatedUser = mapDbUserToUser(nextDbUser);
+              const cacheKey = CacheKeys.userProfile(userId);
+
+              setUser((prev) => {
+                if (!prev || prev.id !== userId) return prev;
+                const merged: User = {
+                  ...prev,
+                  ...mappedUpdatedUser,
+                  // Preserve achievements if they were hydrated elsewhere
+                  achievements: prev.achievements ?? mappedUpdatedUser.achievements,
+                };
+                // Keep cache in sync (TTL aligns with loadUserProfile)
+                cache.set(cacheKey, merged, 1 * 60 * 1000);
+                return merged;
+              });
+            } catch (e: any) {
+              console.warn('[AUTH] ⚠️ Failed to merge realtime profile update:', e?.message);
+            }
           }
         )
         .subscribe((status) => {
           console.log('[AUTH] 📡 Real-time subscription status:', status);
         });
+
+      userChannelRef.current = channel;
+      userChannelUserIdRef.current = userId;
     };
 
     // Initialize auth first
@@ -288,9 +329,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (subscription) {
         subscription.unsubscribe();
       }
-      if (userChannel) {
+      if (userChannelRef.current) {
         console.log('[AUTH] 🧹 Unsubscribing from user profile changes...');
-        supabase.removeChannel(userChannel);
+        supabase.removeChannel(userChannelRef.current);
+        userChannelRef.current = null;
+        userChannelUserIdRef.current = null;
       }
     };
   }, []);
