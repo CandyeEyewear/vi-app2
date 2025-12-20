@@ -36,6 +36,7 @@ const FeedContext = createContext<FeedContextType | undefined>(undefined);
 
 export function FeedProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  const userId = user?.id ?? null;
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -97,10 +98,10 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
 
   // Load feed on mount
   useEffect(() => {
-    if (user) {
+    if (userId) {
       console.log('[FEED] 🚀 User logged in, loading feed and setting up real-time...');
       loadFeed();
-      const cleanup = setupRealtimeSubscriptions();
+      const cleanup = setupRealtimeSubscriptions(userId);
       
       return () => {
         console.log('[FEED] 🧹 Cleaning up real-time subscriptions...');
@@ -109,7 +110,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
         }
       };
     }
-  }, [user]);
+  }, [userId]);
 
   // ✅ Helper function to calculate reaction summary
   const calculateReactionSummary = (reactions: PostReaction[], userId?: string): ReactionSummary => {
@@ -154,8 +155,8 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
   };
 
   // 🎯 COMPREHENSIVE REAL-TIME SUBSCRIPTIONS
-  const setupRealtimeSubscriptions = () => {
-    if (!user) return;
+  const setupRealtimeSubscriptions = (currentUserId: string) => {
+    if (!currentUserId) return;
 
     console.log('[FEED] 🔌 Setting up comprehensive real-time subscriptions...');
 
@@ -176,7 +177,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
           const newPostData = payload.new as any;
           
           // Skip if it's our own post (already optimistically added)
-          if (newPostData.user_id === user.id) {
+          if (newPostData.user_id === currentUserId) {
             console.log('[FEED] ℹ️ Skipping own post (already added optimistically)');
             return;
           }
@@ -500,7 +501,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
                 isAnnouncement: originalPostData.is_announcement || false,
                 isPinned: originalPostData.is_pinned || false,
                 reactions: originalReactionsList,
-                reactionSummary: calculateReactionSummary(originalReactionsList, user?.id),
+                reactionSummary: calculateReactionSummary(originalReactionsList, currentUserId),
                 createdAt: originalPostData.created_at,
                 updatedAt: originalPostData.updated_at,
               };
@@ -649,7 +650,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
           const newReaction = payload.new as any;
           
           // If this is our own reaction and we already optimistically added one, replace it instead of duplicating
-          const isOwnReaction = user && newReaction.user_id === user.id;
+          const isOwnReaction = newReaction.user_id === currentUserId;
 
           // Get user details for the reaction
           const { data: userData } = await supabase
@@ -700,7 +701,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
                       return {
                         ...p,
                         reactions,
-                        reactionSummary: calculateReactionSummary(reactions, user?.id),
+                        reactionSummary: calculateReactionSummary(reactions, currentUserId),
                       };
                     }
                   }
@@ -718,7 +719,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
                 return {
                   ...p,
                   reactions,
-                  reactionSummary: calculateReactionSummary(reactions, user?.id),
+                  reactionSummary: calculateReactionSummary(reactions, currentUserId),
                 };
               }
               return p;
@@ -782,7 +783,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
                 return {
                   ...p,
                   reactions,
-                  reactionSummary: calculateReactionSummary(reactions, user?.id),
+                  reactionSummary: calculateReactionSummary(reactions, currentUserId),
                 };
               }
               return p;
@@ -812,7 +813,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
                 return {
                   ...p,
                   reactions,
-                  reactionSummary: calculateReactionSummary(reactions, user?.id),
+                  reactionSummary: calculateReactionSummary(reactions, currentUserId),
                 };
               }
               return p;
@@ -847,7 +848,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
       if (postsError) throw postsError;
 
       // Filter targeted announcements to only show eligible ones
-      const eligibleTargeted = user?.id ? await getEligibleTargetedAnnouncementPostIds(user.id) : new Set<string>();
+      const eligibleTargeted = userId ? await getEligibleTargetedAnnouncementPostIds(userId) : new Set<string>();
       const visiblePostsData = (postsData || []).filter((p: any) => {
         const isAnnouncement = !!p.is_announcement;
         const scope = (p.announcement_scope || 'general') as string;
@@ -1016,7 +1017,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
             isPinned: post.is_pinned || false,
             announcementScope: post.announcement_scope || 'general',
             reactions, // ✅ Add reactions
-            reactionSummary: calculateReactionSummary(reactions, user?.id), // ✅ Add summary
+            reactionSummary: calculateReactionSummary(reactions, userId ?? undefined), // ✅ Add summary
             sharedPostId: post.shared_post_id || null,
             postType: post.post_type || 'regular',
             shoutoutUserId: post.shoutout_user_id,
@@ -1284,7 +1285,7 @@ const postsWithEvents = await Promise.all(
                 isAnnouncement: originalPostData.is_announcement || false,
                 isPinned: originalPostData.is_pinned || false,
                 reactions: originalReactionsList,
-                reactionSummary: calculateReactionSummary(originalReactionsList, user?.id),
+                reactionSummary: calculateReactionSummary(originalReactionsList, userId ?? undefined),
                 createdAt: originalPostData.created_at,
                 updatedAt: originalPostData.updated_at,
               };
