@@ -23,6 +23,7 @@ import {
   Alert,
   Modal,
   Animated,
+  Easing,
   ScrollView,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -42,16 +43,25 @@ import TypingIndicator from '../../components/TypingIndicator';
 import OnlineStatusDot from '../../components/OnlineStatusDot';
 import SwipeableMessage from '../../components/SwipeableMessage';
 import LinkText from '../../components/LinkText';
-import * as Clipboard from 'expo-clipboard';
 import { UserAvatar, UserNameWithBadge } from '../../components/index';
 import { goBack } from '../../utils/navigation';
+
+// expo-clipboard will crash at import-time if the native module isn't present
+// (common when running an old Expo Dev Client build). Fail-soft instead.
+const Clipboard = (() => {
+  try {
+    return require('expo-clipboard') as typeof import('expo-clipboard');
+  } catch {
+    return null;
+  }
+})();
 
 export default function ConversationScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const { conversations, sendMessage, markAsRead, markMessageDelivered, deleteMessage } = useMessaging();
+  const { conversations, sendMessage, markAsRead, markMessageDelivered, deleteMessage, refreshConversations, isUserOnline } = useMessaging();
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -64,7 +74,7 @@ export default function ConversationScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [oldestMessageId, setOldestMessageId] = useState<string | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [otherUserOnline, setOtherUserOnline] = useState(false); // Track if other user is in chat
+  const [otherUserOnline, setOtherUserOnline] = useState(false); // Track if other user is in this chat (presence channel)
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [imagePreview, setImagePreview] = useState<{ uri: string; type: string } | null>(null); // For sending new images
   const [viewingImage, setViewingImage] = useState<string | null>(null); // For viewing already-sent images
@@ -77,6 +87,65 @@ export default function ConversationScreen() {
 
   const conversation = conversations.find((c) => c.id === id);
   const otherUser = conversation?.participantDetails.find((p) => p.id !== user?.id);
+  const isOtherUserOnlineAnywhere = otherUser?.id ? isUserOnline(otherUser.id) : false;
+  const [otherUserLastSeen, setOtherUserLastSeen] = useState<string | undefined>(otherUser?.lastSeen);
+
+  const formatLastSeen = (timestamp?: string) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return '';
+
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    if (diffMs < 60_000) return 'Last seen just now';
+    if (diffMs < 60 * 60_000) return `Last seen ${Math.round(diffMs / 60_000)}m ago`;
+
+    const isSameDay =
+      now.getFullYear() === date.getFullYear() &&
+      now.getMonth() === date.getMonth() &&
+      now.getDate() === date.getDate();
+
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    const isYesterday =
+      yesterday.getFullYear() === date.getFullYear() &&
+      yesterday.getMonth() === date.getMonth() &&
+      yesterday.getDate() === date.getDate();
+
+    const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    if (isSameDay) return `Last seen today at ${time}`;
+    if (isYesterday) return `Last seen yesterday at ${time}`;
+
+    const day = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return `Last seen ${day} at ${time}`;
+  };
+
+  // Keep lastSeen fresh for header (best-effort)
+  useEffect(() => {
+    setOtherUserLastSeen(otherUser?.lastSeen);
+    if (!otherUser?.id) return;
+
+    const channel = supabase
+      .channel(`user-last-seen:${otherUser.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'users',
+          filter: `id=eq.${otherUser.id}`,
+        },
+        (payload) => {
+          setOtherUserLastSeen(payload.new?.last_seen ?? payload.new?.lastSeen ?? undefined);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      channel.unsubscribe();
+      supabase.removeChannel(channel);
+    };
+  }, [otherUser?.id, otherUser?.lastSeen]);
 
   // Merge arrays without duplicate ids
   const mergeUnique = (a: Message[], b: Message[]) => {
@@ -142,10 +211,11 @@ export default function ConversationScreen() {
         const height = e.endCoordinates.height;
         setKeyboardHeight(height);
         
-        // Ultra smooth animation - no gaps
+        // Ultra smooth animation with easing - no gaps
         Animated.timing(keyboardAnim, {
           toValue: height,
-          duration: Platform.OS === 'ios' ? 250 : 150,
+          duration: Platform.OS === 'ios' ? e.duration || 300 : 200,
+          easing: Easing.bezier(0.25, 0.1, 0.25, 1), // Smooth cubic bezier easing
           useNativeDriver: false,
         }).start();
         
@@ -158,13 +228,14 @@ export default function ConversationScreen() {
 
     const hideSubscription = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => {
+      (e) => {
         setKeyboardHeight(0);
         
-        // Ultra smooth animation - smooth transition back
+        // Ultra smooth animation - smooth transition back with easing
         Animated.timing(keyboardAnim, {
           toValue: 0,
-          duration: Platform.OS === 'ios' ? 250 : 150,
+          duration: Platform.OS === 'ios' ? e.duration || 300 : 200,
+          easing: Easing.bezier(0.25, 0.1, 0.25, 1), // Smooth cubic bezier easing
           useNativeDriver: false,
         }).start();
       }
@@ -265,6 +336,7 @@ export default function ConversationScreen() {
           filter: `conversation_id=eq.${id}`,
         },
         (payload) => {
+          // Update the message (including if it was deleted - we'll show "This message was deleted")
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === payload.new.id
@@ -278,6 +350,11 @@ export default function ConversationScreen() {
                 : msg
             )
           );
+          
+          // If message was deleted, refresh conversations to update the last message in chat list
+          if (payload.new.deleted_at) {
+            refreshConversations();
+          }
         }
       )
       .subscribe();
@@ -815,7 +892,25 @@ export default function ConversationScreen() {
           const result = await deleteMessage(message.id);
           if (!result.success) {
             Alert.alert('Error', result.error || 'Failed to delete message');
+            return;
           }
+
+          // Optimistic UI: update local list immediately (realtime UPDATE can be partial/missing fields)
+          const deletedAt = new Date().toISOString();
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === message.id
+                ? {
+                    ...m,
+                    deletedAt,
+                    text: 'This message was deleted',
+                  }
+                : m
+            )
+          );
+
+          // Ensure inbox preview updates even if you navigate back quickly
+          refreshConversations();
         },
       },
     ]);
@@ -832,6 +927,13 @@ export default function ConversationScreen() {
     if (hasCopyableText) {
       options.push('Copy');
       actions.push(async () => {
+        if (!Clipboard?.setStringAsync) {
+          Alert.alert(
+            'Clipboard unavailable',
+            'Clipboard is not available in this build. If you are using Expo Dev Client, rebuild the dev client to include expo-clipboard.'
+          );
+          return;
+        }
         await Clipboard.setStringAsync(message.text);
       });
     }
@@ -880,6 +982,12 @@ export default function ConversationScreen() {
     
     const hasAttachments = item.attachments && item.attachments.length > 0;
     const hasText = item.text && item.text.trim().length > 0;
+    const newestMessageId = messages[0]?.id;
+    const showSeenLabel =
+      isMe &&
+      !isDeleted &&
+      item.id === newestMessageId &&
+      (item.status === 'read' || item.read === true);
     
     return (
       <SwipeableMessage
@@ -892,11 +1000,14 @@ export default function ConversationScreen() {
           delayLongPress={500}
           disabled={!(hasText && !isDeleted) && !canDeleteMessage(item)}
         >
-          <View style={[
-            styles.messageBubble, 
-            isMe && styles.messageBubbleMe,
-            isDeleted && styles.messageBubbleDeleted
-          ]}>
+          <View style={{ alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '100%' }}>
+            <View
+              style={[
+                styles.messageBubble,
+                isMe && styles.messageBubbleMe,
+                isDeleted && styles.messageBubbleDeleted,
+              ]}
+            >
           {/* Reply Quote Preview */}
           {item.replyTo && !isDeleted && (
             <View style={[styles.replyQuote, isMe && styles.replyQuoteMe]}>
@@ -984,7 +1095,10 @@ export default function ConversationScreen() {
           )}
           
           {/* If only image (no text), no additional footer needed - timestamp is on image */}
-        </View>
+            </View>
+
+            {showSeenLabel && <Text style={styles.seenLabel}>Seen</Text>}
+          </View>
       </Pressable>
     </SwipeableMessage>
     );
@@ -1023,7 +1137,7 @@ export default function ConversationScreen() {
               membershipStatus={otherUser.membershipStatus || 'inactive'}
               isPartnerOrganization={otherUser.is_partner_organization}
             />
-            {otherUserOnline && (
+            {isOtherUserOnlineAnywhere && (
               <View style={{ position: 'absolute', bottom: -2, right: -2 }}>
                 <OnlineStatusDot isOnline={true} size={12} />
               </View>
@@ -1038,7 +1152,13 @@ export default function ConversationScreen() {
               isPartnerOrganization={otherUser.is_partner_organization}
               style={styles.headerName}
             />
-            {otherUserOnline && <Text style={styles.onlineText}>Online</Text>}
+            {isOtherUserOnlineAnywhere ? (
+              <Text style={styles.onlineText}>Online</Text>
+            ) : (
+              !!formatLastSeen(otherUserLastSeen) && (
+                <Text style={styles.lastSeenText}>{formatLastSeen(otherUserLastSeen)}</Text>
+              )
+            )}
           </View>
         </TouchableOpacity>
       </View>
@@ -1418,6 +1538,11 @@ const styles = StyleSheet.create({
     color: Colors.light.primary, // Blue like app theme
     marginTop: 2,
   },
+  lastSeenText: {
+    fontSize: 12,
+    color: Colors.light.textSecondary,
+    marginTop: 2,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -1480,6 +1605,13 @@ const styles = StyleSheet.create({
   },
   messageTimeMe: {
     color: WHATSAPP_COLORS.timestamp,
+  },
+  seenLabel: {
+    fontSize: 11,
+    color: Colors.light.textSecondary,
+    marginTop: 2,
+    marginRight: 2,
+    alignSelf: 'flex-end',
   },
   emptyContainer: {
     flex: 1,

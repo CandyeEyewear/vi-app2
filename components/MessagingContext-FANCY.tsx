@@ -7,6 +7,20 @@ import React, { createContext, useState, useContext, useEffect, useMemo } from '
 import { Conversation, Message, ApiResponse } from '../types';
 import { supabase } from '../services/supabase';
 import { useAuth } from './AuthContext';
+import { warn as logWarn } from '../utils/logger';
+
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  if (err && typeof err === 'object' && 'message' in err && typeof (err as any).message === 'string') {
+    return (err as any).message;
+  }
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return 'Unknown error';
+  }
+}
 
 interface MessagingContextType {
   conversations: Conversation[];
@@ -355,9 +369,10 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       setConversations((prev) => prev.filter((conv) => conv.id !== conversationId));
 
       return { success: true };
-    } catch (error: any) {
-      console.error('Error deleting conversation:', error);
-      return { success: false, error: error.message };
+    } catch (error: unknown) {
+      // Avoid RN redbox from console.error for non-fatal failures.
+      logWarn('Error deleting conversation', error);
+      return { success: false, error: getErrorMessage(error) };
     }
   };
 
@@ -395,7 +410,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         .from('users')
         .update({
           online_status: isOnline,
-          last_seen: new Date().toISOString(),
+          ...(isOnline ? {} : { last_seen: new Date().toISOString() }),
         })
         .eq('id', user.id);
     } catch (error) {

@@ -3,7 +3,7 @@ export default {
     name: "VIbe",
     slug: "vibe-volunteer-app",
     scheme: "vibe",
-    version: "1.0.1",
+    version: "1.0.2",
     // Allow rotation & resizing for large-screen devices (tablets/foldables/Chromebooks)
     // per Google Play large-screen requirements.
     orientation: "default",
@@ -14,7 +14,7 @@ export default {
       backgroundColor: "#0944a2"
     },
     runtimeVersion: {
-      policy: "appVersion" // Uses app version (1.0.1) as runtime version
+      policy: "appVersion" // Uses app version (1.0.2) as runtime version
     },
     updates: {
       url: "https://u.expo.dev/af48b690-5cb4-44ef-bd25-e8bcc1c31f0b",
@@ -47,6 +47,9 @@ export default {
         backgroundColor: "#2196F3"
       },
       permissions: [
+        // Android 13+ runtime permission required for notifications.
+        // NOTE: Defining `android.permissions` overrides Expo defaults, so we must include this explicitly.
+        "android.permission.POST_NOTIFICATIONS",
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",

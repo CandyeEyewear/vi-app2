@@ -65,6 +65,10 @@ export interface User {
   totalDonated?: number;
   donationCount?: number;
   donorBadges?: DonorBadge[];
+
+  // Messaging presence (optional; hydrated in messaging flows)
+  onlineStatus?: boolean;
+  lastSeen?: string;
 }
 
 export interface Achievement {

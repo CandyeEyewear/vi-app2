@@ -3,7 +3,7 @@
  * Conversational inbox with search, filters, and rich previews
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,25 +14,26 @@ import {
   RefreshControl,
   useColorScheme,
   Platform,
+  Alert,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { Search, Plus, X, Inbox } from 'lucide-react-native';
+import { Swipeable } from 'react-native-gesture-handler';
+import { Search, Plus, X, Inbox, Trash2 } from 'lucide-react-native';
 
 import { Colors } from '../../constants/colors';
 import { useMessaging } from '../../contexts/MessagingContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { EmptyState } from '../../components/EmptyState';
 import { UserAvatar, UserNameWithBadge, OnlineStatusDot, MessageStatus } from '../../components';
+import CustomAlert from '../../components/CustomAlert';
 import type { Conversation } from '../../types';
 
 const FILTERS: { id: 'all' | 'unread'; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'unread', label: 'Unread' },
 ];
-
-const PLACEHOLDER_ITEMS = Array.from({ length: 6 }).map((_, index) => index);
 
 type ColorTheme = typeof Colors.light;
 
@@ -104,18 +105,6 @@ const parseMessagePreview = (rawText?: string) => {
     hasReply,
   };
 };
-
-const ConversationSkeleton = ({ colors }: { colors: ColorTheme }) => (
-  <View style={[styles.conversationCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-    {/* avatar + text placeholder */}
-    <View style={[styles.avatarSkeleton, { backgroundColor: colors.skeleton }]} />
-    <View style={styles.skeletonContent}>
-      <View style={[styles.textSkeleton, { width: '55%', backgroundColor: colors.skeleton }]} />
-      <View style={[styles.textSkeleton, { width: '35%', backgroundColor: colors.skeleton }]} />
-      <View style={[styles.textSkeleton, { width: '80%', backgroundColor: colors.skeleton }]} />
-    </View>
-  </View>
-);
 
 const ConversationRow = ({ conversation, colors, currentUserId, isUserOnline, onPress }: ConversationRowProps) => {
   const otherUser = getOtherParticipant(conversation, currentUserId);
@@ -220,11 +209,14 @@ export default function MessagesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { conversations, loading, refreshConversations, isUserOnline } = useMessaging();
+  const { conversations, loading, refreshConversations, isUserOnline, deleteConversation } = useMessaging();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'unread'>('all');
   const [refreshing, setRefreshing] = useState(false);
+  const swipeableRefs = useRef<Map<string, Swipeable | null>>(new Map());
+  const [deleteAlertVisible, setDeleteAlertVisible] = useState(false);
+  const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -261,18 +253,66 @@ export default function MessagesScreen() {
     });
   }, [activeFilter, conversations, searchQuery, user?.id]);
 
-  const showSkeleton = loading && conversations.length === 0;
+  const handleDeleteConversation = useCallback((conversationId: string) => {
+    setConversationToDelete(conversationId);
+    setDeleteAlertVisible(true);
+    // Close swipeable if open
+    swipeableRefs.current.get(conversationId)?.close();
+  }, []);
+
+  const confirmDeleteConversation = useCallback(async () => {
+    if (!conversationToDelete) return;
+
+    setDeleteAlertVisible(false);
+    const conversationId = conversationToDelete;
+    setConversationToDelete(null);
+
+    const result = await deleteConversation(conversationId);
+    if (!result.success) {
+      // Show error alert if delete fails
+      Alert.alert('Error', result.error || 'Failed to delete conversation');
+    }
+  }, [conversationToDelete, deleteConversation]);
+
+  const renderRightActions = useCallback((conversationId: string) => {
+    return (
+      <View style={styles.rightAction}>
+        <Pressable
+          style={[styles.deleteButton, { backgroundColor: colors.error || '#FF3B30' }]}
+          onPress={() => handleDeleteConversation(conversationId)}
+        >
+          <Trash2 size={20} color="#FFFFFF" />
+          <Text style={styles.deleteButtonText}>Delete</Text>
+        </Pressable>
+      </View>
+    );
+  }, [colors, handleDeleteConversation]);
 
   const renderConversation = ({ item }: { item: Conversation }) => (
-    <ConversationRow
-      conversation={item}
-      colors={colors}
-      currentUserId={user?.id}
-      isUserOnline={isUserOnline}
-      onPress={(conversationId) =>
-        router.push({ pathname: '/conversation/[id]', params: { id: conversationId } })
-      }
-    />
+    <Swipeable
+      ref={(ref) => {
+        if (ref) {
+          swipeableRefs.current.set(item.id, ref);
+        } else {
+          swipeableRefs.current.delete(item.id);
+        }
+      }}
+      renderRightActions={() => renderRightActions(item.id)}
+      rightThreshold={40}
+      overshootRight={false}
+    >
+      <ConversationRow
+        conversation={item}
+        colors={colors}
+        currentUserId={user?.id}
+        isUserOnline={isUserOnline}
+        onPress={(conversationId) => {
+          // Close any open swipeables before navigating
+          swipeableRefs.current.forEach((ref) => ref.close());
+          router.push({ pathname: '/conversation/[id]', params: { id: conversationId } });
+        }}
+      />
+    </Swipeable>
   );
 
   return (
@@ -363,54 +403,85 @@ export default function MessagesScreen() {
           })}
         </View>
 
-        {showSkeleton ? (
-          <View style={styles.skeletonList}>
-            {PLACEHOLDER_ITEMS.map((item) => (
-              <ConversationSkeleton colors={colors} key={`skeleton-${item}`} />
-            ))}
-          </View>
-        ) : (
-          <FlatList
-            data={filteredConversations}
-            keyExtractor={(item) => item.id}
-            renderItem={renderConversation}
-            contentContainerStyle={[
-              styles.listContent,
-              filteredConversations.length === 0 && styles.emptyListContent,
-              { paddingBottom: (filteredConversations.length === 0 ? 0 : 12) + insets.bottom },
-            ]}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={handleRefresh}
-                tintColor={colors.primary}
-                colors={[colors.primary]}
-              />
-            }
-            keyboardShouldPersistTaps="handled"
-            ListEmptyComponent={
-              <EmptyState
-                icon={Inbox}
-                title={searchQuery ? 'No results found' : 'No conversations yet'}
-                subtitle={
-                  searchQuery
-                    ? 'Try a different name or keyword.'
-                    : 'Start a conversation with a volunteer or organization.'
-                }
-                action={{
-                  label: 'Find people to message',
-                  onPress: () => router.push('/search'),
-                }}
-                suggestions={
-                  searchQuery
-                    ? ['Search by cause, organization, or name']
-                    : ['Explore the feed and tap message', 'Invite teammates to chat']
-                }
-                colors={colors}
-              />
-            }
-          />
-        )}
+        <FlatList
+          data={filteredConversations}
+          keyExtractor={(item) => item.id}
+          renderItem={renderConversation}
+          contentContainerStyle={[
+            styles.listContent,
+            filteredConversations.length === 0 && styles.emptyListContent,
+            { paddingBottom: (filteredConversations.length === 0 ? 0 : 12) + insets.bottom },
+          ]}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
+          keyboardShouldPersistTaps="handled"
+          ListEmptyComponent={
+            <EmptyState
+              icon={Inbox}
+              title={
+                loading
+                  ? 'Loading messages...'
+                  : searchQuery
+                  ? 'No results found'
+                  : activeFilter === 'unread'
+                  ? 'No unread messages'
+                  : 'No messages'
+              }
+              subtitle={
+                loading
+                  ? 'Just a moment while we load your inbox.'
+                  : searchQuery
+                  ? 'Try a different name or keyword.'
+                  : activeFilter === 'unread'
+                  ? "You're all caught up."
+                  : 'Start a conversation with a volunteer or organization.'
+              }
+              action={
+                loading
+                  ? undefined
+                  : activeFilter === 'unread'
+                  ? {
+                      label: 'View all messages',
+                      onPress: () => setActiveFilter('all'),
+                    }
+                  : {
+                      label: 'Find people to message',
+                      onPress: () => router.push('/search'),
+                    }
+              }
+              suggestions={
+                loading
+                  ? undefined
+                  : searchQuery
+                  ? ['Search by cause, organization, or name']
+                  : activeFilter === 'unread'
+                  ? ['Switch to All to see earlier chats']
+                  : ['Explore the feed and tap message', 'Invite teammates to chat']
+              }
+              colors={colors}
+            />
+          }
+        />
+
+        {/* Delete Confirmation Alert */}
+        <CustomAlert
+          visible={deleteAlertVisible}
+          type="error"
+          title="Delete Conversation"
+          message="Are you sure you want to delete this conversation? This action cannot be undone."
+          showCancel
+          onClose={() => {
+            setDeleteAlertVisible(false);
+            setConversationToDelete(null);
+          }}
+          onConfirm={confirmDeleteConversation}
+        />
       </View>
     </>
   );
@@ -578,22 +649,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  skeletonList: {
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingBottom: 32,
-  },
-  avatarSkeleton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-  },
-  skeletonContent: {
+  rightAction: {
     flex: 1,
-    gap: 8,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    paddingRight: 16,
   },
-  textSkeleton: {
-    height: 14,
-    borderRadius: 7,
+  deleteButton: {
+    width: 100,
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 20,
+    gap: 4,
+  },
+  deleteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

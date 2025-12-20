@@ -3,12 +3,26 @@
  * Real-time updates for conversation list with global presence tracking
  */
 
-import React, { createContext, useState, useContext, useEffect, useMemo, useRef } from 'react';
+import React, { createContext, useState, useContext, useEffect, useMemo, useRef, useCallback } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { Conversation, Message, ApiResponse } from '../types';
 import { supabase } from '../services/supabase';
 import { useAuth } from './AuthContext';
 import { sendNotificationToUser } from '../services/pushNotifications';
+import { warn as logWarn } from '../utils/logger';
+
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  if (err && typeof err === 'object' && 'message' in err && typeof (err as any).message === 'string') {
+    return (err as any).message;
+  }
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return 'Unknown error';
+  }
+}
 
 interface MessagingContextType {
   conversations: Conversation[];
@@ -52,41 +66,67 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     if (user) {
       loadConversations();
     }
-  }, [user]);
+  }, [user, updateOnlineStatus]);
 
   // SIMPLE REAL-TIME SUBSCRIPTION LIKE NOTIFICATIONS (narrowed events)
   useEffect(() => {
     if (!user) return;
 
-    // Subscribe to new messages
+    // Subscribe to message changes that can affect previews/unreads (INSERT/UPDATE/DELETE)
+    // Note: UPDATE is required for "soft delete" (deleted_at/text change) to reflect in the inbox.
     const messageSubscription = supabase
       .channel('messages-changes')
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT', // Only new messages affect conversation previews/unreads
-          schema: 'public',
-          table: 'messages',
-        },
-        () => {
-          // Simply reload conversations when any message changes
-          loadConversations();
-        }
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        () => loadConversations()
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages' },
+        () => loadConversations()
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'messages' },
+        () => loadConversations()
       )
       .subscribe();
 
-    // Subscribe to conversation changes
+    // Subscribe to conversation changes (including deletes so removed/left chats disappear)
     const conversationSubscription = supabase
       .channel('conversations-changes')
       .on(
         'postgres_changes',
         {
-          event: 'UPDATE', // Creation handled by messages; updates change ordering
+          event: 'INSERT',
+          schema: 'public',
+          table: 'conversations',
+        },
+        () => {
+          loadConversations();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE', // Updates change ordering/participants
           schema: 'public',
           table: 'conversations',
         },
         () => {
           // Reload conversations when any conversation changes
+          loadConversations();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'conversations',
+        },
+        () => {
           loadConversations();
         }
       )
@@ -96,7 +136,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       messageSubscription.unsubscribe();
       conversationSubscription.unsubscribe();
     };
-  }, [user]);
+  }, [user, updateOnlineStatus]);
 
   // GLOBAL PRESENCE CHANNEL - Track all online users
   useEffect(() => {
@@ -151,6 +191,10 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       .subscribe(async (status) => {
         console.log('[GlobalPresence] Subscription status:', status);
         if (status === 'SUBSCRIBED') {
+          // Persist presence state (best-effort; used for "Last seen")
+          // Fire-and-forget: presence itself is still the source of truth for "online now".
+          updateOnlineStatus(true).catch(() => {});
+
           // Track current user as online
           await globalPresenceChannel.track({
             user_id: user.id,
@@ -165,6 +209,9 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     return () => {
       console.log('[GlobalPresence] Cleaning up presence channel');
       if (globalPresenceChannelRef.current) {
+        // Persist last seen on exit (best-effort)
+        updateOnlineStatus(false).catch(() => {});
+
         globalPresenceChannelRef.current.untrack();
         globalPresenceChannelRef.current.unsubscribe();
         supabase.removeChannel(globalPresenceChannelRef.current);
@@ -189,6 +236,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         console.log('[AppState] App came to foreground, marking user as online');
         if (globalPresenceChannelRef.current) {
           try {
+            updateOnlineStatus(true).catch(() => {});
             await globalPresenceChannelRef.current.track({
               user_id: user.id,
               user_name: user.fullName,
@@ -204,6 +252,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         console.log('[AppState] App went to background, marking user as offline');
         if (globalPresenceChannelRef.current) {
           try {
+            updateOnlineStatus(false).catch(() => {});
             await globalPresenceChannelRef.current.untrack();
           } catch (error) {
             console.error('[AppState] Error untracking presence:', error);
@@ -223,11 +272,13 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
 
     try {
+      setLoading(true);
       // Fetch conversations where user is a participant
       const { data: conversationsData, error: conversationsError } = await supabase
         .from('conversations')
         .select('*')
         .contains('participants', [user.id])
+        .not('deleted_by', 'cs', `["${user.id}"]`)
         .order('updated_at', { ascending: false });
 
       if (conversationsError) throw conversationsError;
@@ -265,11 +316,12 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
             updatedAt: u.updated_at,
           })) || [];
 
-          // Get last message
+          // Get last message (excluding deleted messages)
           const { data: messagesData } = await supabase
             .from('messages')
             .select('*')
             .eq('conversation_id', conv.id)
+            .is('deleted_at', null) // Only get non-deleted messages
             .order('created_at', { ascending: false })
             .limit(1);
 
@@ -677,34 +729,45 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     await loadConversations();
   };
 
-  const deleteConversation = async (conversationId: string): Promise<ApiResponse<void>> => {
-    if (!user) {
-      return { success: false, error: 'Not authenticated' };
-    }
-
+  const deleteConversation = async (conversationId: string) => {
     try {
-      // Delete all messages in the conversation first
-      const { error: messagesError } = await supabase
-        .from('messages')
-        .delete()
-        .eq('conversation_id', conversationId);
+      if (!user?.id) {
+        return { success: false, error: 'User not authenticated' };
+      }
 
-      if (messagesError) throw messagesError;
-
-      // Delete the conversation
-      const { error: convError } = await supabase
+      // First, get the current deleted_by array
+      const { data: conversation, error: fetchError } = await supabase
         .from('conversations')
-        .delete()
+        .select('deleted_by')
+        .eq('id', conversationId)
+        .single();
+
+      if (fetchError) {
+        console.error('Error fetching conversation:', fetchError);
+        return { success: false, error: fetchError.message };
+      }
+
+      // Add current user to deleted_by array
+      const currentDeletedBy = conversation?.deleted_by || [];
+      const updatedDeletedBy = [...currentDeletedBy, user.id];
+
+      // Soft delete: Update deleted_by array
+      const { error: updateError } = await supabase
+        .from('conversations')
+        .update({ deleted_by: updatedDeletedBy })
         .eq('id', conversationId);
 
-      if (convError) throw convError;
+      if (updateError) {
+        console.error('Error soft deleting conversation:', updateError);
+        return { success: false, error: updateError.message };
+      }
 
-      // Update local state
-      setConversations((prev) => prev.filter((conv) => conv.id !== conversationId));
+      // Remove from local state immediately
+      setConversations(prev => prev.filter(c => c.id !== conversationId));
 
       return { success: true };
     } catch (error: any) {
-      console.error('Error deleting conversation:', error);
+      console.error('Error in deleteConversation:', error);
       return { success: false, error: error.message };
     }
   };
@@ -733,21 +796,25 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const updateOnlineStatus = async (isOnline: boolean) => {
+  const updateOnlineStatus = useCallback(async (isOnline: boolean) => {
     if (!user) return;
 
     try {
-      await supabase
-        .from('users')
-        .update({
-          online_status: isOnline,
-          last_seen: new Date().toISOString(),
-        })
-        .eq('id', user.id);
+      const updates: Record<string, any> = {
+        online_status: isOnline,
+      };
+
+      // "Last seen" should represent the last time the user was active.
+      // We update it when the app goes to background/offline.
+      if (!isOnline) {
+        updates.last_seen = new Date().toISOString();
+      }
+
+      await supabase.from('users').update(updates).eq('id', user.id);
     } catch (error) {
       console.error('Error updating online status:', error);
     }
-  };
+  }, [user]);
 
   const markMessageDelivered = async (messageId: string) => {
     if (!user) return;
@@ -771,7 +838,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data: message, error: fetchError } = await supabase
         .from('messages')
-        .select('sender_id, created_at')
+        .select('sender_id, created_at, conversation_id')
         .eq('id', messageId)
         .single();
 
@@ -802,6 +869,22 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         .eq('id', messageId);
 
       if (deleteError) throw deleteError;
+
+      // Optimistically update inbox preview if this was the lastMessage
+      // (realtime UPDATE payloads can be partial depending on replica identity settings)
+      setConversations((prev) =>
+        prev.map((conv) => {
+          if (conv.lastMessage?.id !== messageId) return conv;
+          return {
+            ...conv,
+            lastMessage: {
+              ...conv.lastMessage,
+              text: 'This message was deleted',
+            },
+            updatedAt: new Date().toISOString(),
+          };
+        })
+      );
 
       return { success: true };
     } catch (error: any) {

@@ -11,7 +11,7 @@ import {
   TextInput,
   StyleSheet,
   TouchableOpacity,
-  FlatList,
+  ScrollView,
   Image,
   ActivityIndicator,
   useColorScheme,
@@ -527,7 +527,7 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
     }
   };
 
-  const renderUserItem = ({ item }: { item: SearchUser }) => (
+  const renderUserItem = (item: SearchUser) => (
     <TouchableOpacity
       style={[styles.pickerItem, { borderBottomColor: colors.border }]}
       onPress={() => handleSelectUser(item)}
@@ -549,7 +549,7 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
     </TouchableOpacity>
   );
 
-  const renderHashtagItem = ({ item }: { item: HashtagItem }) => (
+  const renderHashtagItem = (item: HashtagItem) => (
     <TouchableOpacity
       style={[styles.pickerItem, { borderBottomColor: colors.border }]}
       onPress={() => handleSelectHashtag(item)}
@@ -604,14 +604,15 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
           </View>
           
           {userResults.length > 0 ? (
-            <FlatList
-              data={userResults}
-              keyExtractor={(item) => item.id}
-              renderItem={renderUserItem}
+            <ScrollView
               keyboardShouldPersistTaps="handled"
               style={styles.pickerList}
               showsVerticalScrollIndicator={false}
-            />
+            >
+              {userResults.map((item) => (
+                <View key={item.id}>{renderUserItem(item)}</View>
+              ))}
+            </ScrollView>
           ) : !searching ? (
             <View style={styles.emptyState}>
               <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
@@ -662,14 +663,15 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
           </View>
           
           {getCurrentHashtagResults().length > 0 ? (
-            <FlatList
-              data={getCurrentHashtagResults()}
-              keyExtractor={(item) => item.id}
-              renderItem={renderHashtagItem}
+            <ScrollView
               keyboardShouldPersistTaps="handled"
               style={styles.pickerList}
               showsVerticalScrollIndicator={false}
-            />
+            >
+              {getCurrentHashtagResults().map((item) => (
+                <View key={item.id}>{renderHashtagItem(item)}</View>
+              ))}
+            </ScrollView>
           ) : !searching ? (
             <View style={styles.emptyState}>
               <Text style={[styles.emptyText, { color: colors.textSecondary }]}>

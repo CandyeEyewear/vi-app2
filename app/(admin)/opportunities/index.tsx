@@ -24,6 +24,7 @@ import { supabase } from '../../../services/supabase';
 import CustomAlert from '../../../components/CustomAlert';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AnimatedPressable } from '../../../components/AnimatedPressable';
+import AssignmentManager from '../../../components/AssignmentManager';
 import QRCode from 'react-native-qrcode-svg';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
@@ -408,6 +409,15 @@ export default function AdminManageOpportunitiesScreen() {
                     <Text style={[styles.actionText, { color: colors.error }]}>Delete</Text>
                   </AnimatedPressable>
                 </View>
+
+                {/* Assignment Manager */}
+                <View style={styles.assignmentSection}>
+                  <AssignmentManager
+                    type="opportunity"
+                    itemId={item.id}
+                    itemTitle={item.title}
+                  />
+                </View>
               </View>
             );
           }}
@@ -536,6 +546,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   actionText: { fontSize: 13, fontWeight: '700' },
+  assignmentSection: {
+    marginTop: 12,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
