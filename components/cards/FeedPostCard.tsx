@@ -148,6 +148,9 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
       return;
     }
 
+    // Prevent Android layout/keyboard + Modal animation jank (can look like flicker)
+    Keyboard.dismiss();
+
     setEditing(true);
     const response = await updatePost(post.id, editText);
     setEditing(false);
