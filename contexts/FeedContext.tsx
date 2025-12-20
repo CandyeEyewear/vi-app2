@@ -532,6 +532,8 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
                 console.log('[FEED] ✅ Updating post in feed:', updatedPostData.id);
                 return {
                   ...p,
+                  // Include text updates as well (e.g., user edits)
+                  text: updatedPostData.text ?? p.text,
                   likes: updatedPostData.likes || p.likes,
                   shares: updatedPostData.shares || p.shares,
                   isPinned: updatedPostData.is_pinned || p.isPinned,
@@ -2165,6 +2167,7 @@ const postsWithEvents = await Promise.all(
 
     try {
       console.log('[FEED] ✏️ Updating post:', postId);
+      const nextText = text.trim();
       
       // Check if user is admin or post owner
       const post = posts.find((p) => p.id === postId);
@@ -2180,7 +2183,7 @@ const postsWithEvents = await Promise.all(
       setPosts((prev) =>
         prev.map((p) =>
           p.id === postId
-            ? { ...p, text: text.trim(), updatedAt: new Date().toISOString() }
+            ? { ...p, text: nextText, updatedAt: new Date().toISOString() }
             : p
         )
       );
@@ -2189,7 +2192,7 @@ const postsWithEvents = await Promise.all(
       const { data, error } = await supabase
         .from('posts')
         .update({
-          text: text.trim(),
+          text: nextText,
           updated_at: new Date().toISOString(),
         })
         .eq('id', postId)
@@ -2199,11 +2202,29 @@ const postsWithEvents = await Promise.all(
       if (error) throw error;
 
       console.log('[FEED] ✅ Post updated successfully');
-      
-      // Reload to get full updated post data
-      await loadFeed();
-      
-      return { success: true, data: post };
+
+      // Reconcile local state from server response (avoid full feed reload, which can cause modal flicker).
+      const updatedAt = data?.updated_at || new Date().toISOString();
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? {
+                ...p,
+                text: data?.text ?? nextText,
+                updatedAt,
+              }
+            : p
+        )
+      );
+
+      return {
+        success: true,
+        data: {
+          ...post,
+          text: data?.text ?? nextText,
+          updatedAt,
+        },
+      };
     } catch (error: any) {
       console.error('[FEED] ❌ Update post error:', error);
       // Reload feed to restore state if update failed
