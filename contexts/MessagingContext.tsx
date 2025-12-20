@@ -84,11 +84,39 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   }
 
   const { user } = useAuth();
+  const userId = user?.id ?? null;
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
   const globalPresenceChannelRef = useRef<any>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const userNameRef = useRef<string>('');
+  const offlineUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    userNameRef.current = user?.fullName || '';
+  }, [user?.fullName]);
+
+  // NOTE: This must be defined before it's referenced in dependency arrays below.
+  const updateOnlineStatus = useCallback(async (isOnline: boolean) => {
+    if (!userId) return;
+
+    try {
+      const updates: Record<string, any> = {
+        online_status: isOnline,
+      };
+
+      // "Last seen" should represent the last time the user was active.
+      // We update it when the app goes to background/offline.
+      if (!isOnline) {
+        updates.last_seen = new Date().toISOString();
+      }
+
+      await supabase.from('users').update(updates).eq('id', userId);
+    } catch (error) {
+      console.error('Error updating online status:', error);
+    }
+  }, [userId]);
 
   // NOTE: This must be defined before it's referenced in dependency arrays below.
   const updateOnlineStatus = useCallback(async (isOnline: boolean) => {
@@ -123,14 +151,14 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
 
   // Load conversations on mount - SIMPLE LIKE NOTIFICATIONS
   useEffect(() => {
-    if (user) {
+    if (userId) {
       loadConversations();
     }
-  }, [user, updateOnlineStatus]);
+  }, [userId]);
 
   // SIMPLE REAL-TIME SUBSCRIPTION LIKE NOTIFICATIONS (narrowed events)
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
 
     // Subscribe to message changes that can affect previews/unreads (INSERT/UPDATE/DELETE)
     // Note: UPDATE is required for "soft delete" (deleted_at/text change) to reflect in the inbox.
@@ -196,18 +224,24 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       messageSubscription.unsubscribe();
       conversationSubscription.unsubscribe();
     };
-  }, [user, updateOnlineStatus]);
+  }, [userId]);
 
   // GLOBAL PRESENCE CHANNEL - Track all online users
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
 
-    console.log('[GlobalPresence] Setting up global presence channel for user:', user.id.substring(0, 8));
+    // Cancel any pending "mark offline" updates (helps with dev remounts / quick re-init)
+    if (offlineUpdateTimeoutRef.current) {
+      clearTimeout(offlineUpdateTimeoutRef.current);
+      offlineUpdateTimeoutRef.current = null;
+    }
+
+    console.log('[GlobalPresence] Setting up global presence channel for user:', userId.substring(0, 8));
 
     const globalPresenceChannel = supabase.channel('global-presence', {
       config: {
         presence: {
-          key: user.id,
+          key: userId,
         },
       },
     });
@@ -251,14 +285,20 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       .subscribe(async (status) => {
         console.log('[GlobalPresence] Subscription status:', status);
         if (status === 'SUBSCRIBED') {
+          // If we had a pending offline update (cleanup from a quick remount), cancel it.
+          if (offlineUpdateTimeoutRef.current) {
+            clearTimeout(offlineUpdateTimeoutRef.current);
+            offlineUpdateTimeoutRef.current = null;
+          }
+
           // Persist presence state (best-effort; used for "Last seen")
           // Fire-and-forget: presence itself is still the source of truth for "online now".
           updateOnlineStatus(true).catch(() => {});
 
           // Track current user as online
           await globalPresenceChannel.track({
-            user_id: user.id,
-            user_name: user.fullName,
+            user_id: userId,
+            user_name: userNameRef.current,
             online: true,
             timestamp: new Date().toISOString(),
           });
@@ -269,8 +309,15 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     return () => {
       console.log('[GlobalPresence] Cleaning up presence channel');
       if (globalPresenceChannelRef.current) {
-        // Persist last seen on exit (best-effort)
-        updateOnlineStatus(false).catch(() => {});
+        // Persist last seen on exit (best-effort) - debounce to avoid flip-flopping
+        // when effects re-mount quickly (e.g. profile updates, dev strict-mode).
+        if (offlineUpdateTimeoutRef.current) {
+          clearTimeout(offlineUpdateTimeoutRef.current);
+        }
+        offlineUpdateTimeoutRef.current = setTimeout(() => {
+          updateOnlineStatus(false).catch(() => {});
+          offlineUpdateTimeoutRef.current = null;
+        }, 1500);
 
         globalPresenceChannelRef.current.untrack();
         globalPresenceChannelRef.current.unsubscribe();
@@ -279,11 +326,11 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       }
       setOnlineUsers(new Set());
     };
-  }, [user]);
+  }, [userId, updateOnlineStatus]);
 
   // APP STATE LISTENER - Track when app goes to background/foreground
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
 
     const handleAppStateChange = async (nextAppState: AppStateStatus) => {
       const previousAppState = appStateRef.current;
@@ -298,8 +345,8 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
           try {
             updateOnlineStatus(true).catch(() => {});
             await globalPresenceChannelRef.current.track({
-              user_id: user.id,
-              user_name: user.fullName,
+              user_id: userId,
+              user_name: userNameRef.current,
               online: true,
               timestamp: new Date().toISOString(),
             });
@@ -326,7 +373,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     return () => {
       subscription.remove();
     };
-  }, [user]);
+  }, [userId, updateOnlineStatus]);
 
   const loadConversations = async () => {
     if (!user) return;
