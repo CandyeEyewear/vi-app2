@@ -4,7 +4,7 @@
  */
 
 import React, { createContext, useState, useContext, useEffect, useMemo, useRef, useCallback } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, Platform } from 'react-native';
 import { Conversation, Message, ApiResponse } from '../types';
 import { supabase } from '../services/supabase';
 import { useAuth } from './AuthContext';
@@ -44,12 +44,72 @@ interface MessagingContextType {
 const MessagingContext = createContext<MessagingContextType | undefined>(undefined);
 
 export function MessagingProvider({ children }: { children: React.ReactNode }) {
+  // Firebase Messaging is not available on web - provide a safe no-op context
+  // (and avoid running hooks that assume native modules exist).
+  if (Platform.OS === 'web') {
+    const webContextValue: MessagingContextType = {
+      conversations: [],
+      loading: false,
+      totalUnreadCount: 0,
+      onlineUsers: new Set(),
+      isUserOnline: () => false,
+      getOrCreateConversation: async () => ({
+        success: false,
+        error: 'Messaging not available on web',
+      }),
+      sendMessage: async () => ({
+        success: false,
+        error: 'Messaging not available on web',
+      }),
+      markAsRead: async () => {},
+      refreshConversations: async () => {},
+      deleteConversation: async () => ({
+        success: false,
+        error: 'Messaging not available on web',
+      }),
+      setTypingStatus: async () => {},
+      updateOnlineStatus: async () => {},
+      markMessageDelivered: async () => {},
+      deleteMessage: async () => ({
+        success: false,
+        error: 'Messaging not available on web',
+      }),
+    };
+
+    return (
+      <MessagingContext.Provider value={webContextValue}>
+        {children}
+      </MessagingContext.Provider>
+    );
+  }
+
   const { user } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
   const globalPresenceChannelRef = useRef<any>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+
+  // NOTE: This must be defined before it's referenced in dependency arrays below.
+  const updateOnlineStatus = useCallback(async (isOnline: boolean) => {
+    if (!user) return;
+
+    try {
+      const updates: Record<string, any> = {
+        online_status: isOnline,
+      };
+
+      // "Last seen" should represent the last time the user was active.
+      // We update it when the app goes to background/offline.
+      if (!isOnline) {
+        updates.last_seen = new Date().toISOString();
+      }
+
+      await supabase.from('users').update(updates).eq('id', user.id);
+    } catch (error) {
+      console.error('Error updating online status:', error);
+    }
+  }, [user]);
 
   // Calculate total unread count
   const totalUnreadCount = useMemo(() => {
@@ -795,26 +855,6 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       console.error('Error setting typing status:', error);
     }
   };
-
-  const updateOnlineStatus = useCallback(async (isOnline: boolean) => {
-    if (!user) return;
-
-    try {
-      const updates: Record<string, any> = {
-        online_status: isOnline,
-      };
-
-      // "Last seen" should represent the last time the user was active.
-      // We update it when the app goes to background/offline.
-      if (!isOnline) {
-        updates.last_seen = new Date().toISOString();
-      }
-
-      await supabase.from('users').update(updates).eq('id', user.id);
-    } catch (error) {
-      console.error('Error updating online status:', error);
-    }
-  }, [user]);
 
   const markMessageDelivered = async (messageId: string) => {
     if (!user) return;
