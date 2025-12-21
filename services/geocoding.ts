@@ -4,7 +4,9 @@
  */
 
 const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+// Fallback to production URL so geocoding doesn't hard-fail if env injection is misconfigured.
+// NOTE: For OTA updates, prefer setting this via EAS "Environment variables" (production/preview).
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://vibe.volunteersinc.org';
 
 export interface GeocodeResult {
   success: boolean;
