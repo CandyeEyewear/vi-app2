@@ -373,6 +373,7 @@ function AppContent() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="edit-profile" />
           <Stack.Screen name="settings" />
+          <Stack.Screen name="invite-friends" />
           <Stack.Screen name="conversation/[id]" />
           <Stack.Screen name="opportunity/[slug]" />
           <Stack.Screen name="profile/[slug]" />
