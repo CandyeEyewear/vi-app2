@@ -118,6 +118,27 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     }
   }, [userId]);
 
+  // NOTE: This must be defined before it's referenced in dependency arrays below.
+  const updateOnlineStatus = useCallback(async (isOnline: boolean) => {
+    if (!user) return;
+
+    try {
+      const updates: Record<string, any> = {
+        online_status: isOnline,
+      };
+
+      // "Last seen" should represent the last time the user was active.
+      // We update it when the app goes to background/offline.
+      if (!isOnline) {
+        updates.last_seen = new Date().toISOString();
+      }
+
+      await supabase.from('users').update(updates).eq('id', user.id);
+    } catch (error) {
+      console.error('Error updating online status:', error);
+    }
+  }, [user]);
+
   // Calculate total unread count
   const totalUnreadCount = useMemo(() => {
     return conversations.reduce((sum, conv) => sum + conv.unreadCount, 0);
