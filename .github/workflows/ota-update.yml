@@ -34,8 +34,12 @@ jobs:
         run: |
           if [[ "${{ github.ref }}" == "refs/heads/production" ]]; then
             echo "Publishing to production branch..."
-            eas update --branch production --message "${{ github.event.head_commit.message }}" --non-interactive
+            # IMPORTANT:
+            # OTA updates do NOT automatically inherit `eas.json` build-profile env vars.
+            # Use EAS "environment variables" (production/preview) so EXPO_PUBLIC_* values
+            # like EXPO_PUBLIC_API_URL are embedded into the update bundle.
+            eas update --branch production --environment production --message "${{ github.event.head_commit.message }}" --non-interactive
           else
             echo "Publishing to preview branch..."
-            eas update --branch preview --message "${{ github.event.head_commit.message }}" --non-interactive
+            eas update --branch preview --environment preview --message "${{ github.event.head_commit.message }}" --non-interactive
           fi
