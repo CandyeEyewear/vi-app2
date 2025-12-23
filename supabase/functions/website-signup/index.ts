@@ -1,9 +1,10 @@
-// @ts-nocheck
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { getCorsHeaders, handleCorsPreflight } from '../_shared/cors.ts';
 
-// CORS headers handled via shared helper
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 function generateSecurePassword(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
@@ -15,24 +16,11 @@ function generateSecurePassword(): string {
 }
 
 serve(async (req) => {
-  const preflight = handleCorsPreflight(req);
-  if (preflight) return preflight;
-  const corsHeaders = getCorsHeaders(req);
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
 
   try {
-    // AuthN: this endpoint creates auth users with service role; require a shared secret header.
-    const expected = Deno.env.get('WEBSITE_SIGNUP_SECRET') || '';
-    const provided =
-      req.headers.get('x-website-signup-secret') ||
-      req.headers.get('X-Website-Signup-Secret') ||
-      '';
-    if (!expected || provided !== expected) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
