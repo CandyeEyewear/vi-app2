@@ -15,6 +15,16 @@ export const MAX_VIDEO_SIZE_BYTES = 150 * 1024 * 1024; // 150MB (Facebook-like, 
 export const MAX_VIDEO_DURATION_MINUTES = 15;
 export const MAX_VIDEO_DURATION_SECONDS = MAX_VIDEO_DURATION_MINUTES * 60;
 
+/**
+ * `expo-image-picker` returns video `duration` in milliseconds on native platforms.
+ * Normalize to seconds so our app-level duration checks are consistent.
+ */
+export function imagePickerDurationToSeconds(duration?: number): number | undefined {
+  if (typeof duration !== 'number' || !Number.isFinite(duration)) return undefined;
+  // Web duration (when present) is typically already seconds; native is milliseconds.
+  return Platform.OS === 'web' ? duration : duration / 1000;
+}
+
 // Expo SDK 54: `copyAsync` is now on the legacy API for some runtimes.
 // On web we don't need FileSystem for uploads (we use Blob), and legacy may not exist.
 let FileSystem: any;

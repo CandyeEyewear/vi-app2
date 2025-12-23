@@ -43,7 +43,16 @@ import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../../services/supabase';
 import { uploadMultipleImages } from '../../services/imageUpload';
-import { uploadVideo, getVideoSize, formatFileSize, isVideoTooLarge, MAX_VIDEO_DURATION_MINUTES, MAX_VIDEO_DURATION_SECONDS, MAX_VIDEO_SIZE_BYTES } from '../../services/videoUtils';
+import {
+  uploadVideo,
+  getVideoSize,
+  formatFileSize,
+  isVideoTooLarge,
+  MAX_VIDEO_DURATION_MINUTES,
+  MAX_VIDEO_DURATION_SECONDS,
+  MAX_VIDEO_SIZE_BYTES,
+  imagePickerDurationToSeconds,
+} from '../../services/videoUtils';
 import { extractMentionedUserIds } from '../../utils/mentions';
 import { extractHashtagIds } from '../../utils/hashtags';
 
@@ -524,7 +533,8 @@ const loadNotificationCount = async () => {
           uri: asset.uri,
           type: asset.type === 'video' ? 'video' : 'image',
           fileSize: typeof asset.fileSize === 'number' ? asset.fileSize : undefined,
-          duration: typeof asset.duration === 'number' ? asset.duration : undefined,
+          // expo-image-picker duration is milliseconds on native; normalize to seconds.
+          duration: asset.type === 'video' ? imagePickerDurationToSeconds(asset.duration) : undefined,
         }));
 
         const nextTotalCount = selectedMedia.length + normalized.length;
