@@ -3,8 +3,6 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCorsHeaders, handleCorsPreflight } from '../_shared/cors.ts';
 
-// CORS headers handled via shared helper
-
 function generateSecurePassword(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
   let password = '';
@@ -17,15 +15,13 @@ function generateSecurePassword(): string {
 serve(async (req) => {
   const preflight = handleCorsPreflight(req);
   if (preflight) return preflight;
+
   const corsHeaders = getCorsHeaders(req);
 
   try {
-    // AuthN: this endpoint creates auth users with service role; require a shared secret header.
+    // AuthN: require a shared secret header
     const expected = Deno.env.get('WEBSITE_SIGNUP_SECRET') || '';
-    const provided =
-      req.headers.get('x-website-signup-secret') ||
-      req.headers.get('X-Website-Signup-Secret') ||
-      '';
+    const provided = req.headers.get('x-website-signup-secret') || req.headers.get('X-Website-Signup-Secret') || '';
     if (!expected || provided !== expected) {
       return new Response(
         JSON.stringify({ success: false, error: 'Unauthorized' }),
@@ -38,7 +34,6 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const { email, fullName, phone, location, bio, areasOfExpertise, education, country, dateOfBirth } = await req.json();
-
     console.log('[WEBSITE-SIGNUP] Creating account for:', email);
 
     // Generate random temporary password
@@ -73,9 +68,50 @@ serve(async (req) => {
 
     console.log('[WEBSITE-SIGNUP] ✅ Account created, user ID:', authData.user.id);
 
-    // Send password recovery email so user can set their password
-    console.log('[WEBSITE-SIGNUP] Sending password recovery email...');
+    // ===== NEW: EXPLICITLY CREATE USER PROFILE =====
+    console.log('[WEBSITE-SIGNUP] Creating user profile...');
+    const { data: profileData, error: profileError } = await supabase
+      .from('users')
+      .insert({
+        id: authData.user.id,
+        email: email,
+        full_name: fullName,
+        phone: phone || null,
+        location: location || null,
+        bio: bio || null,
+        education: education || null,
+        country: country || 'Jamaica',
+        date_of_birth: dateOfBirth || null,
+        areas_of_expertise: areasOfExpertise || [],
+        is_private: false,
+        is_banned: false,
+        online_status: false,
+        total_hours: 0,
+        activities_completed: 0,
+        organizations_helped: 0,
+        current_streak: 0,
+        longest_streak: 0,
+        membership_status: 'active',
+        is_sso_user: false,
+        is_anonymous: false,
+        is_premium: false,
+        account_type: 'individual',
+        approval_status: 'pending',
+        is_partner_organization: false,
+      })
+      .select()
+      .single();
 
+    if (profileError) {
+      console.error('[WEBSITE-SIGNUP] Profile creation error:', profileError);
+      // Don't fail the entire signup - account is created, user can still set password
+      // But log this so it can be tracked
+    } else {
+      console.log('[WEBSITE-SIGNUP] ✅ Profile created successfully');
+    }
+
+    // Send password recovery email
+    console.log('[WEBSITE-SIGNUP] Sending password recovery email...');
     const { data: linkData, error: recoveryError } = await supabase.auth.admin.generateLink({
       type: 'recovery',
       email: email,
@@ -86,14 +122,12 @@ serve(async (req) => {
 
     if (recoveryError || !linkData?.properties?.action_link) {
       console.error('[WEBSITE-SIGNUP] Failed to generate recovery link:', recoveryError);
-      // Don't fail the whole signup - account is created, they can request reset later
     } else {
       const recoveryLink = linkData.properties.action_link;
       console.log('[WEBSITE-SIGNUP] ✅ Recovery link generated');
 
-      // Actually send the email via Resend
+      // Send email via Resend
       console.log('[WEBSITE-SIGNUP] Sending email via Resend...');
-
       const resendApiKey = Deno.env.get('RESEND_API_KEY');
       if (!resendApiKey) {
         console.error('[WEBSITE-SIGNUP] RESEND_API_KEY not configured!');
@@ -117,16 +151,12 @@ serve(async (req) => {
                     <div style="text-align: center; margin-bottom: 30px;">
                       <img src="https://46485094.fs1.hubspotusercontent-na1.net/hubfs/46485094/icon%2022a.png" alt="VIbe" style="width: 80px;">
                     </div>
-
                     <h1 style="color: #4A90E2;">Welcome to VIbe!</h1>
-
                     <p>Hi ${fullName},</p>
                     <p>Your VIbe account has been created! Click the button below to set your password:</p>
-
                     <div style="text-align: center; margin: 30px 0;">
                       <a href="${recoveryLink}" style="background: #4A90E2; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; display: inline-block;">Set Your Password</a>
                     </div>
-
                     <p style="font-size: 14px; color: #666;">Or copy this link:</p>
                     <p style="font-size: 12px; word-break: break-all;">${recoveryLink}</p>
                   </div>
@@ -157,7 +187,6 @@ serve(async (req) => {
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-
   } catch (error: any) {
     console.error('[WEBSITE-SIGNUP] Error:', error);
     return new Response(
