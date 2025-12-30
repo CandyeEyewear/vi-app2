@@ -24,11 +24,11 @@ const getCalendar = async (): Promise<any> => {
     const calendarModule = await import('expo-calendar');
     
     // expo-calendar exports are at root level, try both default and direct access
-    let module = calendarModule;
+    let calendarApi: any = calendarModule;
     
     // If there's a default export, use it; otherwise use the module itself
     if (calendarModule.default && typeof calendarModule.default.getCalendarPermissionsAsync === 'function') {
-      module = calendarModule.default;
+      calendarApi = calendarModule.default;
     } else if (typeof calendarModule.getCalendarPermissionsAsync !== 'function') {
       // Neither structure works, log for debugging
       console.warn('[Calendar] expo-calendar module structure unexpected. Available keys:', Object.keys(calendarModule));
@@ -36,8 +36,8 @@ const getCalendar = async (): Promise<any> => {
       return null;
     }
     
-    CalendarModule = module;
-    return module;
+    CalendarModule = calendarApi;
+    return calendarApi;
   } catch (error: any) {
     // If it's a native module error on web, that's expected
     if (error?.message?.includes('native module') || error?.message?.includes('ExpoCalendar')) {
