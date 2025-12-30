@@ -42,9 +42,9 @@ async function loadWebBrowserModule(): Promise<WebBrowserType | null> {
   webBrowserLoadPromise = (async () => {
     try {
       webBrowserLoadAttempted = true;
-      const module = await import('expo-web-browser');
-      WebBrowserModule = module;
-      return module;
+      const importedWebBrowser = await import('expo-web-browser');
+      WebBrowserModule = importedWebBrowser;
+      return importedWebBrowser;
     } catch (error) {
       console.warn('Failed to pre-load expo-web-browser:', error);
       return null;

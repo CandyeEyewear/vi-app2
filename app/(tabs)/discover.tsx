@@ -973,7 +973,7 @@ export default function DiscoverScreen() {
 
       {searchQuery.trim() && (
         <View style={[styles.searchInfoBar, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
-          <Text style={[styles.searchInfoText, { color: colors.textSecondary }]}>{filteredOpportunities.length} {filteredOpportunities.length === 1 ? 'result' : 'results'}{searchQuery && ` for "${searchQuery}"`}</Text>
+          <Text style={[styles.searchInfoText, { color: colors.textSecondary }]}>{filteredOpportunities.length} {filteredOpportunities.length === 1 ? 'result' : 'results'}{searchQuery && ` for ${searchQuery}`}</Text>
           <Pressable onPress={() => setShowFilters(!showFilters)} style={({ pressed }) => [styles.filterToggleButton, { backgroundColor: showFilters ? colors.primarySoft : colors.card, borderColor: showFilters ? colors.primary : colors.border }, pressed && { opacity: 0.7 }]}>
             <SlidersHorizontal size={16} color={showFilters ? colors.primary : colors.textSecondary} />
             <Text style={[styles.filterToggleText, { color: showFilters ? colors.primary : colors.textSecondary }]}>Filters</Text>
@@ -994,7 +994,7 @@ export default function DiscoverScreen() {
   const renderEmptyComponent = useCallback(() => {
     if (loading) return <View style={styles.listContent}><OpportunitiesSkeleton count={4} /></View>;
     if (error) return <EmptyState icon={X} title="Error loading opportunities" subtitle={error} action={{ label: 'Retry', onPress: () => loadOpportunities() }} colors={colors} />;
-    if (searchQuery.trim() && filteredOpportunities.length === 0) return <EmptyState icon={Search} title="No results for that search" subtitle={`We couldn't find opportunities matching "${searchQuery}"`} action={{ label: 'Clear Search', onPress: () => { setSearchQuery(''); setSearchInputValue(''); setSelectedQuickFilter(null); } }} suggestions={['Try different keywords', 'Browse all opportunities']} colors={colors} />;
+    if (searchQuery.trim() && filteredOpportunities.length === 0) return <EmptyState icon={Search} title="No results for that search" subtitle={`We could not find opportunities matching ${searchQuery}`} action={{ label: 'Clear Search', onPress: () => { setSearchQuery(''); setSearchInputValue(''); setSelectedQuickFilter(null); } }} suggestions={['Try different keywords', 'Browse all opportunities']} colors={colors} />;
     if (selectedCategory !== 'all' && filteredOpportunities.length === 0) return <EmptyState icon={Filter} title="No opportunities in this category" subtitle={`There are no ${selectedCategory} opportunities right now`} action={{ label: 'View All', onPress: () => handleSelectCategory('all') }} colors={colors} />;
     if (selectedQuickFilter && filteredOpportunities.length === 0) return <EmptyState icon={selectedQuickFilter === 'saved' ? Bookmark : TrendingUp} title={`No ${QUICK_FILTERS.find(f => f.id === selectedQuickFilter)?.label || ''} opportunities`} subtitle="Try a different filter" action={{ label: 'View All', onPress: () => { setSelectedQuickFilter(null); handleSelectCategory('all'); } }} colors={colors} />;
     return <EmptyState icon={Lightbulb} title="Discover volunteer opportunities" subtitle="Browse and find opportunities that match your interests" action={{ label: 'Browse Categories', onPress: () => handleSelectCategory('all') }} colors={colors} />;
