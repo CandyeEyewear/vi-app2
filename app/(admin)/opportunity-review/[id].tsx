@@ -37,7 +37,7 @@ import {
 } from 'lucide-react-native';
 import { supabase } from '../../../services/supabase';
 import CustomAlert from '../../../components/CustomAlert';
-import { sendNotificationToUser } from '../../../services/pushNotifications';
+import { sendNotificationToUser, sendEmailNotification } from '../../../services/pushNotifications';
 
 interface OpportunityData {
   id: string;
@@ -176,6 +176,15 @@ export default function OpportunityReviewDetailScreen() {
         } catch (pushError) {
           console.error('Error sending push notification:', pushError);
         }
+
+        // Send email notification (non-blocking)
+        sendEmailNotification(opportunity.submitted_by, 'opportunity', {
+          title: `Your opportunity "${opportunity.title}" has been approved!`,
+          description: 'Your opportunity is now live and visible to volunteers.',
+          id: opportunityId,
+        }).catch((err) => {
+          console.error('Error sending email notification:', err);
+        });
       }
 
       showAlert('Success!', 'Opportunity has been approved and is now active', 'success');
@@ -237,6 +246,15 @@ export default function OpportunityReviewDetailScreen() {
         } catch (pushError) {
           console.error('Error sending push notification:', pushError);
         }
+
+        // Send email notification (non-blocking)
+        sendEmailNotification(opportunity.submitted_by, 'opportunity', {
+          title: `Your opportunity "${opportunity.title}" was rejected`,
+          description: `Reason: ${rejectionReason.trim()}. You can revise and resubmit your proposal.`,
+          id: opportunityId,
+        }).catch((err) => {
+          console.error('Error sending email notification:', err);
+        });
       }
 
       setRejectModalVisible(false);

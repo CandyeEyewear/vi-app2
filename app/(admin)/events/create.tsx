@@ -55,7 +55,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../services/supabase';
 import WebContainer from '../../../components/WebContainer';
 import { decode } from 'base64-arraybuffer';
-import { sendNotificationToUser } from '../../../services/pushNotifications';
+import { sendNotificationToUser, sendEmailNotification } from '../../../services/pushNotifications';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
@@ -461,6 +461,15 @@ export default function CreateEventScreen() {
                   } catch (pushError) {
                     console.error('❌ Failed to send push to user:', userObj.id, pushError);
                   }
+
+                  // Send email notification (non-blocking)
+                  sendEmailNotification(userObj.id, 'event', {
+                    title: eventTitle,
+                    description: eventDescription?.substring(0, 200),
+                    id: eventId,
+                  }).catch((err) => {
+                    console.error('❌ Email notification error for user:', userObj.id, err);
+                  });
                 }
                 
                 console.log('🎉 Push notification process complete!');
