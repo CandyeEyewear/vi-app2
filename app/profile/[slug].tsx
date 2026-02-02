@@ -48,7 +48,7 @@ import { Colors } from '../../constants/colors';
 import { supabase } from '../../services/supabase';
 import CustomAlert from '../../components/CustomAlert';
 import { useAlert, showErrorAlert } from '../../hooks/useAlert';
-import { sendNotificationToUser } from '../../services/pushNotifications';
+import { sendNotificationToUser, sendEmailNotification } from '../../services/pushNotifications';
 import { cache, CacheKeys } from '../../services/cache';
 import FeedPostCard from '../../components/cards/FeedPostCard';
 import { UserAvatar, UserNameWithBadge } from '../../components';
@@ -82,6 +82,7 @@ export default function ViewProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [circleStatus, setCircleStatus] = useState<'none' | 'pending' | 'accepted'>('none');
+  const [hasIncomingRequest, setHasIncomingRequest] = useState(false);
   const [circleLoading, setCircleLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('posts');
   
@@ -218,22 +219,38 @@ export default function ViewProfileScreen() {
     if (!currentUser?.id || !slug) return;
 
     try {
-      const { data, error } = await supabase
+      // Check outgoing request (current user -> profile user)
+      const { data: outgoingData, error: outgoingError } = await supabase
         .from('user_circles')
         .select('status')
         .eq('user_id', currentUser.id)
         .eq('circle_user_id', profileUser?.id || slug)
         .single();
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error checking circle status:', error);
+      if (outgoingError && outgoingError.code !== 'PGRST116') {
+        console.error('Error checking outgoing circle status:', outgoingError);
       }
 
-      if (data) {
-        setCircleStatus(data.status as 'pending' | 'accepted');
+      if (outgoingData) {
+        setCircleStatus(outgoingData.status as 'pending' | 'accepted');
       } else {
         setCircleStatus('none');
       }
+
+      // Check incoming request (profile user -> current user)
+      const { data: incomingData, error: incomingError } = await supabase
+        .from('user_circles')
+        .select('status')
+        .eq('user_id', profileUser?.id || slug)
+        .eq('circle_user_id', currentUser.id)
+        .eq('status', 'pending')
+        .single();
+
+      if (incomingError && incomingError.code !== 'PGRST116') {
+        console.error('Error checking incoming circle status:', incomingError);
+      }
+
+      setHasIncomingRequest(!!incomingData);
     } catch (error) {
       console.error('Error checking circle status:', error);
     }
@@ -478,6 +495,15 @@ export default function ViewProfileScreen() {
         console.error('[PROFILE] ❌ Exception sending push notification:', pushError);
       }
 
+      // Send email notification (non-blocking)
+      sendEmailNotification(profileUser.id, 'circle_request', {
+        senderName: currentUser.fullName,
+        senderAvatarUrl: currentUser.avatarUrl,
+        id: currentUser.id,
+      }).catch((err) => {
+        console.error('[PROFILE] ❌ Email notification error:', err);
+      });
+
       setCircleStatus('pending');
       showAlert({
         title: 'Request Sent',
@@ -526,6 +552,83 @@ export default function ViewProfileScreen() {
     } catch (error: any) {
       console.error('Error removing from circle:', error);
       showAlert(showErrorAlert('Error', 'Failed to remove from circle'));
+    } finally {
+      setCircleLoading(false);
+    }
+  };
+
+  const handleAcceptRequest = async () => {
+    if (!currentUser?.id || !profileUser) return;
+
+    try {
+      setCircleLoading(true);
+
+      // Accept the incoming request (change status to accepted)
+      const { error: acceptError } = await supabase
+        .from('user_circles')
+        .update({ status: 'accepted' })
+        .eq('user_id', profileUser.id)
+        .eq('circle_user_id', currentUser.id)
+        .eq('status', 'pending');
+
+      if (acceptError) throw acceptError;
+
+      // Create the reverse relationship (current user -> profile user)
+      const { error: insertError } = await supabase
+        .from('user_circles')
+        .insert({
+          user_id: currentUser.id,
+          circle_user_id: profileUser.id,
+          status: 'accepted',
+        });
+
+      if (insertError && insertError.code !== '23505') { // Ignore duplicate key error
+        throw insertError;
+      }
+
+      setHasIncomingRequest(false);
+      setCircleStatus('accepted');
+      await refreshFeed();
+
+      showAlert({
+        title: 'Request Accepted',
+        message: `${profileUser.fullName} is now in your circle`,
+        type: 'success',
+      });
+    } catch (error: any) {
+      console.error('Error accepting circle request:', error);
+      showAlert(showErrorAlert('Error', 'Failed to accept circle request'));
+    } finally {
+      setCircleLoading(false);
+    }
+  };
+
+  const handleRejectRequest = async () => {
+    if (!currentUser?.id || !profileUser) return;
+
+    try {
+      setCircleLoading(true);
+
+      // Delete the incoming request
+      const { error } = await supabase
+        .from('user_circles')
+        .delete()
+        .eq('user_id', profileUser.id)
+        .eq('circle_user_id', currentUser.id)
+        .eq('status', 'pending');
+
+      if (error) throw error;
+
+      setHasIncomingRequest(false);
+
+      showAlert({
+        title: 'Request Declined',
+        message: `Circle request from ${profileUser.fullName} has been declined`,
+        type: 'success',
+      });
+    } catch (error: any) {
+      console.error('Error rejecting circle request:', error);
+      showAlert(showErrorAlert('Error', 'Failed to decline circle request'));
     } finally {
       setCircleLoading(false);
     }
@@ -1129,9 +1232,41 @@ export default function ViewProfileScreen() {
             </View>
           )}
 
+          {/* Incoming Circle Request Banner */}
+          {!isOwnProfile && hasIncomingRequest && (
+            <View style={[styles.incomingRequestBanner, { backgroundColor: colors.primary + '15', borderColor: colors.primary }]}>
+              <View style={styles.incomingRequestContent}>
+                <UserPlus size={20} color={colors.primary} />
+                <Text style={[styles.incomingRequestText, { color: colors.text }]}>
+                  {profileUser?.fullName} wants to add you to their circle
+                </Text>
+              </View>
+              <View style={styles.incomingRequestActions}>
+                <AnimatedPressable
+                  style={[styles.acceptButton, { backgroundColor: colors.primary }]}
+                  onPress={handleAcceptRequest}
+                  disabled={circleLoading}
+                >
+                  {circleLoading ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.acceptButtonText}>Accept</Text>
+                  )}
+                </AnimatedPressable>
+                <AnimatedPressable
+                  style={[styles.declineButton, { borderColor: colors.border, backgroundColor: colors.card }]}
+                  onPress={handleRejectRequest}
+                  disabled={circleLoading}
+                >
+                  <Text style={[styles.declineButtonText, { color: colors.text }]}>Decline</Text>
+                </AnimatedPressable>
+              </View>
+            </View>
+          )}
+
           {/* Action Buttons */}
           <View style={styles.actionButtons}>
-            {!isOwnProfile && !isOrganization && (
+            {!isOwnProfile && !isOrganization && !hasIncomingRequest && (
               <AnimatedPressable
                 style={[
                   styles.actionButton,
@@ -1623,5 +1758,53 @@ const styles = StyleSheet.create({
   partnerStatusSubtitle: {
     fontSize: 13,
     lineHeight: 18,
+  },
+  incomingRequestBanner: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 16,
+    width: '100%',
+  },
+  incomingRequestContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  incomingRequestText: {
+    fontSize: 15,
+    fontWeight: '500',
+    flex: 1,
+  },
+  incomingRequestActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  acceptButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  acceptButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  declineButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  declineButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

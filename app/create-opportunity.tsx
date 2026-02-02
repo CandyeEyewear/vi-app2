@@ -45,7 +45,7 @@ import { File } from 'expo-file-system';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import CrossPlatformDateTimePicker from '../components/CrossPlatformDateTimePicker';
 import CustomAlert from '../components/CustomAlert';
-import { sendNotificationToUser } from '../services/pushNotifications';
+import { sendNotificationToUser, sendEmailNotification } from '../services/pushNotifications';
 import WebContainer from '../components/WebContainer';
 import { VisibilityType } from '../types';
 
@@ -93,6 +93,7 @@ export default function CreateOpportunityScreen() {
   const [spotsTotal, setSpotsTotal] = useState('');
   const [impactStatement, setImpactStatement] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [autoCropImage, setAutoCropImage] = useState(false);
   const [contactPersonName, setContactPersonName] = useState('');
   const [contactPersonPhone, setContactPersonPhone] = useState('');
 
@@ -297,7 +298,8 @@ export default function CreateOpportunityScreen() {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
+        allowsEditing: autoCropImage,
+        ...(autoCropImage ? { aspect: [16, 9] as [number, number] } : {}),
         quality: 0.8,
       });
 
@@ -650,6 +652,15 @@ export default function CreateOpportunityScreen() {
                 } catch (pushError) {
                   console.error('❌ Failed to send push to user:', userObj.id, pushError);
                 }
+
+                // Send email notification (non-blocking)
+                sendEmailNotification(userObj.id, 'opportunity', {
+                  title: title.trim(),
+                  description: description?.trim().substring(0, 200),
+                  id: data.id,
+                }).catch((err) => {
+                  console.error('❌ Email notification error for user:', userObj.id, err);
+                });
               }
               
               console.log('🎉 Push notification process complete!');
@@ -1189,9 +1200,30 @@ export default function CreateOpportunityScreen() {
           <Text style={[styles.label, { color: colors.text }]}>
             Image (Optional)
           </Text>
+          <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.toggleInfo}>
+              <ImageIcon size={responsive.iconSize.md} color={autoCropImage ? colors.primary : colors.textSecondary} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.toggleLabel, { color: colors.text }]}>Auto-crop image</Text>
+                <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
+                  Off = upload full image • On = crop to 16:9
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={autoCropImage}
+              onValueChange={setAutoCropImage}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor={colors.textOnPrimary}
+            />
+          </View>
           {imageUri ? (
             <View style={styles.imagePreviewContainer}>
-              <Image source={{ uri: imageUri }} style={styles.imagePreview} />
+              <Image
+                source={{ uri: imageUri }}
+                style={styles.imagePreview}
+                resizeMode={autoCropImage ? 'cover' : 'contain'}
+              />
               <AnimatedPressable
                 style={styles.removeImageButton}
                 onPress={() => setImageUri(null)}

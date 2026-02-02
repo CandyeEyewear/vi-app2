@@ -42,7 +42,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import CrossPlatformDateTimePicker from '../components/CrossPlatformDateTimePicker';
 import CustomAlert from '../components/CustomAlert';
 import Button from '../components/Button';
-import { sendNotificationToUser } from '../services/pushNotifications';
+import { sendNotificationToUser, sendEmailNotification } from '../services/pushNotifications';
 import { MembershipFeatureScreen } from '../components/MembershipFeatureScreen';
 
 const CATEGORIES = [
@@ -654,6 +654,15 @@ export default function ProposeOpportunityScreen() {
               } catch (pushError) {
                 console.error('❌ Failed to send push to admin:', admin.id, pushError);
               }
+
+              // Send email notification (non-blocking)
+              sendEmailNotification(admin.id, 'opportunity', {
+                title: `New Opportunity Proposal: ${title.trim()}`,
+                description: `${user?.fullName || 'A volunteer'} submitted a new opportunity proposal for review.`,
+                id: data.id,
+              }).catch((err) => {
+                console.error('❌ Email notification error for admin:', admin.id, err);
+              });
             }
             
             console.log('🎉 Push notification process complete!');

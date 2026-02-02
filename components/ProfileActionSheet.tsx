@@ -46,23 +46,27 @@ export default function ProfileActionSheet({
   };
 
   const handleSendMessage = async () => {
-    onClose();
-    
     try {
       // Get or create conversation with this user
       const response = await getOrCreateConversation(userId);
-      
+
       if (response.success && response.data) {
-        // Navigate to the conversation using proper params format
-        router.push({
-          pathname: '/conversation/[id]',
-          params: { id: response.data.id }
-        } as any);
+        // Close modal first, then navigate
+        onClose();
+        // Small delay to ensure modal is closed before navigation
+        setTimeout(() => {
+          router.push({
+            pathname: '/conversation/[id]',
+            params: { id: response.data!.id }
+          } as any);
+        }, 100);
       } else {
+        // Show error while modal is still open
         showAlert(showErrorAlert('Error', response.error || 'Failed to start conversation'));
       }
-    } catch (error) {
-      showAlert(showErrorAlert('Error', 'Failed to start conversation'));
+    } catch (error: any) {
+      console.error('Error starting conversation:', error);
+      showAlert(showErrorAlert('Error', error?.message || 'Failed to start conversation'));
     }
   };
 

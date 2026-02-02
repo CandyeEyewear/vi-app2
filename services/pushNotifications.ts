@@ -451,7 +451,7 @@ export async function clearBadgeCount(): Promise<void> {
  */
 export async function updateBadgeCount(userId: string): Promise<void> {
   console.log('[PUSH] 🔴 Updating badge count for user:', userId);
-  
+
   try {
     const { count: unreadCount } = await supabase
       .from('notifications')
@@ -461,10 +461,62 @@ export async function updateBadgeCount(userId: string): Promise<void> {
 
     const badgeNumber = unreadCount || 0;
     console.log('[PUSH] 📊 Setting badge to:', badgeNumber);
-    
+
     await Notifications.setBadgeCountAsync(badgeNumber);
     console.log('[PUSH] ✅ Badge count updated');
   } catch (error) {
     console.error('[PUSH] ❌ Error updating badge count:', error);
+  }
+}
+
+/**
+ * Send email notification via Supabase Edge Function
+ * The Edge Function handles throttling, user preferences, and online status checks
+ */
+export async function sendEmailNotification(
+  recipientUserId: string,
+  type: 'message' | 'circle_request' | 'announcement' | 'opportunity' | 'event' | 'cause',
+  data: {
+    senderName?: string;
+    senderAvatarUrl?: string;
+    messagePreview?: string;
+    conversationId?: string;
+    title?: string;
+    description?: string;
+    slug?: string;
+    id?: string;
+  }
+): Promise<{ success: boolean; skipped?: boolean; error?: string }> {
+  console.log('[EMAIL] 📧 Sending email notification...');
+  console.log('[EMAIL] Recipient:', recipientUserId.substring(0, 8) + '...');
+  console.log('[EMAIL] Type:', type);
+
+  try {
+    const { data: result, error } = await supabase.functions.invoke(
+      'send-notification-email',
+      {
+        body: { recipientUserId, type, data },
+      }
+    );
+
+    if (error) {
+      console.error('[EMAIL] ❌ Error invoking Edge Function:', error);
+      return { success: false, error: error.message };
+    }
+
+    if (result?.success) {
+      if (result.skipped) {
+        console.log('[EMAIL] ⏭️ Email skipped:', result.reason);
+        return { success: true, skipped: true };
+      }
+      console.log('[EMAIL] ✅ Email notification sent successfully');
+      return { success: true };
+    }
+
+    console.error('[EMAIL] ❌ Failed to send email:', result?.error);
+    return { success: false, error: result?.error || 'Unknown error' };
+  } catch (error: any) {
+    console.error('[EMAIL] ❌ Exception sending email notification:', error);
+    return { success: false, error: error.message };
   }
 }

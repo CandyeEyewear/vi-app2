@@ -40,6 +40,7 @@ const insets = useSafeAreaInsets();
      opportunity_proposals_enabled: true,
      causes_enabled: true,
      events_enabled: true,
+     email_notifications_enabled: true,
    });
 
    const [loading, setLoading] = useState(true);
@@ -108,6 +109,7 @@ const insets = useSafeAreaInsets();
           opportunity_proposals_enabled: true,
           causes_enabled: true,
           events_enabled: true,
+          email_notifications_enabled: true,
         };
 
         const { data: created, error: createError } = await supabase
@@ -130,6 +132,7 @@ const insets = useSafeAreaInsets();
           opportunity_proposals_enabled: created.opportunity_proposals_enabled,
           causes_enabled: created.causes_enabled ?? true,
           events_enabled: created.events_enabled ?? true,
+          email_notifications_enabled: created.email_notifications_enabled ?? true,
         });
         return;
       }
@@ -149,6 +152,7 @@ const insets = useSafeAreaInsets();
           opportunity_proposals_enabled: data.opportunity_proposals_enabled,
           causes_enabled: data.causes_enabled ?? true,
           events_enabled: data.events_enabled ?? true,
+          email_notifications_enabled: data.email_notifications_enabled ?? true,
         });
       }
      } catch (error) {
@@ -523,6 +527,27 @@ const handleDeleteAccount = async () => {
        </Text>
      </TouchableOpacity>
    </View>
+
+        {/* Email Notifications */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Email Notifications</Text>
+
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingLabel}>Email Notifications</Text>
+              <Text style={styles.settingDescription}>
+                Receive email alerts when you're offline for messages and other notifications
+              </Text>
+            </View>
+            <Switch
+              value={notificationSettings.email_notifications_enabled}
+              onValueChange={(value) => updateNotificationSetting('email_notifications_enabled', value)}
+              trackColor={{ false: Colors.light.border, true: Colors.light.primary }}
+              thumbColor="#FFFFFF"
+              disabled={loading || updatingNotificationField === 'email_notifications_enabled'}
+            />
+          </View>
+        </View>
 
         {/* Reminder Preferences */}
         <View style={styles.section}>
