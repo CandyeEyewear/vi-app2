@@ -98,7 +98,7 @@ export default function ConversationScreen() {
     const fetchConversationData = async () => {
       if (!id || !user) return;
 
-      // If already in context, no need to fetch
+      // If already in context, use it and skip fetching
       const existingConv = conversations.find((c) => c.id === id);
       if (existingConv) {
         setConversationData(existingConv);
@@ -106,6 +106,9 @@ export default function ConversationScreen() {
         if (other) setOtherUserData(other);
         return;
       }
+
+      // Only fetch if not found in context (avoid redundant fetches)
+      if (conversationData) return;
 
       try {
         // Fetch conversation
@@ -148,16 +151,24 @@ export default function ConversationScreen() {
             });
           }
         }
-
-        // Also trigger a refresh of conversations in context
-        refreshConversations();
       } catch (error) {
         console.error('Error fetching conversation data:', error);
       }
     };
 
     fetchConversationData();
-  }, [id, user, conversations.length]);
+  }, [id, user?.id]); // Only depend on id and user.id to avoid loops
+
+  // Sync from context when conversation becomes available there
+  useEffect(() => {
+    if (!id || !user) return;
+    const existingConv = conversations.find((c) => c.id === id);
+    if (existingConv && !conversationData) {
+      setConversationData(existingConv);
+      const other = existingConv.participantDetails?.find((p: any) => p.id !== user.id);
+      if (other) setOtherUserData(other);
+    }
+  }, [conversations, id, user]);
 
   const formatLastSeen = (timestamp?: string) => {
     if (!timestamp) return '';
