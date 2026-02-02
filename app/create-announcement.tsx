@@ -34,7 +34,7 @@ import * as FileSystem from 'expo-file-system';
 import { File } from 'expo-file-system';
 import CustomAlert from '../components/CustomAlert';
 import Button from '../components/Button';
-import { sendNotificationToUser } from '../services/pushNotifications';
+import { sendNotificationToUser, sendEmailNotification } from '../services/pushNotifications';
 import WebContainer from '../components/WebContainer';
 import MentionInput from '../components/MentionInput';
 import { extractHashtagIds } from '../utils/hashtags';
@@ -364,6 +364,15 @@ export default function CreateAnnouncementScreen() {
                 } catch (pushError) {
                   console.error('❌ Failed to send push to user:', userObj.id, pushError);
                 }
+
+                // Send email notification (non-blocking)
+                sendEmailNotification(userObj.id, 'announcement', {
+                  title: 'New Announcement',
+                  description: text.trim().substring(0, 200),
+                  id: data.id,
+                }).catch((err) => {
+                  console.error('❌ Email notification error for user:', userObj.id, err);
+                });
               }
               
               console.log('🎉 Push notification process complete!');

@@ -48,7 +48,7 @@ import { Colors } from '../../constants/colors';
 import { supabase } from '../../services/supabase';
 import CustomAlert from '../../components/CustomAlert';
 import { useAlert, showErrorAlert } from '../../hooks/useAlert';
-import { sendNotificationToUser } from '../../services/pushNotifications';
+import { sendNotificationToUser, sendEmailNotification } from '../../services/pushNotifications';
 import { cache, CacheKeys } from '../../services/cache';
 import FeedPostCard from '../../components/cards/FeedPostCard';
 import { UserAvatar, UserNameWithBadge } from '../../components';
@@ -494,6 +494,15 @@ export default function ViewProfileScreen() {
       } catch (pushError) {
         console.error('[PROFILE] ❌ Exception sending push notification:', pushError);
       }
+
+      // Send email notification (non-blocking)
+      sendEmailNotification(profileUser.id, 'circle_request', {
+        senderName: currentUser.fullName,
+        senderAvatarUrl: currentUser.avatarUrl,
+        id: currentUser.id,
+      }).catch((err) => {
+        console.error('[PROFILE] ❌ Email notification error:', err);
+      });
 
       setCircleStatus('pending');
       showAlert({

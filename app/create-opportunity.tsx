@@ -45,7 +45,7 @@ import { File } from 'expo-file-system';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import CrossPlatformDateTimePicker from '../components/CrossPlatformDateTimePicker';
 import CustomAlert from '../components/CustomAlert';
-import { sendNotificationToUser } from '../services/pushNotifications';
+import { sendNotificationToUser, sendEmailNotification } from '../services/pushNotifications';
 import WebContainer from '../components/WebContainer';
 import { VisibilityType } from '../types';
 
@@ -652,6 +652,15 @@ export default function CreateOpportunityScreen() {
                 } catch (pushError) {
                   console.error('❌ Failed to send push to user:', userObj.id, pushError);
                 }
+
+                // Send email notification (non-blocking)
+                sendEmailNotification(userObj.id, 'opportunity', {
+                  title: title.trim(),
+                  description: description?.trim().substring(0, 200),
+                  id: data.id,
+                }).catch((err) => {
+                  console.error('❌ Email notification error for user:', userObj.id, err);
+                });
               }
               
               console.log('🎉 Push notification process complete!');

@@ -8,7 +8,7 @@ import { AppState, AppStateStatus, Platform } from 'react-native';
 import { Conversation, Message, ApiResponse } from '../types';
 import { supabase } from '../services/supabase';
 import { useAuth } from './AuthContext';
-import { sendNotificationToUser } from '../services/pushNotifications';
+import { sendNotificationToUser, sendEmailNotification } from '../services/pushNotifications';
 import { warn as logWarn } from '../utils/logger';
 
 function getErrorMessage(err: unknown): string {
@@ -645,7 +645,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
           title: 'New Message',
           body: `${user.fullName}: ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}`,
         });
-        
+
         if (pushResult) {
           console.log('✅ Push notification sent!');
         } else {
@@ -654,6 +654,27 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       } catch (pushError) {
         console.error('❌ Exception sending push notification:', pushError);
       }
+
+      // Send email notification (async, non-blocking)
+      // The Edge Function handles throttling and checks if user is online
+      sendEmailNotification(recipientId, 'message', {
+        senderName: user.fullName,
+        senderAvatarUrl: user.avatarUrl,
+        messagePreview: text.substring(0, 150),
+        conversationId: conversationId,
+      }).then((emailResult) => {
+        if (emailResult.success) {
+          if (emailResult.skipped) {
+            console.log('📧 Email notification skipped (throttled or user online)');
+          } else {
+            console.log('📧 Email notification sent!');
+          }
+        } else {
+          console.error('📧 Email notification failed:', emailResult.error);
+        }
+      }).catch((emailError) => {
+        console.error('📧 Exception sending email notification:', emailError);
+      });
     } else {
       console.log('⏭️ Skipping push notification (disabled in settings)');
     }
