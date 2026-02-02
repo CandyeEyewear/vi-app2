@@ -26,6 +26,9 @@ DECLARE
   education_val TEXT;
   date_of_birth_val TEXT;
   invite_code_val TEXT;
+  slug_val TEXT;
+  base_slug TEXT;
+  random_suffix TEXT;
 BEGIN
   -- Get metadata from the new user record
   -- Use COALESCE to handle missing raw_user_meta_data gracefully
@@ -82,9 +85,30 @@ BEGIN
     NULL
   );
 
+  -- Generate a unique slug from the full name
+  -- Convert to lowercase, replace spaces with hyphens, remove special chars
+  base_slug := COALESCE(
+    LOWER(
+      REGEXP_REPLACE(
+        REGEXP_REPLACE(
+          TRIM(full_name_val),
+          '[^\w\s-]', '', 'g'  -- Remove special characters
+        ),
+        '\s+', '-', 'g'  -- Replace spaces with hyphens
+      )
+    ),
+    'user'
+  );
+  -- Limit length to 60 chars
+  base_slug := LEFT(base_slug, 60);
+  -- Add random 4-char suffix for uniqueness
+  random_suffix := LOWER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 4));
+  slug_val := base_slug || '-' || random_suffix;
+
   -- Insert into public.users table
   INSERT INTO public.users (
     id,
+    slug,
     email,
     full_name,
     phone,
@@ -103,6 +127,7 @@ BEGIN
   )
   VALUES (
     NEW.id,
+    slug_val,
     COALESCE(NEW.email, ''),
     full_name_val,
     phone_val,
@@ -170,10 +195,11 @@ BEGIN
   ON CONFLICT (user_id) DO NOTHING;  -- Prevent duplicate inserts
 
   -- Log for debugging (optional - remove in production)
-  RAISE NOTICE 'User profile created: % (email: %, full_name: %, phone: %)', 
-    NEW.id, 
-    NEW.email, 
-    full_name_val, 
+  RAISE NOTICE 'User profile created: % (email: %, full_name: %, slug: %, phone: %)',
+    NEW.id,
+    NEW.email,
+    full_name_val,
+    slug_val,
     phone_val;
 
   RETURN NEW;
