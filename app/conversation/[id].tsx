@@ -62,7 +62,7 @@ export default function ConversationScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const { conversations, sendMessage, markAsRead, markMessageDelivered, deleteMessage, refreshConversations, isUserOnline } = useMessaging();
-  
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -80,15 +80,84 @@ export default function ConversationScreen() {
   const [viewingImage, setViewingImage] = useState<string | null>(null); // For viewing already-sent images
   const [uploadingImage, setUploadingImage] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [conversationData, setConversationData] = useState<any>(null);
+  const [otherUserData, setOtherUserData] = useState<any>(null);
   const flatListRef = useRef<FlatList<Message>>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const presenceChannelRef = useRef<any>(null);
   const keyboardAnim = useRef(new Animated.Value(0)).current;
 
-  const conversation = conversations.find((c) => c.id === id);
-  const otherUser = conversation?.participantDetails.find((p) => p.id !== user?.id);
+  // Try to find conversation in context first, otherwise use fetched data
+  const conversation = conversations.find((c) => c.id === id) || conversationData;
+  const otherUser = conversation?.participantDetails?.find((p: any) => p.id !== user?.id) || otherUserData;
   const isOtherUserOnlineAnywhere = otherUser?.id ? isUserOnline(otherUser.id) : false;
   const [otherUserLastSeen, setOtherUserLastSeen] = useState<string | undefined>(otherUser?.lastSeen);
+
+  // Fetch conversation data directly if not found in context
+  useEffect(() => {
+    const fetchConversationData = async () => {
+      if (!id || !user) return;
+
+      // If already in context, no need to fetch
+      const existingConv = conversations.find((c) => c.id === id);
+      if (existingConv) {
+        setConversationData(existingConv);
+        const other = existingConv.participantDetails?.find((p: any) => p.id !== user.id);
+        if (other) setOtherUserData(other);
+        return;
+      }
+
+      try {
+        // Fetch conversation
+        const { data: convData, error: convError } = await supabase
+          .from('conversations')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (convError || !convData) {
+          console.error('Error fetching conversation:', convError);
+          return;
+        }
+
+        // Fetch participant details
+        const otherParticipantId = convData.participants.find((p: string) => p !== user.id);
+        if (otherParticipantId) {
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('id, full_name, avatar_url, location, role, membership_tier, membership_status, is_partner_organization, last_seen')
+            .eq('id', otherParticipantId)
+            .single();
+
+          if (!userError && userData) {
+            const formattedUser = {
+              id: userData.id,
+              fullName: userData.full_name,
+              avatarUrl: userData.avatar_url,
+              location: userData.location,
+              role: userData.role,
+              membershipTier: userData.membership_tier,
+              membershipStatus: userData.membership_status,
+              is_partner_organization: userData.is_partner_organization,
+              lastSeen: userData.last_seen,
+            };
+            setOtherUserData(formattedUser);
+            setConversationData({
+              ...convData,
+              participantDetails: [formattedUser],
+            });
+          }
+        }
+
+        // Also trigger a refresh of conversations in context
+        refreshConversations();
+      } catch (error) {
+        console.error('Error fetching conversation data:', error);
+      }
+    };
+
+    fetchConversationData();
+  }, [id, user, conversations.length]);
 
   const formatLastSeen = (timestamp?: string) => {
     if (!timestamp) return '';
@@ -1104,11 +1173,20 @@ export default function ConversationScreen() {
     );
   };
 
+  // Show loading while conversation data is being fetched
   if (!conversation || !otherUser) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.errorText}>Conversation not found</Text>
-      </View>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+          <TouchableOpacity onPress={() => goBack('/(tabs)/messages')} style={styles.backButton}>
+            <ChevronLeft size={28} color={Colors.light.primary} />
+          </TouchableOpacity>
+          <Text style={styles.headerName}>Loading...</Text>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.light.primary} />
+        </View>
+      </SafeAreaView>
     );
   }
 
