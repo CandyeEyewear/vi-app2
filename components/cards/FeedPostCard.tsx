@@ -123,10 +123,7 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
   };
 
   const handleSubmitComment = async () => {
-    if (!commentText.trim()) return;
-
-    // Dismiss keyboard immediately so the tap registers
-    Keyboard.dismiss();
+    if (!commentText.trim() || submitting) return;
 
     setSubmitting(true);
     const response = await addComment(post.id, commentText);
@@ -134,6 +131,7 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
 
     if (response.success) {
       setCommentText('');
+      Keyboard.dismiss();
       setShowCommentModal(false);
     } else {
       showAlert('Error', response.error || 'Failed to add comment', 'error');
@@ -622,34 +620,47 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
 
                 {/* Input Container - Fixed at bottom, above keyboard and nav bar */}
                 <SafeAreaView edges={['bottom']} style={styles.modalInputSafeArea}>
-                  <View style={[
-                    styles.modalInput,
-                    {
-                      paddingBottom: Math.max(insets.bottom, 8),
-                      paddingTop: 8,
-                    }
-                  ]}>
-                    <MentionInput
-                      style={styles.commentInput}
-                      placeholder="Write a comment... Use @ to mention"
-                      value={commentText}
-                      onChangeText={setCommentText}
-                      multiline
-                      maxLength={500}
-                      textAlignVertical="center"
-                      onSubmitEditing={handleSubmitComment}
-                      returnKeyType="default"
-                      blurOnSubmit={false}
-                    />
-                    <TouchableOpacity
-                      style={[styles.sendButton, (!commentText.trim() || submitting) && styles.sendButtonDisabled]}
-                      onPress={handleSubmitComment}
-                      disabled={!commentText.trim() || submitting}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <Text style={styles.sendButtonText}>Send</Text>
-                    </TouchableOpacity>
-                  </View>
+                  <ScrollView
+                    horizontal
+                    scrollEnabled={false}
+                    contentContainerStyle={styles.modalInputScrollContent}
+                    keyboardShouldPersistTaps="always"
+                  >
+                    <View style={[
+                      styles.modalInput,
+                      {
+                        paddingBottom: Math.max(insets.bottom, 8),
+                        paddingTop: 8,
+                      }
+                    ]}>
+                      <View style={styles.commentInputWrapper}>
+                        <MentionInput
+                          style={styles.commentInput}
+                          placeholder="Write a comment... Use @ to mention"
+                          value={commentText}
+                          onChangeText={setCommentText}
+                          multiline
+                          maxLength={500}
+                          textAlignVertical="center"
+                          onSubmitEditing={handleSubmitComment}
+                          returnKeyType="default"
+                          blurOnSubmit={false}
+                        />
+                      </View>
+                      <TouchableOpacity
+                        style={[styles.sendButton, (!commentText.trim() || submitting) && styles.sendButtonDisabled]}
+                        onPress={handleSubmitComment}
+                        disabled={!commentText.trim() || submitting}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        {submitting ? (
+                          <ActivityIndicator size="small" color="#FFFFFF" />
+                        ) : (
+                          <Text style={styles.sendButtonText}>Send</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </ScrollView>
                 </SafeAreaView>
               </View>
             </View>
@@ -1232,15 +1243,22 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.light.border,
   },
+  modalInputScrollContent: {
+    flexGrow: 1,
+  },
   modalInput: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 16,
     gap: 12,
     minHeight: 60,
+    width: '100%',
+  },
+  commentInputWrapper: {
+    flex: 1,
+    minWidth: 0,
   },
   commentInput: {
-    flex: 1,
     backgroundColor: Colors.light.card,
     borderRadius: 20,
     paddingHorizontal: 16,
@@ -1254,11 +1272,15 @@ const styles = StyleSheet.create({
     textAlignVertical: 'center',
   },
   sendButton: {
-    marginLeft: 8,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 12,
     backgroundColor: Colors.light.primary,
     borderRadius: 20,
+    minWidth: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-end',
+    marginBottom: 2,
   },
   sendButtonDisabled: {
     opacity: 0.5,
