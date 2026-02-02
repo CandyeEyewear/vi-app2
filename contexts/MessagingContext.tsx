@@ -44,45 +44,6 @@ interface MessagingContextType {
 const MessagingContext = createContext<MessagingContextType | undefined>(undefined);
 
 export function MessagingProvider({ children }: { children: React.ReactNode }) {
-  // Firebase Messaging is not available on web - provide a safe no-op context
-  // (and avoid running hooks that assume native modules exist).
-  if (Platform.OS === 'web') {
-    const webContextValue: MessagingContextType = {
-      conversations: [],
-      loading: false,
-      totalUnreadCount: 0,
-      onlineUsers: new Set(),
-      isUserOnline: () => false,
-      getOrCreateConversation: async () => ({
-        success: false,
-        error: 'Messaging not available on web',
-      }),
-      sendMessage: async () => ({
-        success: false,
-        error: 'Messaging not available on web',
-      }),
-      markAsRead: async () => {},
-      refreshConversations: async () => {},
-      deleteConversation: async () => ({
-        success: false,
-        error: 'Messaging not available on web',
-      }),
-      setTypingStatus: async () => {},
-      updateOnlineStatus: async () => {},
-      markMessageDelivered: async () => {},
-      deleteMessage: async () => ({
-        success: false,
-        error: 'Messaging not available on web',
-      }),
-    };
-
-    return (
-      <MessagingContext.Provider value={webContextValue}>
-        {children}
-      </MessagingContext.Provider>
-    );
-  }
-
   const { user } = useAuth();
   const userId = user?.id ?? null;
   const [conversations, setConversations] = useState<Conversation[]>([]);
