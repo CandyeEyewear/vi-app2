@@ -1056,10 +1056,10 @@ export default function ConversationScreen() {
   const renderMessage = ({ item }: { item: Message }) => {
     const isMe = item.senderId === user?.id;
     const isDeleted = !!item.deletedAt;
-    const replySenderName = item.replyTo?.senderId === user?.id 
-      ? 'You' 
+    const replySenderName = item.replyTo?.senderId === user?.id
+      ? 'You'
       : otherUser?.fullName || 'User';
-    
+
     const hasAttachments = item.attachments && item.attachments.length > 0;
     const hasText = item.text && item.text.trim().length > 0;
     const newestMessageId = messages[0]?.id;
@@ -1068,7 +1068,7 @@ export default function ConversationScreen() {
       !isDeleted &&
       item.id === newestMessageId &&
       (item.status === 'read' || item.read === true);
-    
+
     return (
       <SwipeableMessage
         onSwipeRight={() => handleSwipeToReply(item)}
@@ -1080,7 +1080,7 @@ export default function ConversationScreen() {
           delayLongPress={500}
           disabled={!(hasText && !isDeleted) && !canDeleteMessage(item)}
         >
-          <View style={{ alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '100%' }}>
+          <View style={[styles.messageWrapper, isMe && styles.messageWrapperMe]}>
             <View
               style={[
                 styles.messageBubble,
@@ -1106,7 +1106,7 @@ export default function ConversationScreen() {
               </View>
             </View>
           )}
-          
+
           {/* Attachments - WhatsApp Style (Edge-to-Edge) */}
           {hasAttachments && (
             <View style={styles.attachmentsContainer}>
@@ -1128,22 +1128,13 @@ export default function ConversationScreen() {
                           styles.messageImage,
                           // Apply bubble corners to image - sharp bottom corner if no text below
                           !hasText ? (
-                            isMe 
+                            isMe
                               ? { borderBottomRightRadius: 0 } // Sharp corner bottom-right for sent
                               : { borderBottomLeftRadius: 0 }  // Sharp corner bottom-left for received
                           ) : undefined
                         ]}
                         resizeMode="cover"
                       />
-                      {/* Timestamp overlay on image - WhatsApp style */}
-                      <View style={styles.imageTimestampOverlay}>
-                        <View style={styles.imageTimestampBadge}>
-                          <Text style={styles.imageTimestampText}>
-                            {formatTime(item.createdAt)}
-                          </Text>
-                          {isMe && item.status && <MessageStatus status={item.status} />}
-                        </View>
-                      </View>
                     </TouchableOpacity>
                   );
                 }
@@ -1151,33 +1142,31 @@ export default function ConversationScreen() {
               })}
             </View>
           )}
-          
+
           {/* Message Text - Only show if there's text */}
           {hasText && (
-            <>
-              <LinkText
-                text={isDeleted ? '🚫 This message was deleted' : item.text}
-                style={[
-                  styles.messageText,
-                  isMe && styles.messageTextMe,
-                  isDeleted && styles.messageTextDeleted,
-                ]}
-                selectable
-                linkStyle={isMe ? { color: '#FFFFFF', textDecorationLine: 'underline' } : undefined}
-              />
-              <View style={styles.messageFooter}>
-                <Text style={[styles.messageTime, isMe && styles.messageTimeMe]}>
-                  {formatTime(item.createdAt)}
-                </Text>
-                {isMe && !isDeleted && item.status && <MessageStatus status={item.status} />}
-              </View>
-            </>
+            <LinkText
+              text={isDeleted ? '🚫 This message was deleted' : item.text}
+              style={[
+                styles.messageText,
+                isMe && styles.messageTextMe,
+                isDeleted && styles.messageTextDeleted,
+              ]}
+              selectable
+              linkStyle={isMe ? { color: '#FFFFFF', textDecorationLine: 'underline' } : undefined}
+            />
           )}
-          
-          {/* If only image (no text), no additional footer needed - timestamp is on image */}
             </View>
 
-            {showSeenLabel && <Text style={styles.seenLabel}>Seen</Text>}
+            {/* Timestamp outside bubble - industry best practice */}
+            <View style={[styles.messageTimeContainer, isMe && styles.messageTimeContainerMe]}>
+              <Text style={styles.messageTimeOutside}>
+                {formatTime(item.createdAt)}
+              </Text>
+              {isMe && !isDeleted && item.status && <MessageStatus status={item.status} />}
+            </View>
+
+            {showSeenLabel && <Text style={[styles.seenLabel, isMe && styles.seenLabelMe]}>Seen</Text>}
           </View>
       </Pressable>
     </SwipeableMessage>
@@ -1642,25 +1631,31 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   messageContainer: {
-    marginBottom: 4,
+    marginBottom: 8,
     flexDirection: 'row',
   },
   messageContainerMe: {
     justifyContent: 'flex-end',
   },
+  messageWrapper: {
+    alignItems: 'flex-start',
+    maxWidth: '80%',
+  },
+  messageWrapperMe: {
+    alignItems: 'flex-end',
+  },
   messageBubble: {
-    maxWidth: '75%',
+    minWidth: 80,
     backgroundColor: WHATSAPP_COLORS.receivedBubble,
-    borderRadius: 8,
-    borderBottomLeftRadius: 0, // Sharp corner on left (received)
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    paddingBottom: 6,
+    borderRadius: 16,
+    borderBottomLeftRadius: 4, // Sharp corner on left (received)
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   messageBubbleMe: {
     backgroundColor: WHATSAPP_COLORS.sentBubble,
-    borderBottomLeftRadius: 8,
-    borderBottomRightRadius: 0, // Sharp corner on right (sent)
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 4, // Sharp corner on right (sent)
   },
   messageBubbleDeleted: {
     backgroundColor: '#F5F5F5',
@@ -1670,8 +1665,7 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: 16,
     color: '#000000',
-    marginBottom: 2,
-    lineHeight: 20,
+    lineHeight: 22,
   },
   messageTextMe: {
     color: '#FFFFFF', // White text on blue background
@@ -1681,26 +1675,32 @@ const styles = StyleSheet.create({
     color: Colors.light.textSecondary,
     fontSize: 14,
   },
-  messageFooter: {
+  messageTimeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    marginTop: 2,
+    marginTop: 4,
+    marginLeft: 14,
     gap: 4,
   },
-  messageTime: {
-    fontSize: 11,
-    color: WHATSAPP_COLORS.timestamp,
+  messageTimeContainerMe: {
+    marginLeft: 0,
+    marginRight: 14,
+    justifyContent: 'flex-end',
   },
-  messageTimeMe: {
-    color: WHATSAPP_COLORS.timestamp,
+  messageTimeOutside: {
+    fontSize: 11,
+    color: Colors.light.textSecondary,
   },
   seenLabel: {
     fontSize: 11,
     color: Colors.light.textSecondary,
     marginTop: 2,
-    marginRight: 2,
-    alignSelf: 'flex-end',
+    marginLeft: 14,
+  },
+  seenLabelMe: {
+    marginLeft: 0,
+    marginRight: 14,
+    textAlign: 'right',
   },
   emptyContainer: {
     flex: 1,
