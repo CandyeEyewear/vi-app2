@@ -136,31 +136,13 @@ export default async function handler(req: any, res: any) {
    
    const postBackUrl = `${baseUrl}/api/ezee/webhook`;
    
-   // Build return URL with returnPath if provided
+   // Build return URL - KEEP IT SHORT to avoid eZeePayments URL length limits
    // NOTE: eZeePayments requires HTTPS URLs, so we always use HTTPS baseUrl even for app platform
-   // The app can handle deep link redirects on the success page itself
+   // IMPORTANT: Do NOT include returnPath in URLs - it makes them too long and causes 500 errors
+   // The returnPath is stored in transaction metadata and looked up by success/cancel pages
    // CRITICAL: Never add platform=app to URLs sent to eZeePayments - it causes rejection!
-   // We'll detect mobile app in the success page using User-Agent or other methods
-   const returnParams = new URLSearchParams({ orderId: uniqueOrderId });
-   if (returnPath) {
-     returnParams.append('returnPath', returnPath);
-   }
-   // DO NOT add platform=app - eZeePayments rejects URLs with this parameter
-   const returnUrl = `${baseUrl}/payment/success?${returnParams.toString()}`;
-   
-   const cancelParams = new URLSearchParams({ orderId: uniqueOrderId });
-   if (returnPath) {
-     cancelParams.append('returnPath', returnPath);
-   }
-   // DO NOT add platform=app - eZeePayments rejects URLs with this parameter
-   const cancelUrl = `${baseUrl}/payment/cancel?${cancelParams.toString()}`;
-   
-   // Verify URLs don't contain platform=app (safety check)
-   if (returnUrl.includes('platform=app') || cancelUrl.includes('platform=app')) {
-     console.error('🔴 [CREATE-TOKEN] ERROR: URLs still contain platform=app! This will cause eZeePayments to reject the request.');
-     console.error('🔴 [CREATE-TOKEN] returnUrl:', returnUrl);
-     console.error('🔴 [CREATE-TOKEN] cancelUrl:', cancelUrl);
-   }
+   const returnUrl = `${baseUrl}/payment/success?orderId=${uniqueOrderId}`;
+   const cancelUrl = `${baseUrl}/payment/cancel?orderId=${uniqueOrderId}`;
 
    // Debug logging - log the URLs being sent
    console.log('🔵 [CREATE-TOKEN] URL Debug:', {
@@ -416,8 +398,9 @@ export default async function handler(req: any, res: any) {
        status: 'pending',
        customer_email: customerEmail,
        customer_name: customerName,
-        metadata: { 
+        metadata: {
           original_order_id: orderId,  // Always store original orderId here
+          return_path: returnPath || null,  // Store returnPath for success page redirect
           ...eventMetadata,  // Add event_id and ticket_count for event registrations
         },
      })

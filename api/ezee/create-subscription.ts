@@ -138,26 +138,12 @@ export default async function handler(req: any, res: any) {
     
     const postBackUrl = `${baseUrl}/api/ezee/webhook`;
     
-    // Build return URL with returnPath if provided
-    const returnParams = new URLSearchParams({ 
-      orderId: subscriptionOrderId,
-      type: 'subscription'
-    });
-    if (returnPath) {
-      returnParams.append('returnPath', returnPath);
-    }
-    if (isApp) {
-      returnParams.append('platform', 'app'); // flag for app-specific handling
-    }
-    const returnUrl = `${baseUrl}/payment/success?${returnParams.toString()}`;
-    const cancelParams = new URLSearchParams({
-      orderId: subscriptionOrderId,
-      type: 'subscription',
-    });
-    if (isApp) {
-      cancelParams.append('platform', 'app');
-    }
-    const cancelUrl = `${baseUrl}/payment/cancel?${cancelParams.toString()}`;
+    // Build return URL - KEEP IT SHORT to avoid eZeePayments URL length limits
+    // IMPORTANT: Do NOT include returnPath in URLs - it makes them too long and causes 500 errors
+    // The returnPath is stored in subscription metadata and looked up by success/cancel pages
+    // CRITICAL: Never add platform=app to URLs sent to eZeePayments - it causes rejection!
+    const returnUrl = `${baseUrl}/payment/success?orderId=${subscriptionOrderId}&type=subscription`;
+    const cancelUrl = `${baseUrl}/payment/cancel?orderId=${subscriptionOrderId}&type=subscription`;
 
     // Create subscription with eZeePayments using form data
     const subscriptionFormData = new URLSearchParams();
@@ -314,6 +300,7 @@ export default async function handler(req: any, res: any) {
           ezee_subscription_id: ezeeSubscriptionId,
           payment_subscriptions_id: subscription?.id,
           recurring_donations_id: subscriptionType === 'recurring_donation' ? referenceId : null,
+          return_path: returnPath || null,  // Store returnPath for success page redirect
         },
       });
 
