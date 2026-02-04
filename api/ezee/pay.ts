@@ -77,7 +77,7 @@ export default async function handler(req: any, res: any) {
       .replace(/'/g, '&#039;');
   };
 
-  // Generate auto-submitting form
+  // Generate auto-submitting form with fallback button for reliability
   const html = `
     <!DOCTYPE html>
     <html>
@@ -101,6 +101,7 @@ export default async function handler(req: any, res: any) {
           background: white;
           border-radius: 8px;
           box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          max-width: 400px;
         }
         .spinner {
           border: 3px solid #f3f3f3;
@@ -115,13 +116,49 @@ export default async function handler(req: any, res: any) {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
+        .fallback-btn {
+          display: none;
+          background: #38B6FF;
+          color: white;
+          border: none;
+          padding: 12px 32px;
+          font-size: 16px;
+          border-radius: 8px;
+          cursor: pointer;
+          margin-top: 1rem;
+          transition: background 0.2s;
+        }
+        .fallback-btn:hover {
+          background: #2da3e8;
+        }
+        .fallback-btn.show {
+          display: inline-block;
+        }
+        .status-text {
+          color: #666;
+          font-size: 0.9rem;
+          margin-top: 0.5rem;
+        }
+        .error-text {
+          color: #dc3545;
+          font-size: 0.9rem;
+          margin-top: 0.5rem;
+          display: none;
+        }
+        .error-text.show {
+          display: block;
+        }
       </style>
     </head>
     <body>
       <div class="container">
-        <div class="spinner"></div>
-        <p>Redirecting to secure payment page...</p>
-        <p style="color: #666; font-size: 0.9rem;">Please wait...</p>
+        <div class="spinner" id="spinner"></div>
+        <p id="mainText">Redirecting to secure payment page...</p>
+        <p class="status-text" id="statusText">Please wait...</p>
+        <p class="error-text" id="errorText">Auto-redirect didn't work. Please click the button below.</p>
+        <button type="button" class="fallback-btn" id="fallbackBtn" onclick="manualSubmit()">
+          Continue to Payment
+        </button>
       </div>
       <form id="paymentForm" method="POST" action="${escapeHtml(paymentUrl)}">
         <input type="hidden" name="platform" value="custom" />
@@ -134,30 +171,82 @@ export default async function handler(req: any, res: any) {
         <input type="hidden" name="description" value="${escapeHtml(description || 'Payment')}" />
         ${subscription_id ? `<input type="hidden" name="subscription_id" value="${escapeHtml(subscription_id)}" />` : ''}
         ${recurring ? `<input type="hidden" name="recurring" value="true" />` : ''}
+        <noscript>
+          <div style="text-align: center; padding: 20px;">
+            <p>JavaScript is required for automatic redirect.</p>
+            <button type="submit" style="background: #38B6FF; color: white; border: none; padding: 12px 32px; font-size: 16px; border-radius: 8px; cursor: pointer;">
+              Continue to Payment
+            </button>
+          </div>
+        </noscript>
       </form>
       <script>
-        // Multiple methods to ensure form submission works
-        (function() {
-          function submitForm() {
-            const form = document.getElementById('paymentForm');
-            if (form) {
+        // Track submission attempts
+        var submitted = false;
+        var attempts = 0;
+        var maxAttempts = 5;
+
+        function manualSubmit() {
+          var form = document.getElementById('paymentForm');
+          if (form && !submitted) {
+            submitted = true;
+            document.getElementById('statusText').textContent = 'Redirecting...';
+            form.submit();
+          }
+        }
+
+        function showFallback() {
+          document.getElementById('spinner').style.display = 'none';
+          document.getElementById('mainText').textContent = 'Ready to proceed';
+          document.getElementById('errorText').classList.add('show');
+          document.getElementById('fallbackBtn').classList.add('show');
+          document.getElementById('statusText').style.display = 'none';
+        }
+
+        function trySubmit() {
+          if (submitted) return;
+          attempts++;
+
+          var form = document.getElementById('paymentForm');
+          if (form) {
+            try {
+              submitted = true;
               form.submit();
+            } catch (e) {
+              submitted = false;
+              console.error('Form submit error:', e);
+              if (attempts >= maxAttempts) {
+                showFallback();
+              }
             }
+          } else if (attempts >= maxAttempts) {
+            showFallback();
           }
-          
-          // Try immediately
-          submitForm();
-          
-          // Also try on load (backup)
-          if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', submitForm);
-          } else {
-            window.addEventListener('load', submitForm);
+        }
+
+        // Wait for DOM to be ready before attempting submit
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', function() {
+            // Small delay to ensure form is fully parsed
+            setTimeout(trySubmit, 50);
+          });
+        } else {
+          // DOM already loaded, try after a small delay
+          setTimeout(trySubmit, 50);
+        }
+
+        // Multiple fallback attempts with increasing delays
+        setTimeout(function() { if (!submitted) trySubmit(); }, 200);
+        setTimeout(function() { if (!submitted) trySubmit(); }, 500);
+        setTimeout(function() { if (!submitted) trySubmit(); }, 1000);
+        setTimeout(function() { if (!submitted) trySubmit(); }, 2000);
+
+        // Show fallback button after 3 seconds if still not submitted
+        setTimeout(function() {
+          if (!submitted) {
+            showFallback();
           }
-          
-          // Fallback timeout
-          setTimeout(submitForm, 100);
-        })();
+        }, 3000);
       </script>
     </body>
     </html>

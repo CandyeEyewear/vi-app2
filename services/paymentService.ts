@@ -403,11 +403,23 @@ export async function openPaymentPage(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     console.log('Opening payment page:', paymentUrl);
-    
-    // On web, use window.location to redirect
+
+    // On web, open in a new tab to ensure JavaScript executes properly
+    // This is more reliable than window.location.href in SPA frameworks
     if (Platform.OS === 'web') {
       if (typeof window !== 'undefined') {
-        console.log('Redirecting on web to:', paymentUrl);
+        console.log('Opening payment page in new tab:', paymentUrl);
+
+        // Try window.open first (opens in new tab)
+        const newWindow = window.open(paymentUrl, '_blank', 'noopener,noreferrer');
+
+        if (newWindow) {
+          console.log('Payment page opened in new tab successfully');
+          return { success: true };
+        }
+
+        // If popup was blocked, fall back to window.location.href
+        console.log('Popup blocked, falling back to window.location.href');
         window.location.href = paymentUrl;
         return { success: true };
       }
