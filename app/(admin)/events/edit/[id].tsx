@@ -156,7 +156,6 @@ export default function EditEventScreen() {
   // Pricing
   const [isFree, setIsFree] = useState(true);
   const [ticketPrice, setTicketPrice] = useState('');
-  const [paymentLink, setPaymentLink] = useState('');
 
   // Contact
   const [contactName, setContactName] = useState('');
@@ -226,7 +225,6 @@ export default function EditEventScreen() {
           }
           setIsFree(event.isFree);
           setTicketPrice(event.ticketPrice?.toString() || '');
-          setPaymentLink(event.paymentLink || '');
           setContactName(event.contactName || '');
           setContactEmail(event.contactEmail || '');
           setContactPhone(event.contactPhone || '');
@@ -389,12 +387,8 @@ export default function EditEventScreen() {
       showAlert('warning', 'Invalid', 'Please enter a valid ticket price');
       return false;
     }
-    if (!isFree && !paymentLink.trim()) {
-      showAlert('warning', 'Required', 'Please enter a payment link for paid events');
-      return false;
-    }
     return true;
-  }, [title, description, isVirtual, location, virtualLink, eventDate, startTime, hasCapacity, capacity, isFree, ticketPrice, paymentLink]);
+  }, [title, description, isVirtual, location, virtualLink, eventDate, startTime, hasCapacity, capacity, isFree, ticketPrice]);
 
   // Handle save
   const handleSave = useCallback(async () => {
@@ -438,7 +432,6 @@ export default function EditEventScreen() {
         registrationDeadline: registrationDeadline ? dateToString(registrationDeadline) : undefined,
         isFree,
         ticketPrice: !isFree ? parseFloat(ticketPrice) : undefined,
-        paymentLink: !isFree ? paymentLink.trim() || undefined : undefined,
         contactName: contactName.trim() || undefined,
         contactEmail: contactEmail.trim() || undefined,
         contactPhone: contactPhone.trim() || undefined,
@@ -455,7 +448,7 @@ export default function EditEventScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [validateForm, id, title, description, category, status, isFeatured, imageUri, imageUrl, isVirtual, location, locationAddress, mapLink, latitude, longitude, virtualLink, eventDate, startTime, endTime, hasCapacity, capacity, registrationRequired, registrationDeadline, isFree, ticketPrice, paymentLink, contactName, contactEmail, contactPhone, router, uploadImageToStorage, dateToString, dateToTimeString]);
+  }, [validateForm, id, title, description, category, status, isFeatured, imageUri, imageUrl, isVirtual, location, locationAddress, mapLink, latitude, longitude, virtualLink, eventDate, startTime, endTime, hasCapacity, capacity, registrationRequired, registrationDeadline, isFree, ticketPrice, contactName, contactEmail, contactPhone, router, uploadImageToStorage, dateToString, dateToTimeString]);
 
   // Handle delete
   const handleDelete = useCallback(() => {
@@ -1004,41 +997,23 @@ export default function EditEventScreen() {
             </View>
 
             {!isFree && (
-              <>
-                <View style={styles.inputGroup}>
-                  <Text style={[styles.inputLabel, { color: colors.text }]}>Ticket Price (JMD) *</Text>
-                  <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                    <Text style={[styles.currencyPrefix, { color: colors.textSecondary }]}>J$</Text>
-                    <TextInput
-                      style={[styles.input, { color: colors.text }]}
-                      placeholder="0"
-                      placeholderTextColor={colors.textSecondary}
-                      value={ticketPrice}
-                      onChangeText={setTicketPrice}
-                      keyboardType="number-pad"
-                    />
-                  </View>
+              <View style={styles.inputGroup}>
+                <Text style={[styles.inputLabel, { color: colors.text }]}>Ticket Price (JMD) *</Text>
+                <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Text style={[styles.currencyPrefix, { color: colors.textSecondary }]}>J$</Text>
+                  <TextInput
+                    style={[styles.input, { color: colors.text }]}
+                    placeholder="0"
+                    placeholderTextColor={colors.textSecondary}
+                    value={ticketPrice}
+                    onChangeText={setTicketPrice}
+                    keyboardType="number-pad"
+                  />
                 </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={[styles.inputLabel, { color: colors.text }]}>Payment Link *</Text>
-                  <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                    <Link size={20} color={colors.textSecondary} />
-                    <TextInput
-                      style={[styles.input, { color: colors.text }]}
-                      placeholder="https://payment.example.com/..."
-                      placeholderTextColor={colors.textSecondary}
-                      value={paymentLink}
-                      onChangeText={setPaymentLink}
-                      autoCapitalize="none"
-                      keyboardType="url"
-                    />
-                  </View>
-                  <Text style={[styles.inputHint, { color: colors.textSecondary }]}>
-                    Link to your payment page (e.g., eZeePayments, PayPal, etc.)
-                  </Text>
-                </View>
-              </>
+                <Text style={[styles.inputHint, { color: colors.textSecondary }]}>
+                  Payments are processed securely via eZeePayments
+                </Text>
+              </View>
             )}
           </View>
 
