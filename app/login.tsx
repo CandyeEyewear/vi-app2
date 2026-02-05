@@ -93,43 +93,68 @@ export default function LoginScreen() {
   };
 
   const handleLogin = async () => {
+    // Debug: Log when handleLogin is called and by what
+    console.log('[LOGIN] handleLogin called', {
+      email: email ? `${email.substring(0, 3)}...` : '(empty)',
+      hasPassword: !!password,
+      loading,
+      timestamp: new Date().toISOString(),
+      // Capture call stack to trace what triggered this
+      stack: new Error().stack?.split('\n').slice(1, 4).join(' -> '),
+    });
+
     if (!email || !password) {
+      console.log('[LOGIN] Missing credentials, showing alert');
       showAlert('Missing Information', 'Please fill in all fields', 'error');
       return;
     }
 
-    const response = await signIn({ email, password });
-    
-    if (response.success) {
-      // Small delay to ensure Root Layout is fully mounted before navigating
-      setTimeout(() => {
-        router.replace('/feed' as any);
-      }, 100);
-    } else {
-      // Provide user-friendly error messages
-      let errorMessage = 'Please check your credentials and try again.';
-      
-      if (response.error) {
-        const errorLower = response.error.toLowerCase();
-        if (errorLower.includes('invalid login credentials') || 
-            errorLower.includes('invalid_credentials') ||
-            errorLower.includes('email not confirmed') ||
-            errorLower.includes('invalid password') ||
-            errorLower.includes('user not found')) {
-          errorMessage = 'Invalid email or password. Please check your credentials and try again.';
-        } else if (errorLower.includes('too many requests')) {
-          errorMessage = 'Too many login attempts. Please wait a moment and try again.';
-        } else if (errorLower.includes('network') || errorLower.includes('connection')) {
-          errorMessage = 'Network error. Please check your internet connection and try again.';
-        } else {
-          errorMessage = response.error;
+    // Prevent multiple simultaneous sign-in attempts
+    if (loading) {
+      console.log('[LOGIN] Already loading, ignoring duplicate call');
+      return;
+    }
+
+    try {
+      console.log('[LOGIN] Calling signIn...');
+      const response = await signIn({ email, password });
+      console.log('[LOGIN] signIn response:', { success: response.success, hasError: !!response.error });
+
+      if (response.success) {
+        // Small delay to ensure Root Layout is fully mounted before navigating
+        setTimeout(() => {
+          router.replace('/feed' as any);
+        }, 100);
+      } else {
+        // Provide user-friendly error messages
+        let errorMessage = 'Please check your credentials and try again.';
+
+        if (response.error) {
+          const errorLower = response.error.toLowerCase();
+          if (errorLower.includes('invalid login credentials') ||
+              errorLower.includes('invalid_credentials') ||
+              errorLower.includes('email not confirmed') ||
+              errorLower.includes('invalid password') ||
+              errorLower.includes('user not found')) {
+            errorMessage = 'Invalid email or password. Please check your credentials and try again.';
+          } else if (errorLower.includes('too many requests')) {
+            errorMessage = 'Too many login attempts. Please wait a moment and try again.';
+          } else if (errorLower.includes('network') || errorLower.includes('connection')) {
+            errorMessage = 'Network error. Please check your internet connection and try again.';
+          } else {
+            errorMessage = response.error;
+          }
         }
+
+        // Show alert immediately instead of using pendingError to avoid navigation issues
+        console.log('[LOGIN] Showing error alert:', errorMessage);
+        setTimeout(() => {
+          showAlert('Login Failed', errorMessage, 'error');
+        }, 100);
       }
-      
-      // Show alert immediately instead of using pendingError to avoid navigation issues
-      setTimeout(() => {
-        showAlert('Login Failed', errorMessage, 'error');
-      }, 100);
+    } catch (error) {
+      console.error('[LOGIN] Exception in handleLogin:', error);
+      showAlert('Login Failed', 'An unexpected error occurred. Please try again.', 'error');
     }
   };
 

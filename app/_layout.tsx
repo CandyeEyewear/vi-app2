@@ -4,7 +4,7 @@
  */
 
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Stack, useRouter, usePathname, useRootNavigationState } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import * as Linking from 'expo-linking';
@@ -59,10 +59,11 @@ function AppContent() {
   const webNotificationCleanup = useRef<(() => void) | null>(null);
   const { width } = useWindowDimensions();
   const { alertProps, showAlert } = useAlert();
-  
+  const [forceReady, setForceReady] = useState(false);
+
   // Check if navigation is ready
   const navigationReady = rootNavigationState?.key != null;
-  
+
   // Show WebNavigation on desktop (>= 992px) when user is logged in
   const isDesktop = isWeb && width >= 992;
   const showWebNav = isDesktop && !!user;
@@ -82,7 +83,22 @@ function AppContent() {
   // Determine if we're still initializing (show splash only during initial boot)
   // CRITICAL: Wait for both navigation AND initial auth check to complete
   // This prevents race condition where routing happens before session is loaded
-  const isInitializing = !navigationReady || !initialAuthComplete || authLoading;
+  // forceReady is a safety valve to prevent infinite loading
+  const isInitializing = !forceReady && (!navigationReady || !initialAuthComplete || authLoading);
+
+  // Safety timeout: If still initializing after 10 seconds, force ready state
+  // This prevents the app from being stuck on splash screen forever
+  useEffect(() => {
+    if (isInitializing) {
+      console.log('[NAV] Initializing state:', { navigationReady, initialAuthComplete, authLoading, forceReady });
+      const timeout = setTimeout(() => {
+        console.warn('[NAV] ⚠️ Initialization timeout - forcing ready state after 10s');
+        console.warn('[NAV] State at timeout:', { navigationReady, initialAuthComplete, authLoading });
+        setForceReady(true);
+      }, 10000);
+      return () => clearTimeout(timeout);
+    }
+  }, [isInitializing, navigationReady, initialAuthComplete, authLoading, forceReady]);
 
   useEffect(() => {
     if (!isInitializing && SplashScreen) {
