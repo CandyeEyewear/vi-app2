@@ -96,10 +96,42 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Function to create opportunity notifications for all users
+CREATE OR REPLACE FUNCTION create_opportunity_notifications(
+  p_opportunity_id UUID,
+  p_title TEXT,
+  p_organization_name TEXT,
+  p_sender_id UUID
+)
+RETURNS TABLE(user_id UUID) AS $$
+BEGIN
+  -- Insert notifications for all users except the creator
+  -- Only for users who have opportunities enabled (defaults to true)
+  RETURN QUERY
+  INSERT INTO notifications (user_id, type, title, message, link, related_id, is_read, created_at)
+  SELECT
+    u.id,
+    'opportunity',
+    'New Opportunity Available',
+    p_title || ' - ' || p_organization_name,
+    '/opportunity/' || p_opportunity_id,
+    p_opportunity_id,
+    false,
+    NOW()
+  FROM users u
+  LEFT JOIN user_notification_settings uns ON uns.user_id = u.id
+  WHERE
+    u.id != p_sender_id
+    AND (uns.opportunities_enabled IS NULL OR uns.opportunities_enabled = true)
+  RETURNING user_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Add comments for documentation
 COMMENT ON FUNCTION create_announcement_notifications IS 'Creates in-app notifications for all users (except sender) when a new announcement is posted';
 COMMENT ON FUNCTION create_cause_notifications IS 'Creates in-app notifications for all users (except creator) when a new cause is created';
 COMMENT ON FUNCTION create_event_notifications IS 'Creates in-app notifications for all users (except creator) when a new event is created';
+COMMENT ON FUNCTION create_opportunity_notifications IS 'Creates in-app notifications for all users (except creator) when a new opportunity is created';
 
 -- ============================================
 -- VERIFICATION QUERIES
