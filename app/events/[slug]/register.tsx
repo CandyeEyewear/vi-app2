@@ -628,8 +628,11 @@ export default function EventRegisterScreen() {
       
       // Process payment through eZeePayments
       // Registration will be created in webhook when payment is confirmed
-      const returnPath = `/events/${slug}`;
-      console.log('[EVENT REGISTER] Processing payment with returnPath:', returnPath, 'slug:', slug);
+      // Use event.id instead of slug to shorten the return URL
+      // (eZeePayments may reject requests with URLs that are too long)
+      // The event detail page's getEventBySlug function has UUID fallback support
+      const returnPath = `/events/${event.id}`;
+      console.log('[EVENT REGISTER] Processing payment with returnPath:', returnPath, 'eventId:', event.id);
       console.log('[EVENT REGISTER] Registration will be created after payment confirmation');
       
       const paymentResult = await processPayment({

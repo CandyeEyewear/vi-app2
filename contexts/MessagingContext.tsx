@@ -54,6 +54,32 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   const userNameRef = useRef<string>('');
   const offlineUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Debounce and loading guard refs to prevent API request explosion
+  const loadingInProgressRef = useRef(false);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const DEBOUNCE_MS = 500; // Wait 500ms before loading after rapid events
+
+  // Ref to hold the loadConversations function - allows calling it before definition
+  const loadConversationsRef = useRef<() => Promise<void>>();
+
+  // Debounced load function that uses the ref
+  const triggerDebouncedLoad = useCallback(() => {
+    // Clear any existing debounce timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // Set a new debounce timer
+    debounceTimerRef.current = setTimeout(() => {
+      loadConversationsRef.current?.();
+    }, DEBOUNCE_MS);
+  }, []);
+
+  // Direct load function that uses the ref (for initial load)
+  const triggerLoadConversations = useCallback(() => {
+    loadConversationsRef.current?.();
+  }, []);
+
   useEffect(() => {
     userNameRef.current = user?.fullName || '';
   }, [user?.fullName]);
@@ -92,13 +118,16 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   // Load conversations on mount - SIMPLE LIKE NOTIFICATIONS
   useEffect(() => {
     if (userId) {
-      loadConversations();
+      triggerLoadConversations();
     }
-  }, [userId]);
+  }, [userId, triggerLoadConversations]);
 
   // SIMPLE REAL-TIME SUBSCRIPTION LIKE NOTIFICATIONS (narrowed events)
+  // Uses debounced loading to prevent API request explosion from rapid events
   useEffect(() => {
     if (!userId) return;
+
+    console.log('[MESSAGING] Setting up real-time subscriptions for user:', userId.substring(0, 8));
 
     // Subscribe to message changes that can affect previews/unreads (INSERT/UPDATE/DELETE)
     // Note: UPDATE is required for "soft delete" (deleted_at/text change) to reflect in the inbox.
@@ -107,17 +136,17 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages' },
-        () => loadConversations()
+        () => triggerDebouncedLoad()
       )
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'messages' },
-        () => loadConversations()
+        () => triggerDebouncedLoad()
       )
       .on(
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'messages' },
-        () => loadConversations()
+        () => triggerDebouncedLoad()
       )
       .subscribe();
 
@@ -131,9 +160,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
           schema: 'public',
           table: 'conversations',
         },
-        () => {
-          loadConversations();
-        }
+        () => triggerDebouncedLoad()
       )
       .on(
         'postgres_changes',
@@ -142,10 +169,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
           schema: 'public',
           table: 'conversations',
         },
-        () => {
-          // Reload conversations when any conversation changes
-          loadConversations();
-        }
+        () => triggerDebouncedLoad()
       )
       .on(
         'postgres_changes',
@@ -154,17 +178,21 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
           schema: 'public',
           table: 'conversations',
         },
-        () => {
-          loadConversations();
-        }
+        () => triggerDebouncedLoad()
       )
       .subscribe();
 
     return () => {
+      console.log('[MESSAGING] Cleaning up real-time subscriptions');
+      // Clear debounce timer on cleanup
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
       messageSubscription.unsubscribe();
       conversationSubscription.unsubscribe();
     };
-  }, [userId]);
+  }, [userId, triggerDebouncedLoad]);
 
   // GLOBAL PRESENCE CHANNEL - Track all online users
   useEffect(() => {
@@ -318,7 +346,14 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   const loadConversations = async () => {
     if (!user) return;
 
+    // Prevent overlapping loads - if already loading, skip this call
+    if (loadingInProgressRef.current) {
+      console.log('[MESSAGING] loadConversations skipped - already loading');
+      return;
+    }
+
     try {
+      loadingInProgressRef.current = true;
       setLoading(true);
       // Fetch conversations where user is a participant
       const { data: conversationsData, error: conversationsError } = await supabase
@@ -405,9 +440,13 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Error loading conversations:', error);
     } finally {
+      loadingInProgressRef.current = false;
       setLoading(false);
     }
   };
+
+  // Store the function in the ref so it can be called from earlier useEffects
+  loadConversationsRef.current = loadConversations;
 
   // Keep all your existing functions exactly as they were
   const getOrCreateConversation = async (
