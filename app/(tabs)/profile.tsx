@@ -10,7 +10,6 @@ import {
   ScrollView,
   StyleSheet,
   Image,
-  Alert,
   useColorScheme,
   Platform,
   useWindowDimensions,
@@ -26,33 +25,8 @@ import { UserAvatar, UserNameWithBadge } from '../../components/index';
 import Head from 'expo-router/head';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
-
-// ============================================
-// WEB-COMPATIBLE ALERT HELPERS
-// ============================================
-const showAlert = (title: string, message: string, onOk?: () => void) => {
-  if (Platform.OS === 'web') {
-    window.alert(`${title}\n\n${message}`);
-    if (onOk) onOk();
-  } else {
-    Alert.alert(title, message, [{ text: 'OK', onPress: onOk }]);
-  }
-};
-
-const showConfirm = (title: string, message: string, onConfirm: () => void, onCancel?: () => void) => {
-  if (Platform.OS === 'web') {
-    if (window.confirm(`${title}\n\n${message}`)) {
-      onConfirm();
-    } else if (onCancel) {
-      onCancel();
-    }
-  } else {
-    Alert.alert(title, message, [
-      { text: 'Cancel', style: 'cancel', onPress: onCancel },
-      { text: 'OK', onPress: onConfirm },
-    ]);
-  }
-};
+import CustomAlert from '../../components/CustomAlert';
+import { useAlert } from '../../hooks/useAlert';
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -66,6 +40,8 @@ export default function ProfileScreen() {
   const isOfficialMember = isPremium || isAdmin;
   const hasProposeAccess = isOfficialMember;
   const [refreshing, setRefreshing] = useState(false);
+  const { alertProps, showAlert } = useAlert();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -74,22 +50,24 @@ export default function ProfileScreen() {
   }, [refreshUser]);
 
   const handleLogout = () => {
-    showConfirm(
-      'Logout',
-      'Are you sure you want to logout?',
-      async () => {
-        try {
-            await signOut();
-            router.replace('/login');
-        } catch (error) {
-          console.error('Logout error:', error);
-          showAlert(
-            'Logout Error',
-            'Failed to logout. Please try again.'
-          );
-        }
-      }
-    );
+    setShowLogoutConfirm(true);
+  };
+
+  const confirmLogout = async () => {
+    setShowLogoutConfirm(false);
+    try {
+      console.log('[PROFILE] Starting logout...');
+      await signOut();
+      console.log('[PROFILE] Logout successful, navigating to login...');
+      router.replace('/login');
+    } catch (error) {
+      console.error('[PROFILE] Logout error:', error);
+      showAlert({
+        type: 'error',
+        title: 'Logout Error',
+        message: 'Failed to logout. Please try again.',
+      });
+    }
   };
 
   if (!user) {
@@ -505,6 +483,22 @@ export default function ProfileScreen() {
           Member since {new Date(user.createdAt).toLocaleDateString()}
         </Text>
       </View>
+
+      {/* Logout Confirmation Modal */}
+      <CustomAlert
+        visible={showLogoutConfirm}
+        type="warning"
+        title="Logout"
+        message="Are you sure you want to logout?"
+        buttons={[
+          { text: 'Cancel', style: 'cancel', onPress: () => setShowLogoutConfirm(false) },
+          { text: 'Logout', style: 'destructive', onPress: confirmLogout },
+        ]}
+        onClose={() => setShowLogoutConfirm(false)}
+      />
+
+      {/* General Alert Modal */}
+      <CustomAlert {...alertProps} />
     </ScrollView>
   );
 }

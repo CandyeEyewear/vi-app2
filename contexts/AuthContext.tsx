@@ -641,8 +641,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (data: LoginFormData): Promise<ApiResponse<User>> => {
     console.log('[AUTH] 🔑 Starting sign in process...');
     console.log('[AUTH] Email:', data.email);
-    
+    // Debug: Capture call stack to trace what triggered signIn
+    console.log('[AUTH] 🔍 signIn called from:', new Error().stack?.split('\n').slice(1, 6).join('\n  '));
+
     try {
+      // Prevent duplicate sign-in attempts
+      if (loading) {
+        console.log('[AUTH] ⚠️ Already loading, ignoring duplicate signIn call');
+        return { success: false, error: 'Sign in already in progress' };
+      }
       setLoading(true);
 
       // Sign in with Supabase
