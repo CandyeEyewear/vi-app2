@@ -11,6 +11,9 @@ import { useAuth } from './AuthContext';
 import { sendNotificationToUser, sendEmailNotification } from '../services/pushNotifications';
 import { warn as logWarn } from '../utils/logger';
 
+// Debounce delay for real-time subscription updates (ms)
+const DEBOUNCE_DELAY = 300;
+
 function getErrorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (typeof err === 'string') return err;
@@ -53,10 +56,17 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const userNameRef = useRef<string>('');
   const offlineUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const conversationsRef = useRef<Conversation[]>([]); // Keep current conversations in ref for partial updates
 
   useEffect(() => {
     userNameRef.current = user?.fullName || '';
   }, [user?.fullName]);
+
+  // Keep conversationsRef in sync with state for use in partial updates
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
 
   // NOTE: This must be defined before it's referenced in dependency arrays below.
   const updateOnlineStatus = useCallback(async (isOnline: boolean) => {
@@ -89,82 +99,302 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     return onlineUsers.has(userId);
   };
 
-  // Load conversations on mount - SIMPLE LIKE NOTIFICATIONS
+  // Helper to map database user row to participant details
+  const mapUserToParticipant = (u: any) => ({
+    id: u.id,
+    email: u.email,
+    fullName: u.full_name,
+    phone: u.phone,
+    location: u.location,
+    bio: u.bio,
+    areasOfExpertise: u.areas_of_expertise,
+    education: u.education,
+    avatarUrl: u.avatar_url,
+    role: u.role,
+    membershipTier: u.membership_tier,
+    membershipStatus: u.membership_status,
+    is_partner_organization: u.is_partner_organization,
+    totalHours: u.total_hours,
+    activitiesCompleted: u.activities_completed,
+    organizationsHelped: u.organizations_helped,
+    achievements: [],
+    onlineStatus: u.online_status,
+    lastSeen: u.last_seen,
+    createdAt: u.created_at,
+    updatedAt: u.updated_at,
+  });
+
+  // OPTIMIZED: Uses batched queries instead of N+1
+  const loadConversations = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      setLoading(true);
+
+      // 1. Fetch all conversations where user is a participant (1 query)
+      const { data: conversationsData, error: conversationsError } = await supabase
+        .from('conversations')
+        .select('*')
+        .contains('participants', [user.id])
+        .not('deleted_by', 'cs', `["${user.id}"]`)
+        .order('updated_at', { ascending: false });
+
+      if (conversationsError) throw conversationsError;
+      if (!conversationsData || conversationsData.length === 0) {
+        setConversations([]);
+        return;
+      }
+
+      // 2. Collect all unique participant IDs across all conversations
+      const allParticipantIds = new Set<string>();
+      conversationsData.forEach(conv => {
+        conv.participants.forEach((id: string) => allParticipantIds.add(id));
+      });
+
+      // 3. Fetch ALL users in ONE query (instead of N queries)
+      const { data: allUsersData } = await supabase
+        .from('users')
+        .select('*')
+        .in('id', Array.from(allParticipantIds));
+
+      // Create a lookup map for users
+      const usersMap = new Map<string, any>();
+      allUsersData?.forEach(u => usersMap.set(u.id, u));
+
+      // 4. Get conversation IDs for batch queries
+      const conversationIds = conversationsData.map(c => c.id);
+
+      // 5. Fetch last messages for ALL conversations in ONE query
+      // Using a subquery approach: get recent messages and dedupe by conversation
+      const { data: allMessagesData } = await supabase
+        .from('messages')
+        .select('*')
+        .in('conversation_id', conversationIds)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+
+      // Group messages by conversation and take the first (most recent) for each
+      const lastMessageMap = new Map<string, any>();
+      allMessagesData?.forEach(msg => {
+        if (!lastMessageMap.has(msg.conversation_id)) {
+          lastMessageMap.set(msg.conversation_id, msg);
+        }
+      });
+
+      // 6. Count unread messages per conversation in ONE query
+      // We fetch unread messages and group them client-side
+      const { data: unreadMessagesData } = await supabase
+        .from('messages')
+        .select('conversation_id')
+        .in('conversation_id', conversationIds)
+        .eq('read', false)
+        .neq('sender_id', user.id);
+
+      // Count unreads per conversation
+      const unreadCountMap = new Map<string, number>();
+      unreadMessagesData?.forEach(msg => {
+        const current = unreadCountMap.get(msg.conversation_id) || 0;
+        unreadCountMap.set(msg.conversation_id, current + 1);
+      });
+
+      // 7. Build conversations with all details (no additional queries!)
+      const conversationsWithDetails = conversationsData.map(conv => {
+        // Get participant details from the lookup map
+        const participantDetails = conv.participants
+          .map((id: string) => usersMap.get(id))
+          .filter(Boolean)
+          .map(mapUserToParticipant);
+
+        // Get last message from the lookup map
+        const lastMsg = lastMessageMap.get(conv.id);
+        const lastMessage = lastMsg ? {
+          id: lastMsg.id,
+          conversationId: lastMsg.conversation_id,
+          senderId: lastMsg.sender_id,
+          text: lastMsg.text,
+          read: lastMsg.read,
+          status: lastMsg.status || 'sent',
+          createdAt: lastMsg.created_at,
+        } : undefined;
+
+        return {
+          id: conv.id,
+          participants: conv.participants,
+          participantDetails,
+          lastMessage,
+          unreadCount: unreadCountMap.get(conv.id) || 0,
+          updatedAt: conv.updated_at,
+        } as Conversation;
+      });
+
+      setConversations(conversationsWithDetails);
+    } catch (error) {
+      console.error('Error loading conversations:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  // Debounced version to prevent rapid-fire reloads from real-time events
+  const debouncedLoadConversations = useCallback(() => {
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+    debounceTimeoutRef.current = setTimeout(() => {
+      loadConversations();
+      debounceTimeoutRef.current = null;
+    }, DEBOUNCE_DELAY);
+  }, [loadConversations]);
+
+  // Update a single conversation's last message and unread count (for partial updates)
+  const updateSingleConversation = useCallback(async (conversationId: string) => {
+    if (!user) return;
+
+    try {
+      // Check if we have this conversation
+      const existingConv = conversationsRef.current.find(c => c.id === conversationId);
+      if (!existingConv) {
+        // New conversation - do a full reload
+        debouncedLoadConversations();
+        return;
+      }
+
+      // Fetch just the last message for this conversation
+      const { data: messagesData } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', conversationId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      // Fetch unread count for this conversation
+      const { count: unreadCount } = await supabase
+        .from('messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('conversation_id', conversationId)
+        .eq('read', false)
+        .neq('sender_id', user.id);
+
+      const lastMessage = messagesData?.[0] ? {
+        id: messagesData[0].id,
+        conversationId: messagesData[0].conversation_id,
+        senderId: messagesData[0].sender_id,
+        text: messagesData[0].text,
+        read: messagesData[0].read,
+        status: messagesData[0].status || 'sent',
+        createdAt: messagesData[0].created_at,
+      } : undefined;
+
+      // Update just this conversation in state
+      setConversations(prev => {
+        const updated = prev.map(conv => {
+          if (conv.id !== conversationId) return conv;
+          return {
+            ...conv,
+            lastMessage,
+            unreadCount: unreadCount || 0,
+            updatedAt: new Date().toISOString(),
+          };
+        });
+        // Re-sort by updatedAt (most recent first)
+        return updated.sort((a, b) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        );
+      });
+    } catch (error) {
+      console.error('Error updating single conversation:', error);
+      // Fall back to full reload on error
+      debouncedLoadConversations();
+    }
+  }, [user, debouncedLoadConversations]);
+
+  // Load conversations on mount
   useEffect(() => {
     if (userId) {
       loadConversations();
     }
-  }, [userId]);
+  }, [userId, loadConversations]);
 
-  // SIMPLE REAL-TIME SUBSCRIPTION LIKE NOTIFICATIONS (narrowed events)
+  // OPTIMIZED REAL-TIME SUBSCRIPTIONS with debouncing and partial updates
   useEffect(() => {
     if (!userId) return;
 
     // Subscribe to message changes that can affect previews/unreads (INSERT/UPDATE/DELETE)
-    // Note: UPDATE is required for "soft delete" (deleted_at/text change) to reflect in the inbox.
+    // OPTIMIZATION: Only update the affected conversation instead of reloading everything
     const messageSubscription = supabase
       .channel('messages-changes')
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages' },
-        () => loadConversations()
+        (payload: any) => {
+          // Only update the specific conversation that received the message
+          const conversationId = payload.new?.conversation_id;
+          if (conversationId) {
+            updateSingleConversation(conversationId);
+          } else {
+            debouncedLoadConversations();
+          }
+        }
       )
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'messages' },
-        () => loadConversations()
+        (payload: any) => {
+          // Message updated (e.g., marked as read, soft deleted)
+          const conversationId = payload.new?.conversation_id;
+          if (conversationId) {
+            updateSingleConversation(conversationId);
+          } else {
+            debouncedLoadConversations();
+          }
+        }
       )
       .on(
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'messages' },
-        () => loadConversations()
+        (payload: any) => {
+          // Hard delete - need conversation_id from old record
+          const conversationId = payload.old?.conversation_id;
+          if (conversationId) {
+            updateSingleConversation(conversationId);
+          } else {
+            debouncedLoadConversations();
+          }
+        }
       )
       .subscribe();
 
-    // Subscribe to conversation changes (including deletes so removed/left chats disappear)
+    // Subscribe to conversation changes (these are less frequent, use debounced full reload)
     const conversationSubscription = supabase
       .channel('conversations-changes')
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'conversations',
-        },
-        () => {
-          loadConversations();
-        }
+        { event: 'INSERT', schema: 'public', table: 'conversations' },
+        () => debouncedLoadConversations()
       )
       .on(
         'postgres_changes',
-        {
-          event: 'UPDATE', // Updates change ordering/participants
-          schema: 'public',
-          table: 'conversations',
-        },
-        () => {
-          // Reload conversations when any conversation changes
-          loadConversations();
-        }
+        { event: 'UPDATE', schema: 'public', table: 'conversations' },
+        () => debouncedLoadConversations()
       )
       .on(
         'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'conversations',
-        },
-        () => {
-          loadConversations();
-        }
+        { event: 'DELETE', schema: 'public', table: 'conversations' },
+        () => debouncedLoadConversations()
       )
       .subscribe();
 
     return () => {
+      // Clean up debounce timeout on unmount
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+        debounceTimeoutRef.current = null;
+      }
       messageSubscription.unsubscribe();
       conversationSubscription.unsubscribe();
     };
-  }, [userId]);
+  }, [userId, updateSingleConversation, debouncedLoadConversations]);
 
   // GLOBAL PRESENCE CHANNEL - Track all online users
   useEffect(() => {
@@ -314,100 +544,6 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       subscription.remove();
     };
   }, [userId, updateOnlineStatus]);
-
-  const loadConversations = async () => {
-    if (!user) return;
-
-    try {
-      setLoading(true);
-      // Fetch conversations where user is a participant
-      const { data: conversationsData, error: conversationsError } = await supabase
-        .from('conversations')
-        .select('*')
-        .contains('participants', [user.id])
-        .not('deleted_by', 'cs', `["${user.id}"]`)
-        .order('updated_at', { ascending: false });
-
-      if (conversationsError) throw conversationsError;
-
-      // For each conversation, get participant details and last message
-      const conversationsWithDetails = await Promise.all(
-        conversationsData.map(async (conv) => {
-          // Get participant details with online status
-          const { data: usersData } = await supabase
-            .from('users')
-            .select('*')
-            .in('id', conv.participants);
-
-          const participantDetails = usersData?.map((u) => ({
-            id: u.id,
-            email: u.email,
-            fullName: u.full_name,
-            phone: u.phone,
-            location: u.location,
-            bio: u.bio,
-            areasOfExpertise: u.areas_of_expertise,
-            education: u.education,
-            avatarUrl: u.avatar_url,
-            role: u.role,
-            membershipTier: u.membership_tier,
-            membershipStatus: u.membership_status,
-            is_partner_organization: u.is_partner_organization,
-            totalHours: u.total_hours,
-            activitiesCompleted: u.activities_completed,
-            organizationsHelped: u.organizations_helped,
-            achievements: [],
-            onlineStatus: u.online_status,
-            lastSeen: u.last_seen,
-            createdAt: u.created_at,
-            updatedAt: u.updated_at,
-          })) || [];
-
-          // Get last message (excluding deleted messages)
-          const { data: messagesData } = await supabase
-            .from('messages')
-            .select('*')
-            .eq('conversation_id', conv.id)
-            .is('deleted_at', null) // Only get non-deleted messages
-            .order('created_at', { ascending: false })
-            .limit(1);
-
-          const lastMessage = messagesData?.[0] ? {
-            id: messagesData[0].id,
-            conversationId: messagesData[0].conversation_id,
-            senderId: messagesData[0].sender_id,
-            text: messagesData[0].text,
-            read: messagesData[0].read,
-            status: messagesData[0].status || 'sent',
-            createdAt: messagesData[0].created_at,
-          } : undefined;
-
-          // Count ONLY unread messages that YOU didn't send
-          const { count: unreadCount } = await supabase
-            .from('messages')
-            .select('*', { count: 'exact', head: true })
-            .eq('conversation_id', conv.id)
-            .eq('read', false)
-            .neq('sender_id', user.id);
-
-          return {
-            id: conv.id,
-            participants: conv.participants,
-            participantDetails,
-            lastMessage,
-            unreadCount: unreadCount || 0,
-            updatedAt: conv.updated_at,
-          } as Conversation;
-        })
-      );
-
-      setConversations(conversationsWithDetails);
-    } catch (error) {
-      console.error('Error loading conversations:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Keep all your existing functions exactly as they were
   const getOrCreateConversation = async (
