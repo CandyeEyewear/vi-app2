@@ -306,12 +306,15 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   const updateSingleConversation = useCallback(async (conversationId: string) => {
     if (!user) return;
 
+    console.log('[updateSingleConversation] Called for:', conversationId?.substring(0, 8));
+
     try {
       // Check if we have this conversation
       const existingConv = conversationsRef.current.find(c => c.id === conversationId);
       if (!existingConv) {
-        // New conversation - do a full reload
-        debouncedLoadConversations();
+        // New conversation - do a full reload (not debounced to ensure it shows immediately)
+        console.log('[updateSingleConversation] New conversation detected, triggering full reload');
+        loadConversations();
         return;
       }
 
@@ -361,9 +364,9 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Error updating single conversation:', error);
       // Fall back to full reload on error
-      debouncedLoadConversations();
+      loadConversations();
     }
-  }, [user, debouncedLoadConversations]);
+  }, [user, loadConversations]);
 
   // Load conversations on mount
   useEffect(() => {

@@ -526,9 +526,10 @@ export default function ConversationScreen() {
       if (error) throw error;
 
       // Get all reply message IDs that we need to fetch
+      // Use != null to filter out both null AND undefined
       const replyMessageIds = (data ?? [])
         .map((msg: any) => msg.reply_to_message_id)
-        .filter((id: string | null) => id !== null) as string[];
+        .filter((id: string | null | undefined): id is string => id != null);
 
       // Fetch reply messages in batch if any exist
       let replyMessagesMap: Record<string, any> = {};
