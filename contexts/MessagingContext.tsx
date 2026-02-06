@@ -58,6 +58,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   const offlineUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const conversationsRef = useRef<Conversation[]>([]); // Keep current conversations in ref for partial updates
+  const isLoadingRef = useRef(false); // Prevent multiple simultaneous loads
 
   useEffect(() => {
     userNameRef.current = user?.fullName || '';
@@ -131,7 +132,14 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // Prevent multiple simultaneous loads
+    if (isLoadingRef.current) {
+      console.log('[loadConversations] Already loading, skipping');
+      return;
+    }
+
     console.log('[loadConversations] Starting load for user:', user.id?.substring(0, 8));
+    isLoadingRef.current = true;
 
     try {
       setLoading(true);
@@ -257,6 +265,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       console.error('[loadConversations] Error:', error);
     } finally {
       setLoading(false);
+      isLoadingRef.current = false;
     }
   }, [user]);
 
