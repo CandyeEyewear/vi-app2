@@ -126,7 +126,12 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
 
   // OPTIMIZED: Uses batched queries instead of N+1
   const loadConversations = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      console.log('[loadConversations] No user, skipping');
+      return;
+    }
+
+    console.log('[loadConversations] Starting load for user:', user.id?.substring(0, 8));
 
     try {
       setLoading(true);
@@ -139,7 +144,13 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         .not('deleted_by', 'cs', `["${user.id}"]`)
         .order('updated_at', { ascending: false });
 
-      if (conversationsError) throw conversationsError;
+      if (conversationsError) {
+        console.error('[loadConversations] Error fetching conversations:', conversationsError);
+        throw conversationsError;
+      }
+
+      console.log('[loadConversations] Found conversations:', conversationsData?.length || 0);
+
       if (!conversationsData || conversationsData.length === 0) {
         setConversations([]);
         return;
@@ -152,10 +163,15 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       });
 
       // 3. Fetch ALL users in ONE query (instead of N queries)
-      const { data: allUsersData } = await supabase
+      const { data: allUsersData, error: usersError } = await supabase
         .from('users')
         .select('*')
         .in('id', Array.from(allParticipantIds));
+
+      if (usersError) {
+        console.error('[loadConversations] Error fetching users:', usersError);
+        throw usersError;
+      }
 
       // Create a lookup map for users
       const usersMap = new Map<string, any>();
@@ -165,13 +181,17 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       const conversationIds = conversationsData.map(c => c.id);
 
       // 5. Fetch last messages for ALL conversations in ONE query
-      // Using a subquery approach: get recent messages and dedupe by conversation
-      const { data: allMessagesData } = await supabase
+      const { data: allMessagesData, error: messagesError } = await supabase
         .from('messages')
         .select('*')
         .in('conversation_id', conversationIds)
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
+
+      if (messagesError) {
+        console.error('[loadConversations] Error fetching messages:', messagesError);
+        throw messagesError;
+      }
 
       // Group messages by conversation and take the first (most recent) for each
       const lastMessageMap = new Map<string, any>();
@@ -182,13 +202,17 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       });
 
       // 6. Count unread messages per conversation in ONE query
-      // We fetch unread messages and group them client-side
-      const { data: unreadMessagesData } = await supabase
+      const { data: unreadMessagesData, error: unreadError } = await supabase
         .from('messages')
         .select('conversation_id')
         .in('conversation_id', conversationIds)
         .eq('read', false)
         .neq('sender_id', user.id);
+
+      if (unreadError) {
+        console.error('[loadConversations] Error fetching unread counts:', unreadError);
+        throw unreadError;
+      }
 
       // Count unreads per conversation
       const unreadCountMap = new Map<string, number>();
@@ -227,9 +251,10 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         } as Conversation;
       });
 
+      console.log('[loadConversations] Successfully loaded', conversationsWithDetails.length, 'conversations');
       setConversations(conversationsWithDetails);
     } catch (error) {
-      console.error('Error loading conversations:', error);
+      console.error('[loadConversations] Error:', error);
     } finally {
       setLoading(false);
     }
@@ -311,6 +336,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
 
   // Load conversations on mount
   useEffect(() => {
+    console.log('[MessagingContext] Mount effect - userId:', userId?.substring(0, 8) || 'null');
     if (userId) {
       loadConversations();
     }
