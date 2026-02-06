@@ -780,7 +780,7 @@ export default function OpportunityDetailsScreen() {
 
       {/* CONTENT BY TAB */}
       {activeTab === 'details' ? (
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
           {/* HERO IMAGE WITH GRADIENT - Memoized to prevent reload loop */}
           <MemoizedHeroImage
             imageUrl={opportunity.imageUrl}
@@ -1020,7 +1020,7 @@ export default function OpportunityDetailsScreen() {
 
       {/* BOTTOM ACTION BAR */}
       {!isAdmin && (
-        <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12, backgroundColor: colors.background, borderTopColor: colors.border }]}>
+        <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 4, backgroundColor: colors.background, borderTopColor: colors.border }]}>
           {isSignedUp ? (
             <AnimatedPressable onPress={handleCancelSignup} disabled={submitting} style={{ flex: 1 }}>
               <View style={styles.actionBtnShadow}>
@@ -1297,7 +1297,7 @@ const styles = StyleSheet.create({
   checkInBtnText: { color: '#FFF', fontSize: 17, fontWeight: '700' },
 
   // Bottom Bar
-  bottomBar: { paddingHorizontal: 16, paddingTop: 12, borderTopWidth: 1 },
+  bottomBar: { paddingHorizontal: 16, paddingTop: 8, borderTopWidth: 1 },
   actionBtnShadow: { position: 'absolute', top: 4, left: 0, right: 0, bottom: -4 },
   actionBtnShadowInner: { flex: 1, borderRadius: 14, opacity: 0.4 },
   actionBtn: { paddingVertical: 16, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
