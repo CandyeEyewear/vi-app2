@@ -59,6 +59,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const conversationsRef = useRef<Conversation[]>([]); // Keep current conversations in ref for partial updates
   const isLoadingRef = useRef(false); // Prevent multiple simultaneous loads
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null); // Failsafe timeout
 
   useEffect(() => {
     userNameRef.current = user?.fullName || '';
@@ -139,10 +140,24 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     }
 
     console.log('[loadConversations] Starting load for user:', user.id?.substring(0, 8));
-    isLoadingRef.current = true;
 
+    // Set loading inside try to ensure finally ALWAYS resets it
     try {
+      isLoadingRef.current = true;
       setLoading(true);
+
+      // Failsafe: Auto-reset loading state after 30 seconds in case something goes wrong
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+      loadingTimeoutRef.current = setTimeout(() => {
+        if (isLoadingRef.current) {
+          console.warn('[loadConversations] Failsafe timeout triggered - resetting stuck loading state');
+          isLoadingRef.current = false;
+          setLoading(false);
+        }
+        loadingTimeoutRef.current = null;
+      }, 30000);
 
       // 1. Fetch all conversations where user is a participant (1 query)
       const { data: conversationsData, error: conversationsError } = await supabase
@@ -160,6 +175,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       console.log('[loadConversations] Found conversations:', conversationsData?.length || 0);
 
       if (!conversationsData || conversationsData.length === 0) {
+        console.log('[loadConversations] No conversations found, setting empty array');
         setConversations([]);
         return;
       }
@@ -264,6 +280,12 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('[loadConversations] Error:', error);
     } finally {
+      console.log('[loadConversations] Finally block - resetting loading state');
+      // Clear failsafe timeout since we completed normally
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
       setLoading(false);
       isLoadingRef.current = false;
     }
@@ -345,10 +367,22 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
 
   // Load conversations on mount
   useEffect(() => {
-    console.log('[MessagingContext] Mount effect - userId:', userId?.substring(0, 8) || 'null');
+    console.log('[MessagingContext] Mount effect - userId:', userId?.substring(0, 8) || 'null', 'isLoading:', isLoadingRef.current);
     if (userId) {
+      // Reset loading ref on mount in case of stale state from previous render
+      isLoadingRef.current = false;
       loadConversations();
     }
+
+    // Cleanup: reset loading state on unmount
+    return () => {
+      console.log('[MessagingContext] Unmount - cleaning up loading state');
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
+      isLoadingRef.current = false;
+    };
   }, [userId, loadConversations]);
 
   // OPTIMIZED REAL-TIME SUBSCRIPTIONS with debouncing and partial updates
