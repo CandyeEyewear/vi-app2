@@ -58,12 +58,22 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   const loadingInProgressRef = useRef(false);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const DEBOUNCE_MS = 500; // Wait 500ms before loading after rapid events
+  const lastLoadCompletedRef = useRef(0);
+  const COOLDOWN_MS = 3000; // Minimum 3 seconds between completed loads
+  const initialLoadDoneRef = useRef(false);
+  const markAsReadInProgressRef = useRef(false); // Guard to skip self-triggered events
 
   // Ref to hold the loadConversations function - allows calling it before definition
   const loadConversationsRef = useRef<() => Promise<void>>();
 
   // Debounced load function that uses the ref
   const triggerDebouncedLoad = useCallback(() => {
+    // Skip if a markAsRead just fired (self-triggered UPDATE event)
+    if (markAsReadInProgressRef.current) return;
+
+    // Skip if we just completed a load (cooldown)
+    if (Date.now() - lastLoadCompletedRef.current < COOLDOWN_MS) return;
+
     // Clear any existing debounce timer
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -354,7 +364,10 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
 
     try {
       loadingInProgressRef.current = true;
-      setLoading(true);
+      // Only show loading spinner on the initial load to avoid UI flicker
+      if (!initialLoadDoneRef.current) {
+        setLoading(true);
+      }
       // Fetch conversations where user is a participant
       const { data: conversationsData, error: conversationsError } = await supabase
         .from('conversations')
@@ -441,6 +454,8 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       console.error('Error loading conversations:', error);
     } finally {
       loadingInProgressRef.current = false;
+      lastLoadCompletedRef.current = Date.now();
+      initialLoadDoneRef.current = true;
       setLoading(false);
     }
   };
@@ -818,17 +833,31 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
 
     try {
+      // Set guard so the UPDATE event doesn't retrigger loadConversations
+      markAsReadInProgressRef.current = true;
       await supabase
         .from('messages')
-        .update({ 
+        .update({
           read: true,
           status: 'read'
         })
         .eq('conversation_id', conversationId)
         .neq('sender_id', user.id)
         .eq('read', false);
+
+      // Update unread count locally instead of reloading everything
+      setConversations(prev =>
+        prev.map(conv =>
+          conv.id === conversationId ? { ...conv, unreadCount: 0 } : conv
+        )
+      );
     } catch (error) {
       console.error('Error marking messages as read:', error);
+    } finally {
+      // Clear guard after a short delay to let the postgres_changes event pass
+      setTimeout(() => {
+        markAsReadInProgressRef.current = false;
+      }, 1000);
     }
   };
 

@@ -225,7 +225,7 @@ export default function ViewProfileScreen() {
         .select('status')
         .eq('user_id', currentUser.id)
         .eq('circle_user_id', profileUser?.id || slug)
-        .single();
+        .maybeSingle();
 
       if (outgoingError && outgoingError.code !== 'PGRST116') {
         console.error('Error checking outgoing circle status:', outgoingError);
@@ -244,7 +244,7 @@ export default function ViewProfileScreen() {
         .eq('user_id', profileUser?.id || slug)
         .eq('circle_user_id', currentUser.id)
         .eq('status', 'pending')
-        .single();
+        .maybeSingle();
 
       if (incomingError && incomingError.code !== 'PGRST116') {
         console.error('Error checking incoming circle status:', incomingError);
@@ -482,6 +482,8 @@ export default function ViewProfileScreen() {
         message: `${currentUser.fullName} wants to add you to their circle`,
         link: `/profile/${currentUser.id}`,
         related_id: currentUser.id,
+        is_read: false,
+        created_at: new Date().toISOString(),
       });
 
       try {

@@ -528,7 +528,7 @@ export default function ConversationScreen() {
       // Get all reply message IDs that we need to fetch
       const replyMessageIds = (data ?? [])
         .map((msg: any) => msg.reply_to_message_id)
-        .filter((id: string | null) => id !== null) as string[];
+        .filter((id: string | null | undefined): id is string => id != null);
 
       // Fetch reply messages in batch if any exist
       let replyMessagesMap: Record<string, any> = {};
