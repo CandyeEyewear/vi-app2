@@ -1002,6 +1002,10 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   };
 
   const refreshConversations = async () => {
+    // Force reset loading state to ensure we can refresh
+    // This is called explicitly by user action (pull-to-refresh, screen focus)
+    console.log('[refreshConversations] Force refreshing conversations');
+    isLoadingRef.current = false;
     await loadConversations();
   };
 
