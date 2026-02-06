@@ -59,6 +59,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const DEBOUNCE_MS = 500; // Wait 500ms before loading after rapid events
   const lastLoadCompletedRef = useRef(0);
+  const lastLoadStartedRef = useRef(0);
   const COOLDOWN_MS = 3000; // Minimum 3 seconds between completed loads
   const initialLoadDoneRef = useRef(false);
   const markAsReadInProgressRef = useRef(false); // Guard to skip self-triggered events
@@ -357,17 +358,25 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
 
     // Prevent overlapping loads - if already loading, skip this call
+    // Safety valve: if loading has been in progress for > 30 seconds, allow retry
     if (loadingInProgressRef.current) {
-      console.log('[MESSAGING] loadConversations skipped - already loading');
-      return;
+      const elapsed = Date.now() - (lastLoadStartedRef.current || 0);
+      if (elapsed < 30000) {
+        console.log('[MESSAGING] loadConversations skipped - already loading for', Math.round(elapsed / 1000), 's');
+        return;
+      }
+      console.warn('[MESSAGING] loadConversations was stuck for', Math.round(elapsed / 1000), 's - forcing retry');
     }
 
     try {
       loadingInProgressRef.current = true;
+      lastLoadStartedRef.current = Date.now();
       // Only show loading spinner on the initial load to avoid UI flicker
       if (!initialLoadDoneRef.current) {
         setLoading(true);
       }
+      console.log('[MESSAGING] loadConversations starting...');
+
       // Fetch conversations where user is a participant
       const { data: conversationsData, error: conversationsError } = await supabase
         .from('conversations')
@@ -378,80 +387,97 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
 
       if (conversationsError) throw conversationsError;
 
+      console.log('[MESSAGING] Found', conversationsData?.length || 0, 'conversations');
+
       // For each conversation, get participant details and last message
-      const conversationsWithDetails = await Promise.all(
+      // Use per-conversation error handling so one failure doesn't block all
+      const conversationsWithDetails = (await Promise.all(
         conversationsData.map(async (conv) => {
-          // Get participant details with online status
-          const { data: usersData } = await supabase
-            .from('users')
-            .select('*')
-            .in('id', conv.participants);
+          try {
+            // Get participant details with online status
+            const { data: usersData } = await supabase
+              .from('users')
+              .select('*')
+              .in('id', conv.participants);
 
-          const participantDetails = usersData?.map((u) => ({
-            id: u.id,
-            email: u.email,
-            fullName: u.full_name,
-            phone: u.phone,
-            location: u.location,
-            bio: u.bio,
-            areasOfExpertise: u.areas_of_expertise,
-            education: u.education,
-            avatarUrl: u.avatar_url,
-            role: u.role,
-            membershipTier: u.membership_tier,
-            membershipStatus: u.membership_status,
-            is_partner_organization: u.is_partner_organization,
-            totalHours: u.total_hours,
-            activitiesCompleted: u.activities_completed,
-            organizationsHelped: u.organizations_helped,
-            achievements: [],
-            onlineStatus: u.online_status,
-            lastSeen: u.last_seen,
-            createdAt: u.created_at,
-            updatedAt: u.updated_at,
-          })) || [];
+            const participantDetails = usersData?.map((u) => ({
+              id: u.id,
+              email: u.email,
+              fullName: u.full_name,
+              phone: u.phone,
+              location: u.location,
+              bio: u.bio,
+              areasOfExpertise: u.areas_of_expertise,
+              education: u.education,
+              avatarUrl: u.avatar_url,
+              role: u.role,
+              membershipTier: u.membership_tier,
+              membershipStatus: u.membership_status,
+              is_partner_organization: u.is_partner_organization,
+              totalHours: u.total_hours,
+              activitiesCompleted: u.activities_completed,
+              organizationsHelped: u.organizations_helped,
+              achievements: [],
+              onlineStatus: u.online_status,
+              lastSeen: u.last_seen,
+              createdAt: u.created_at,
+              updatedAt: u.updated_at,
+            })) || [];
 
-          // Get last message (excluding deleted messages)
-          const { data: messagesData } = await supabase
-            .from('messages')
-            .select('*')
-            .eq('conversation_id', conv.id)
-            .is('deleted_at', null) // Only get non-deleted messages
-            .order('created_at', { ascending: false })
-            .limit(1);
+            // Get last message (excluding deleted messages)
+            const { data: messagesData } = await supabase
+              .from('messages')
+              .select('*')
+              .eq('conversation_id', conv.id)
+              .is('deleted_at', null) // Only get non-deleted messages
+              .order('created_at', { ascending: false })
+              .limit(1);
 
-          const lastMessage = messagesData?.[0] ? {
-            id: messagesData[0].id,
-            conversationId: messagesData[0].conversation_id,
-            senderId: messagesData[0].sender_id,
-            text: messagesData[0].text,
-            read: messagesData[0].read,
-            status: messagesData[0].status || 'sent',
-            createdAt: messagesData[0].created_at,
-          } : undefined;
+            const lastMessage = messagesData?.[0] ? {
+              id: messagesData[0].id,
+              conversationId: messagesData[0].conversation_id,
+              senderId: messagesData[0].sender_id,
+              text: messagesData[0].text,
+              read: messagesData[0].read,
+              status: messagesData[0].status || 'sent',
+              createdAt: messagesData[0].created_at,
+            } : undefined;
 
-          // Count ONLY unread messages that YOU didn't send
-          const { count: unreadCount } = await supabase
-            .from('messages')
-            .select('*', { count: 'exact', head: true })
-            .eq('conversation_id', conv.id)
-            .eq('read', false)
-            .neq('sender_id', user.id);
+            // Count ONLY unread messages that YOU didn't send
+            const { count: unreadCount } = await supabase
+              .from('messages')
+              .select('*', { count: 'exact', head: true })
+              .eq('conversation_id', conv.id)
+              .eq('read', false)
+              .neq('sender_id', user.id);
 
-          return {
-            id: conv.id,
-            participants: conv.participants,
-            participantDetails,
-            lastMessage,
-            unreadCount: unreadCount || 0,
-            updatedAt: conv.updated_at,
-          } as Conversation;
+            return {
+              id: conv.id,
+              participants: conv.participants,
+              participantDetails,
+              lastMessage,
+              unreadCount: unreadCount || 0,
+              updatedAt: conv.updated_at,
+            } as Conversation;
+          } catch (convError) {
+            console.error('[MESSAGING] Error loading conversation', conv.id, ':', convError);
+            // Return a minimal conversation so the list isn't empty
+            return {
+              id: conv.id,
+              participants: conv.participants,
+              participantDetails: [],
+              lastMessage: undefined,
+              unreadCount: 0,
+              updatedAt: conv.updated_at,
+            } as Conversation;
+          }
         })
-      );
+      ));
 
       setConversations(conversationsWithDetails);
+      console.log('[MESSAGING] loadConversations completed successfully with', conversationsWithDetails.length, 'conversations');
     } catch (error) {
-      console.error('Error loading conversations:', error);
+      console.error('[MESSAGING] Error loading conversations:', error);
     } finally {
       loadingInProgressRef.current = false;
       lastLoadCompletedRef.current = Date.now();
@@ -667,11 +693,12 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       .from('user_notification_settings')
       .select('messages_enabled')
       .eq('user_id', recipientId)
-      .single();
+      .maybeSingle();
 
     console.log('📊 Recipient notification settings:', settings);
 
-    const shouldSendNotification = settings?.messages_enabled === true;
+    // Default to true if no settings row exists (user hasn't opted out)
+    const shouldSendNotification = settings === null || settings.messages_enabled !== false;
     console.log('🔔 Should send push notification?', shouldSendNotification);
 
     if (shouldSendNotification) {
@@ -687,6 +714,8 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
           link: `/conversation/${conversationId}`,
           related_id: conversationId,
           sender_id: user.id,
+          is_read: false,
+          created_at: new Date().toISOString(),
         });
 
       console.log('📤 Sending push notification to recipient...');
