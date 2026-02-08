@@ -22,7 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors } from '../../constants/colors';
-import { 
+import {
   ChevronLeft,
   Calendar,
   MapPin,
@@ -75,7 +75,7 @@ export default function EditOpportunityScreen() {
   const [endDate, setEndDate] = useState(new Date());
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('17:00');
-  
+
   // Helper function to convert HH:MM string to Date object
   const timeStringToDate = (timeString: string): Date => {
     const [hours, minutes] = timeString.split(':').map(Number);
@@ -83,7 +83,7 @@ export default function EditOpportunityScreen() {
     date.setHours(hours || 9, minutes || 0, 0, 0);
     return date;
   };
-  
+
   // Helper function to convert Date object to HH:MM string
   const dateToTimeString = (date: Date): string => {
     const hours = date.getHours().toString().padStart(2, '0');
@@ -94,7 +94,7 @@ export default function EditOpportunityScreen() {
   const [impactStatement, setImpactStatement] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [autoCropImage, setAutoCropImage] = useState(false);
-  
+
   // Array fields
   const [requirements, setRequirements] = useState<string[]>([]);
   const [currentRequirement, setCurrentRequirement] = useState('');
@@ -125,6 +125,19 @@ export default function EditOpportunityScreen() {
   const [locationSuggestions, setLocationSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
+  // Notification state
+  const [notifyUsers, setNotifyUsers] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState('');
+
+  const navigateBackSafely = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace(`/opportunity/${opportunitySlug || opportunityId}`);
+  };
+
   const showAlert = (title: string, message: string, type: 'success' | 'error' | 'warning' = 'success') => {
     setAlertConfig({ title, message, type });
     setAlertVisible(true);
@@ -135,12 +148,12 @@ export default function EditOpportunityScreen() {
 
   const handleLocationChange = (text: string) => {
     setLocation(text);
-    
+
     // Clear previous timeout
     if (geocodeTimeoutRef.current) {
       clearTimeout(geocodeTimeoutRef.current);
     }
-    
+
     // Only geocode if location has at least 3 characters
     if (text.trim().length < 3) {
       setGeocodingLocation(null);
@@ -151,14 +164,14 @@ export default function EditOpportunityScreen() {
 
     // Keep keyboard open for 1000ms or until user presses Enter
     setShowSuggestions(true);
-    
+
     // Set new timeout - geocode only after user stops typing (800ms)
     geocodeTimeoutRef.current = setTimeout(async () => {
       setIsGeocodingLocation(true);
       try {
         const result = await geocodeLocation(text);
         setGeocodingLocation(result);
-        
+
         if (result.success) {
           // Show suggestion for user to confirm
           setLocationSuggestions([{
@@ -167,7 +180,7 @@ export default function EditOpportunityScreen() {
             longitude: result.longitude,
           }]);
           setShowSuggestions(true);
-          
+
           console.log('[EDIT_OPP] 📍 Geocoding result:', {
             location: result.formattedAddress,
             latitude: result.latitude,
@@ -188,11 +201,11 @@ export default function EditOpportunityScreen() {
     setLocation(suggestion.formattedAddress);
     setManualLatitude(suggestion.latitude.toString());
     setManualLongitude(suggestion.longitude.toString());
-    
+
     // Auto-populate mapLink with Google Maps URL
     const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${suggestion.latitude},${suggestion.longitude}`;
     setMapLink(googleMapsUrl);
-    
+
     setGeocodingLocation({
       success: true,
       latitude: suggestion.latitude,
@@ -200,7 +213,7 @@ export default function EditOpportunityScreen() {
       formattedAddress: suggestion.formattedAddress,
     });
     setShowSuggestions(false);
-    
+
     console.log('[EDIT_OPP] 📍 Location confirmed:', {
       location: suggestion.formattedAddress,
       latitude: suggestion.latitude,
@@ -263,7 +276,7 @@ export default function EditOpportunityScreen() {
     } catch (error) {
       console.error('Error loading opportunity:', error);
       showAlert('Error', 'Failed to load opportunity data', 'error');
-      setTimeout(() => router.back(), 2000);
+      setTimeout(() => navigateBackSafely(), 2000);
     } finally {
       setLoading(false);
     }
@@ -484,9 +497,32 @@ export default function EditOpportunityScreen() {
 
       if (error) throw error;
 
+      // Handle Notifications
+      if (notifyUsers) {
+        console.log('[DEBUG] Attempting to call notify_opportunity_update RPC');
+        try {
+          const { error: notifyError, data: notifyData } = await supabase.rpc('notify_opportunity_update', {
+            p_opportunity_id: opportunityId,
+            p_title: title.trim(),
+            p_changes: updateMessage.trim() || 'Details have been updated.'
+          });
+
+          console.log('[DEBUG] RPC result:', { notifyError, notifyData });
+
+          if (notifyError) {
+            console.error('Error sending notifications:', notifyError);
+            // Don't block success - just warn
+            showAlert('Warning', 'Opportunity updated but failed to notify users', 'warning');
+            return;
+          }
+        } catch (err) {
+          console.error('Notification exception:', err);
+        }
+      }
+
       showAlert(
         'Success!',
-        'Opportunity updated successfully',
+        'Opportunity updated successfully' + (notifyUsers ? ' and users notified.' : '.'),
         'success'
       );
 
@@ -513,7 +549,7 @@ export default function EditOpportunityScreen() {
     >
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={navigateBackSafely} style={styles.backButton}>
           <ChevronLeft size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>
@@ -530,530 +566,571 @@ export default function EditOpportunityScreen() {
           </Text>
         </View>
       ) : (
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: (styles.scrollContent as any).paddingBottom + insets.bottom + 80 },
-        ]}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Title */}
-        <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.text }]}>
-            Title <Text style={{ color: colors.error }}>*</Text>
-          </Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-            value={title}
-            onChangeText={setTitle}
-            placeholder="e.g., Beach Cleanup Drive"
-            placeholderTextColor={colors.textSecondary}
-          />
-        </View>
-
-        {/* Organization Name */}
-        <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.text }]}>
-            Organization Name <Text style={{ color: colors.error }}>*</Text>
-          </Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-            value={organizationName}
-            onChangeText={setOrganizationName}
-            placeholder="e.g., Volunteers Incorporated"
-            placeholderTextColor={colors.textSecondary}
-          />
-        </View>
-
-        {/* Category */}
-        <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.text }]}>
-            Category <Text style={{ color: colors.error }}>*</Text>
-          </Text>
-          <TouchableOpacity
-            style={[styles.input, styles.selectButton, { backgroundColor: colors.card, borderColor: colors.border }]}
-            onPress={() => setShowCategoryPicker(!showCategoryPicker)}
-          >
-            <Text style={[styles.selectButtonText, { color: category ? colors.text : colors.textSecondary }]}>
-              {category ? CATEGORIES.find(c => c.value === category)?.label : 'Select category'}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: (styles.scrollContent as any).paddingBottom + insets.bottom + 80 },
+          ]}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Title */}
+          {/* Title */}
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>
+              Title <Text style={{ color: colors.error }}>*</Text>
             </Text>
-          </TouchableOpacity>
-          {showCategoryPicker && (
-            <View style={[styles.pickerContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              {CATEGORIES.map((cat) => (
-                <TouchableOpacity
-                  key={cat.value}
-                  style={[styles.pickerItem, { borderBottomColor: colors.border }]}
-                  onPress={() => {
-                    setCategory(cat.value);
-                    setShowCategoryPicker(false);
-                  }}
-                >
-                  <Text style={[styles.pickerItemText, { color: colors.text }]}>
-                    {cat.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </View>
-
-        {/* Description */}
-        <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.text }]}>
-            Description <Text style={{ color: colors.error }}>*</Text>
-          </Text>
-          <TextInput
-            style={[styles.input, styles.textArea, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-            value={description}
-            onChangeText={setDescription}
-            placeholder="Describe the opportunity..."
-            placeholderTextColor={colors.textSecondary}
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-          />
-        </View>
-
-        {/* Location Field */}
-        <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.text }]}>Location *</Text>
-          <View style={styles.iconInput}>
-            <MapPin size={20} color={colors.text} />
             <TextInput
-              placeholder="e.g., Kingston, Jamaica"
-              value={location}
-              onChangeText={handleLocationChange}
-              onSubmitEditing={handleLocationKeyPress}
-              style={[styles.inputWithIcon, { color: colors.text }]}
-              editable={!isGeocodingLocation}
-              returnKeyType="done"
+              style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+              value={title}
+              onChangeText={setTitle}
+              placeholder="e.g., Beach Cleanup Drive"
+              placeholderTextColor={colors.textSecondary}
             />
           </View>
-          
-          {/* Geocoding Status */}
-          {isGeocodingLocation && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 6 }}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={{ fontSize: 13, color: colors.text }}>Finding locations...</Text>
+
+          {/* Organization Name */}
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>
+              Organization Name <Text style={{ color: colors.error }}>*</Text>
+            </Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+              value={organizationName}
+              onChangeText={setOrganizationName}
+              placeholder="e.g., Volunteers Incorporated"
+              placeholderTextColor={colors.textSecondary}
+            />
+          </View>
+
+          {/* Category */}
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>
+              Category <Text style={{ color: colors.error }}>*</Text>
+            </Text>
+            <TouchableOpacity
+              style={[styles.input, styles.selectButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={() => setShowCategoryPicker(!showCategoryPicker)}
+            >
+              <Text style={[styles.selectButtonText, { color: category ? colors.text : colors.textSecondary }]}>
+                {category ? CATEGORIES.find(c => c.value === category)?.label : 'Select category'}
+              </Text>
+            </TouchableOpacity>
+            {showCategoryPicker && (
+              <View style={[styles.pickerContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                {CATEGORIES.map((cat) => (
+                  <TouchableOpacity
+                    key={cat.value}
+                    style={[styles.pickerItem, { borderBottomColor: colors.border }]}
+                    onPress={() => {
+                      setCategory(cat.value);
+                      setShowCategoryPicker(false);
+                    }}
+                  >
+                    <Text style={[styles.pickerItemText, { color: colors.text }]}>
+                      {cat.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* Description */}
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>
+              Description <Text style={{ color: colors.error }}>*</Text>
+            </Text>
+            <TextInput
+              style={[styles.input, styles.textArea, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Describe the opportunity..."
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+          </View>
+
+          {/* Location Field */}
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>Location *</Text>
+            <View style={styles.iconInput}>
+              <MapPin size={20} color={colors.text} />
+              <TextInput
+                placeholder="e.g., Kingston, Jamaica"
+                value={location}
+                onChangeText={handleLocationChange}
+                onSubmitEditing={handleLocationKeyPress}
+                style={[styles.inputWithIcon, { color: colors.text }]}
+                editable={!isGeocodingLocation}
+                returnKeyType="done"
+              />
             </View>
-          )}
-          
-          {/* Location Suggestions */}
-          {showSuggestions && locationSuggestions.length > 0 && (
-            <View style={{ 
-              marginTop: 8, 
-              borderWidth: 1, 
-              borderColor: colors.border,
-              borderRadius: 8,
-              backgroundColor: colors.card,
-              overflow: 'hidden'
-            }}>
-              <Text style={{ 
-                fontSize: 12, 
-                fontWeight: '600', 
-                padding: 8,
-                paddingBottom: 4,
-                color: colors.text 
+
+            {/* Geocoding Status */}
+            {isGeocodingLocation && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 6 }}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={{ fontSize: 13, color: colors.text }}>Finding locations...</Text>
+              </View>
+            )}
+
+            {/* Location Suggestions */}
+            {showSuggestions && locationSuggestions.length > 0 && (
+              <View style={{
+                marginTop: 8,
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: 8,
+                backgroundColor: colors.card,
+                overflow: 'hidden'
               }}>
-                Select a location:
-              </Text>
-              {locationSuggestions.map((suggestion, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={{
-                    padding: 12,
-                    borderTopWidth: index > 0 ? 1 : 0,
-                    borderTopColor: colors.border,
-                  }}
-                  onPress={() => handleSelectLocation(suggestion)}
-                >
-                  <Text style={{
-                    fontSize: 14,
-                    color: colors.text,
-                    fontWeight: '500',
-                  }}>
-                    ✅ {suggestion.formattedAddress}
-                  </Text>
-                  <Text style={{
-                    fontSize: 11,
-                    color: colors.text,
-                    opacity: 0.6,
-                    marginTop: 4,
-                  }}>
-                    Lat: {suggestion.latitude.toFixed(4)}, Lon: {suggestion.longitude.toFixed(4)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-          
-          {/* Success Message After Selection */}
-          {geocodingLocation && geocodingLocation.success && !showSuggestions && (
-            <View style={{ 
-              marginTop: 8, 
-              padding: 8, 
-              backgroundColor: '#E8F5E9', 
-              borderRadius: 8 
-            }}>
-              <Text style={{ fontSize: 12, color: '#2E7D32', fontWeight: '500' }}>
-                ✅ Location confirmed
-              </Text>
-              <Text style={{ fontSize: 11, color: '#558B2F', marginTop: 4 }}>
-                {geocodingLocation.formattedAddress}
-              </Text>
-            </View>
-          )}
-          
-          {/* Error Message */}
-          {geocodingLocation && !geocodingLocation.success && location.trim().length >= 3 && !showSuggestions && (
-            <View style={{ 
-              marginTop: 8, 
-              padding: 8, 
-              backgroundColor: '#FFEBEE', 
-              borderRadius: 8 
-            }}>
-              <Text style={{ fontSize: 12, color: '#C62828', fontWeight: '500' }}>
-                ⚠️ {geocodingLocation.error}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Google Maps Link */}
-        <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.text }]}>Google Maps Link (Optional)</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-            placeholder="https://maps.google.com/?q=18.0179,-76.8099"
-            placeholderTextColor={colors.textSecondary}
-            value={mapLink}
-            onChangeText={setMapLink}
-            autoCapitalize="none"
-            keyboardType="url"
-          />
-          <Text style={[styles.helperText, { color: colors.textSecondary }]}>
-            Paste a Google Maps link so volunteers can easily find the location
-          </Text>
-        </View>
-
-        {/* Date Range */}
-        <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.text }]}>
-            Date Range <Text style={{ color: colors.error }}>*</Text>
-          </Text>
-          
-          <View style={styles.dateRangeRow}>
-            <View style={styles.dateRangeItem}>
-              <CrossPlatformDateTimePicker
-                mode="date"
-                value={startDate}
-                onChange={(date) => {
-                  if (date) {
-                    setStartDate(date);
-                    // Auto-set end date if it's before start date
-                    if (endDate < date) {
-                      setEndDate(date);
-                    }
-                  }
-                }}
-                minimumDate={new Date()}
-                label="Start Date"
-                colors={colors}
-              />
-            </View>
-
-            <View style={styles.dateRangeItem}>
-              <CrossPlatformDateTimePicker
-                mode="date"
-                value={endDate}
-                onChange={(date) => date && setEndDate(date)}
-                minimumDate={startDate}
-                label="End Date"
-                colors={colors}
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Time Range */}
-        <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.text }]}>
-            Time Range <Text style={{ color: colors.error }}>*</Text>
-          </Text>
-          
-          <View style={styles.timeRangeRow}>
-            <View style={styles.timeRangeItem}>
-              <CrossPlatformDateTimePicker
-                mode="time"
-                value={timeStringToDate(startTime)}
-                onChange={(date) => date && setStartTime(dateToTimeString(date))}
-                label="Start Time"
-                colors={colors}
-              />
-            </View>
-
-            <View style={styles.timeRangeItem}>
-              <CrossPlatformDateTimePicker
-                mode="time"
-                value={timeStringToDate(endTime)}
-                onChange={(date) => date && setEndTime(dateToTimeString(date))}
-                label="End Time"
-                colors={colors}
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Total Spots */}
-        <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.text }]}>
-            Total Spots <Text style={{ color: colors.error }}>*</Text>
-          </Text>
-          <View style={styles.iconInput}>
-            <Users size={20} color={colors.textSecondary} />
-            <TextInput
-              style={[styles.inputWithIcon, { color: colors.text }]}
-              value={spotsTotal}
-              onChangeText={setSpotsTotal}
-              placeholder="e.g., 20"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="number-pad"
-            />
-          </View>
-        </View>
-
-        {/* Requirements */}
-        <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.text }]}>
-            Requirements (Optional)
-          </Text>
-          <View style={styles.arrayInputContainer}>
-            <View style={styles.iconInput}>
-              <FileText size={20} color={colors.textSecondary} />
-              <TextInput
-                style={[styles.inputWithIcon, { color: colors.text }]}
-                value={currentRequirement}
-                onChangeText={setCurrentRequirement}
-                placeholder="e.g., Must be 18+"
-                placeholderTextColor={colors.textSecondary}
-                onSubmitEditing={addRequirement}
-              />
-              <TouchableOpacity onPress={addRequirement} style={styles.addButton}>
-                <Plus size={20} color={colors.primary} />
-              </TouchableOpacity>
-            </View>
-          </View>
-          {requirements.length > 0 && (
-            <View style={styles.chipsContainer}>
-              {requirements.map((req, index) => (
-                <View key={index} style={[styles.chip, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <Text style={[styles.chipText, { color: colors.text }]}>{req}</Text>
-                  <TouchableOpacity onPress={() => removeRequirement(index)}>
-                    <X size={16} color={colors.textSecondary} />
+                <Text style={{
+                  fontSize: 12,
+                  fontWeight: '600',
+                  padding: 8,
+                  paddingBottom: 4,
+                  color: colors.text
+                }}>
+                  Select a location:
+                </Text>
+                {locationSuggestions.map((suggestion, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={{
+                      padding: 12,
+                      borderTopWidth: index > 0 ? 1 : 0,
+                      borderTopColor: colors.border,
+                    }}
+                    onPress={() => handleSelectLocation(suggestion)}
+                  >
+                    <Text style={{
+                      fontSize: 14,
+                      color: colors.text,
+                      fontWeight: '500',
+                    }}>
+                      ✅ {suggestion.formattedAddress}
+                    </Text>
+                    <Text style={{
+                      fontSize: 11,
+                      color: colors.text,
+                      opacity: 0.6,
+                      marginTop: 4,
+                    }}>
+                      Lat: {suggestion.latitude.toFixed(4)}, Lon: {suggestion.longitude.toFixed(4)}
+                    </Text>
                   </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
+                ))}
+              </View>
+            )}
 
-        {/* Skills Needed */}
-        <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.text }]}>
-            Skills Needed (Optional)
-          </Text>
-          <View style={styles.arrayInputContainer}>
-            <View style={styles.iconInput}>
-              <FileText size={20} color={colors.textSecondary} />
-              <TextInput
-                style={[styles.inputWithIcon, { color: colors.text }]}
-                value={currentSkill}
-                onChangeText={setCurrentSkill}
-                placeholder="e.g., First Aid"
-                placeholderTextColor={colors.textSecondary}
-                onSubmitEditing={addSkill}
-              />
-              <TouchableOpacity onPress={addSkill} style={styles.addButton}>
-                <Plus size={20} color={colors.primary} />
-              </TouchableOpacity>
-            </View>
+            {/* Success Message After Selection */}
+            {geocodingLocation && geocodingLocation.success && !showSuggestions && (
+              <View style={{
+                marginTop: 8,
+                padding: 8,
+                backgroundColor: '#E8F5E9',
+                borderRadius: 8
+              }}>
+                <Text style={{ fontSize: 12, color: '#2E7D32', fontWeight: '500' }}>
+                  ✅ Location confirmed
+                </Text>
+                <Text style={{ fontSize: 11, color: '#558B2F', marginTop: 4 }}>
+                  {geocodingLocation.formattedAddress}
+                </Text>
+              </View>
+            )}
+
+            {/* Error Message */}
+            {geocodingLocation && !geocodingLocation.success && location.trim().length >= 3 && !showSuggestions && (
+              <View style={{
+                marginTop: 8,
+                padding: 8,
+                backgroundColor: '#FFEBEE',
+                borderRadius: 8
+              }}>
+                <Text style={{ fontSize: 12, color: '#C62828', fontWeight: '500' }}>
+                  ⚠️ {geocodingLocation.error}
+                </Text>
+              </View>
+            )}
           </View>
-          {skillsNeeded.length > 0 && (
-            <View style={styles.chipsContainer}>
-              {skillsNeeded.map((skill, index) => (
-                <View key={index} style={[styles.chip, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <Text style={[styles.chipText, { color: colors.text }]}>{skill}</Text>
-                  <TouchableOpacity onPress={() => removeSkill(index)}>
-                    <X size={16} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
 
-        {/* Impact Statement */}
-        <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.text }]}>
-            Impact Statement (Optional)
-          </Text>
-          <TextInput
-            style={[styles.input, styles.textArea, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-            value={impactStatement}
-            onChangeText={setImpactStatement}
-            placeholder="Describe the impact this opportunity will have..."
-            placeholderTextColor={colors.textSecondary}
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-          />
-        </View>
-
-        {/* Links */}
-        <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.text }]}>
-            Links (Optional)
-          </Text>
-          <View style={styles.linkInputContainer}>
+          {/* Google Maps Link */}
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>Google Maps Link (Optional)</Text>
             <TextInput
-              style={[styles.linkInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-              value={currentLinkLabel}
-              onChangeText={setCurrentLinkLabel}
-              placeholder="Label (e.g., Website, Facebook)"
+              style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+              placeholder="https://maps.google.com/?q=18.0179,-76.8099"
               placeholderTextColor={colors.textSecondary}
-            />
-            <TextInput
-              style={[styles.linkInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text, marginTop: 8 }]}
-              value={currentLinkUrl}
-              onChangeText={setCurrentLinkUrl}
-              placeholder="URL (e.g., https://example.com)"
-              placeholderTextColor={colors.textSecondary}
+              value={mapLink}
+              onChangeText={setMapLink}
               autoCapitalize="none"
               keyboardType="url"
             />
-            <TouchableOpacity 
-              onPress={addLink} 
-              style={[styles.addLinkButton, { backgroundColor: colors.primary }]}
-              disabled={!currentLinkLabel.trim() || !currentLinkUrl.trim()}
-            >
-              <Plus size={20} color="#FFFFFF" />
-              <Text style={styles.addLinkButtonText}>Add Link</Text>
-            </TouchableOpacity>
+            <Text style={[styles.helperText, { color: colors.textSecondary }]}>
+              Paste a Google Maps link so volunteers can easily find the location
+            </Text>
           </View>
-          {links.length > 0 && (
-            <View style={styles.linksListContainer}>
-              {links.map((link, index) => (
-                <View key={index} style={[styles.linkItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <View style={styles.linkItemContent}>
-                    <LinkIcon size={16} color={colors.primary} />
-                    <View style={styles.linkItemText}>
-                      <Text style={[styles.linkLabel, { color: colors.text }]}>{link.label}</Text>
-                      <Text style={[styles.linkUrl, { color: colors.textSecondary }]} numberOfLines={1}>
-                        {link.url}
-                      </Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity onPress={() => removeLink(index)}>
-                    <X size={20} color={colors.error} />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
 
-        {/* Image Upload */}
-        <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.text }]}>
-            Image (Optional)
-          </Text>
-          <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={styles.toggleInfo}>
-              <ImageIcon size={20} color={autoCropImage ? colors.primary : colors.textSecondary} />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.toggleLabel, { color: colors.text }]}>Auto-crop image</Text>
-                <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
-                  Off = upload full image • On = crop to 16:9
-                </Text>
+          {/* Date Range */}
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>
+              Date Range <Text style={{ color: colors.error }}>*</Text>
+            </Text>
+
+            <View style={styles.dateRangeRow}>
+              <View style={styles.dateRangeItem}>
+                <CrossPlatformDateTimePicker
+                  mode="date"
+                  value={startDate}
+                  onChange={(date) => {
+                    if (date) {
+                      setStartDate(date);
+                      // Auto-set end date if it's before start date
+                      if (endDate < date) {
+                        setEndDate(date);
+                      }
+                    }
+                  }}
+                  minimumDate={new Date()}
+                  label="Start Date"
+                  colors={colors}
+                />
+              </View>
+
+              <View style={styles.dateRangeItem}>
+                <CrossPlatformDateTimePicker
+                  mode="date"
+                  value={endDate}
+                  onChange={(date) => date && setEndDate(date)}
+                  minimumDate={startDate}
+                  label="End Date"
+                  colors={colors}
+                />
               </View>
             </View>
-            <Switch
-              value={autoCropImage}
-              onValueChange={setAutoCropImage}
-              trackColor={{ false: colors.border, true: colors.primary }}
-              thumbColor="#FFFFFF"
+          </View>
+
+          {/* Time Range */}
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>
+              Time Range <Text style={{ color: colors.error }}>*</Text>
+            </Text>
+
+            <View style={styles.timeRangeRow}>
+              <View style={styles.timeRangeItem}>
+                <CrossPlatformDateTimePicker
+                  mode="time"
+                  value={timeStringToDate(startTime)}
+                  onChange={(date) => date && setStartTime(dateToTimeString(date))}
+                  label="Start Time"
+                  colors={colors}
+                />
+              </View>
+
+              <View style={styles.timeRangeItem}>
+                <CrossPlatformDateTimePicker
+                  mode="time"
+                  value={timeStringToDate(endTime)}
+                  onChange={(date) => date && setEndTime(dateToTimeString(date))}
+                  label="End Time"
+                  colors={colors}
+                />
+              </View>
+            </View>
+          </View>
+
+          {/* Total Spots */}
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>
+              Total Spots <Text style={{ color: colors.error }}>*</Text>
+            </Text>
+            <View style={styles.iconInput}>
+              <Users size={20} color={colors.textSecondary} />
+              <TextInput
+                style={[styles.inputWithIcon, { color: colors.text }]}
+                value={spotsTotal}
+                onChangeText={setSpotsTotal}
+                placeholder="e.g., 20"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="number-pad"
+              />
+            </View>
+          </View>
+
+          {/* Requirements */}
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>
+              Requirements (Optional)
+            </Text>
+            <View style={styles.arrayInputContainer}>
+              <View style={styles.iconInput}>
+                <FileText size={20} color={colors.textSecondary} />
+                <TextInput
+                  style={[styles.inputWithIcon, { color: colors.text }]}
+                  value={currentRequirement}
+                  onChangeText={setCurrentRequirement}
+                  placeholder="e.g., Must be 18+"
+                  placeholderTextColor={colors.textSecondary}
+                  onSubmitEditing={addRequirement}
+                />
+                <TouchableOpacity onPress={addRequirement} style={styles.addButton}>
+                  <Plus size={20} color={colors.primary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+            {requirements.length > 0 && (
+              <View style={styles.chipsContainer}>
+                {requirements.map((req, index) => (
+                  <View key={index} style={[styles.chip, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <Text style={[styles.chipText, { color: colors.text }]}>{req}</Text>
+                    <TouchableOpacity onPress={() => removeRequirement(index)}>
+                      <X size={16} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* Skills Needed */}
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>
+              Skills Needed (Optional)
+            </Text>
+            <View style={styles.arrayInputContainer}>
+              <View style={styles.iconInput}>
+                <FileText size={20} color={colors.textSecondary} />
+                <TextInput
+                  style={[styles.inputWithIcon, { color: colors.text }]}
+                  value={currentSkill}
+                  onChangeText={setCurrentSkill}
+                  placeholder="e.g., First Aid"
+                  placeholderTextColor={colors.textSecondary}
+                  onSubmitEditing={addSkill}
+                />
+                <TouchableOpacity onPress={addSkill} style={styles.addButton}>
+                  <Plus size={20} color={colors.primary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+            {skillsNeeded.length > 0 && (
+              <View style={styles.chipsContainer}>
+                {skillsNeeded.map((skill, index) => (
+                  <View key={index} style={[styles.chip, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <Text style={[styles.chipText, { color: colors.text }]}>{skill}</Text>
+                    <TouchableOpacity onPress={() => removeSkill(index)}>
+                      <X size={16} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* Impact Statement */}
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>
+              Impact Statement (Optional)
+            </Text>
+            <TextInput
+              style={[styles.input, styles.textArea, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+              value={impactStatement}
+              onChangeText={setImpactStatement}
+              placeholder="Describe the impact this opportunity will have..."
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
             />
           </View>
-          {imageUri ? (
-            <View style={styles.imagePreviewContainer}>
-              <Image
-                source={{ uri: imageUri }}
-                style={styles.imagePreview}
-                resizeMode={autoCropImage ? 'cover' : 'contain'}
+
+          {/* Links */}
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>
+              Links (Optional)
+            </Text>
+            <View style={styles.linkInputContainer}>
+              <TextInput
+                style={[styles.linkInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+                value={currentLinkLabel}
+                onChangeText={setCurrentLinkLabel}
+                placeholder="Label (e.g., Website, Facebook)"
+                placeholderTextColor={colors.textSecondary}
+              />
+              <TextInput
+                style={[styles.linkInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text, marginTop: 8 }]}
+                value={currentLinkUrl}
+                onChangeText={setCurrentLinkUrl}
+                placeholder="URL (e.g., https://example.com)"
+                placeholderTextColor={colors.textSecondary}
+                autoCapitalize="none"
+                keyboardType="url"
               />
               <TouchableOpacity
-                style={styles.removeImageButton}
-                onPress={() => setImageUri(null)}
+                onPress={addLink}
+                style={[styles.addLinkButton, { backgroundColor: colors.primary }]}
+                disabled={!currentLinkLabel.trim() || !currentLinkUrl.trim()}
               >
-                <X size={20} color="#FFFFFF" />
+                <Plus size={20} color="#FFFFFF" />
+                <Text style={styles.addLinkButtonText}>Add Link</Text>
               </TouchableOpacity>
             </View>
-          ) : (
-            <TouchableOpacity
-              style={[styles.imagePickerButton, { backgroundColor: colors.card, borderColor: colors.border }]}
-              onPress={handlePickImage}
-            >
-              <ImageIcon size={32} color={colors.textSecondary} />
-              <Text style={[styles.imagePickerText, { color: colors.textSecondary }]}>
-                Tap to upload image
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Visibility */}
-        <View style={[styles.field, { marginTop: 16 }]}>
-          <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={styles.toggleInfo}>
-              {visibility === 'public' ? (
-                <Globe size={20} color="#4CAF50" />
-              ) : (
-                <Lock size={20} color="#FF9800" />
-              )}
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.toggleLabel, { color: colors.text }]}>
-                  {visibility === 'public' ? 'Public' : 'Members Only'}
-                </Text>
-                <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
-                  {visibility === 'public' 
-                    ? 'Visible to everyone, including visitors' 
-                    : 'Only visible to logged-in members'}
-                </Text>
+            {links.length > 0 && (
+              <View style={styles.linksListContainer}>
+                {links.map((link, index) => (
+                  <View key={index} style={[styles.linkItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <View style={styles.linkItemContent}>
+                      <LinkIcon size={16} color={colors.primary} />
+                      <View style={styles.linkItemText}>
+                        <Text style={[styles.linkLabel, { color: colors.text }]}>{link.label}</Text>
+                        <Text style={[styles.linkUrl, { color: colors.textSecondary }]} numberOfLines={1}>
+                          {link.url}
+                        </Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity onPress={() => removeLink(index)}>
+                      <X size={20} color={colors.error} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
               </View>
-            </View>
-            <Switch
-              value={visibility === 'members_only'}
-              onValueChange={(value) => setVisibility(value ? 'members_only' : 'public')}
-              trackColor={{ false: colors.border, true: '#FF9800' }}
-              thumbColor="#FFFFFF"
-            />
+            )}
           </View>
-        </View>
 
-        {/* Update Button */}
-        <TouchableOpacity
-          style={[styles.createButton, { backgroundColor: colors.primary }, loading && styles.createButtonDisabled]}
-          onPress={handleUpdate}
-          disabled={loading}
-        >
-          <Text style={styles.createButtonText}>
-            {loading ? 'Updating...' : 'Update Opportunity'}
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
-      )}
+          {/* Image Upload */}
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>
+              Image (Optional)
+            </Text>
+            <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.toggleInfo}>
+                <ImageIcon size={20} color={autoCropImage ? colors.primary : colors.textSecondary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.toggleLabel, { color: colors.text }]}>Auto-crop image</Text>
+                  <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
+                    Off = upload full image • On = crop to 16:9
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={autoCropImage}
+                onValueChange={setAutoCropImage}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+            {imageUri ? (
+              <View style={styles.imagePreviewContainer}>
+                <Image
+                  source={{ uri: imageUri }}
+                  style={styles.imagePreview}
+                  resizeMode={autoCropImage ? 'cover' : 'contain'}
+                />
+                <TouchableOpacity
+                  style={styles.removeImageButton}
+                  onPress={() => setImageUri(null)}
+                >
+                  <X size={20} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[styles.imagePickerButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+                onPress={handlePickImage}
+              >
+                <ImageIcon size={32} color={colors.textSecondary} />
+                <Text style={[styles.imagePickerText, { color: colors.textSecondary }]}>
+                  Tap to upload image
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+
+
+          {/* Visibility */}
+          <View style={[styles.field, { marginTop: 16 }]}>
+            <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.toggleInfo}>
+                {visibility === 'public' ? (
+                  <Globe size={20} color="#4CAF50" />
+                ) : (
+                  <Lock size={20} color="#FF9800" />
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.toggleLabel, { color: colors.text }]}>
+                    {visibility === 'public' ? 'Public' : 'Members Only'}
+                  </Text>
+                  <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
+                    {visibility === 'public'
+                      ? 'Visible to everyone, including visitors'
+                      : 'Only visible to logged-in members'}
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={visibility === 'members_only'}
+                onValueChange={(value) => setVisibility(value ? 'members_only' : 'public')}
+                trackColor={{ false: colors.border, true: '#FF9800' }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+          </View>
+
+          {/* Notification Settings */}
+          <View style={[styles.field, { marginTop: 16 }]}>
+            <Text style={[styles.label, { color: colors.text }]}>Notification Settings</Text>
+            <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.toggleInfo}>
+                <Users size={20} color={notifyUsers ? colors.primary : colors.textSecondary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.toggleLabel, { color: colors.text }]}>Notify Volunteers</Text>
+                  <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
+                    Send a push notification to all signed-up volunteers about this update.
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={notifyUsers}
+                onValueChange={setNotifyUsers}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={'#FFF'}
+              />
+            </View>
+
+            {notifyUsers && (
+              <View style={{ marginTop: 12 }}>
+                <Text style={[styles.label, { color: colors.text, fontSize: 13 }]}>
+                  Message to Volunteers <Text style={{ color: colors.error }}>*</Text>
+                </Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text, fontSize: 14 }]}
+                  value={updateMessage}
+                  onChangeText={setUpdateMessage}
+                  placeholder="e.g., The start time has been changed to 10:00 AM"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+            )}
+          </View>
+
+          {/* Update Button */}
+          <TouchableOpacity
+            style={[styles.createButton, { backgroundColor: colors.primary }, loading && styles.createButtonDisabled]}
+            onPress={handleUpdate}
+            disabled={loading}
+          >
+            <Text style={styles.createButtonText}>
+              {loading ? 'Updating...' : 'Update Opportunity'}
+            </Text>
+          </TouchableOpacity>
+        </ScrollView >
+      )
+      }
 
       {/* Custom Alert */}
       <CustomAlert
@@ -1063,7 +1140,7 @@ export default function EditOpportunityScreen() {
         type={alertConfig.type}
         onClose={() => setAlertVisible(false)}
       />
-    </KeyboardAvoidingView>
+    </KeyboardAvoidingView >
   );
 }
 

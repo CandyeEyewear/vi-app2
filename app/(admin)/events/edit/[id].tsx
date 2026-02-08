@@ -109,6 +109,10 @@ export default function EditEventScreen() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [autoCropImage, setAutoCropImage] = useState(false);
 
+  // Notification state
+  const [notifyUsers, setNotifyUsers] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState('');
+
   // Location
   const [isVirtual, setIsVirtual] = useState(false);
   const [location, setLocation] = useState('');
@@ -125,7 +129,7 @@ export default function EditEventScreen() {
   const [eventDate, setEventDate] = useState(new Date());
   const [startTime, setStartTime] = useState(new Date());
   const [endTime, setEndTime] = useState<Date | null>(null);
-  
+
   // Helper functions for time conversion
   const timeStringToDate = (timeString: string): Date => {
     const [hours, minutes] = timeString.split(':').map(Number);
@@ -133,13 +137,13 @@ export default function EditEventScreen() {
     date.setHours(hours || 9, minutes || 0, 0, 0);
     return date;
   };
-  
+
   const dateToTimeString = (date: Date): string => {
     const hours = date.getHours().toString().padStart(2, '0');
     const minutes = date.getMinutes().toString().padStart(2, '0');
     return `${hours}:${minutes}`;
   };
-  
+
   const dateToString = (date: Date): string => {
     const year = date.getFullYear();
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
@@ -331,7 +335,7 @@ export default function EditEventScreen() {
   // Handle location geocoding
   const handleLocationGeocode = useCallback(async (locationText: string) => {
     if (!locationText.trim() || isVirtual) return;
-    
+
     setIsGeocodingLocation(true);
     try {
       const result = await geocodeLocation(locationText);
@@ -438,7 +442,26 @@ export default function EditEventScreen() {
       });
 
       if (response.success) {
-        showAlert('success', 'Saved!', 'Event has been updated successfully.', () => router.back());
+        // Handle Notifications
+        if (notifyUsers) {
+          try {
+            const { error: notifyError } = await supabase.rpc('notify_event_update', {
+              p_event_id: id,
+              p_title: title.trim(),
+              p_changes: updateMessage.trim() || 'Details have been updated.'
+            });
+
+            if (notifyError) {
+              console.error('Error sending notifications:', notifyError);
+              showAlert('warning', 'Saved with Warning', 'Event updated but failed to notify attendees.', () => router.back());
+              return;
+            }
+          } catch (err) {
+            console.error('Notification exception:', err);
+          }
+        }
+
+        showAlert('success', 'Saved!', 'Event has been updated successfully' + (notifyUsers ? ' and attendees notified.' : '.'), () => router.back());
       } else {
         showAlert('error', 'Error', response.error || 'Failed to update event');
       }
@@ -512,229 +535,199 @@ export default function EditEventScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <WebContainer>
-        <ScrollView
-          style={styles.scrollView}
+          <ScrollView
+            style={styles.scrollView}
             contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Status & Featured Section */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Status</Text>
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* Status & Featured Section */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Status</Text>
 
-            {/* Status Picker */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Event Status</Text>
-              <TouchableOpacity
-                style={[styles.selectContainer, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={() => setShowStatusPicker(!showStatusPicker)}
-              >
-                <View style={[styles.statusDot, { backgroundColor: selectedStatus?.color }]} />
-                <Text style={[styles.selectText, { color: colors.text }]}>
-                  {selectedStatus?.label}
-                </Text>
-                <ChevronDown size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
+              {/* Status Picker */}
+              <View style={styles.inputGroup}>
+                <Text style={[styles.inputLabel, { color: colors.text }]}>Event Status</Text>
+                <TouchableOpacity
+                  style={[styles.selectContainer, { backgroundColor: colors.card, borderColor: colors.border }]}
+                  onPress={() => setShowStatusPicker(!showStatusPicker)}
+                >
+                  <View style={[styles.statusDot, { backgroundColor: selectedStatus?.color }]} />
+                  <Text style={[styles.selectText, { color: colors.text }]}>
+                    {selectedStatus?.label}
+                  </Text>
+                  <ChevronDown size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
 
-              {showStatusPicker && (
-                <View style={[styles.pickerOptions, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  {STATUS_OPTIONS.map((option) => (
-                    <TouchableOpacity
-                      key={option.value}
-                      style={[styles.pickerOption, status === option.value && { backgroundColor: colors.background }]}
-                      onPress={() => {
-                        setStatus(option.value);
-                        setShowStatusPicker(false);
-                      }}
-                    >
-                      <View style={styles.statusOptionRow}>
-                        <View style={[styles.statusDot, { backgroundColor: option.color }]} />
-                        <Text style={[styles.pickerOptionText, { color: colors.text }]}>
-                          {option.label}
-                        </Text>
-                      </View>
-                      {status === option.value && <Check size={18} color={colors.primary} />}
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
-
-            {/* Visibility */}
-            <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.toggleInfo}>
-                {visibility === 'public' ? (
-                  <Globe size={20} color={colors.success} />
-                ) : (
-                  <Lock size={20} color={colors.warning} />
+                {showStatusPicker && (
+                  <View style={[styles.pickerOptions, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    {STATUS_OPTIONS.map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[styles.pickerOption, status === option.value && { backgroundColor: colors.background }]}
+                        onPress={() => {
+                          setStatus(option.value);
+                          setShowStatusPicker(false);
+                        }}
+                      >
+                        <View style={styles.statusOptionRow}>
+                          <View style={[styles.statusDot, { backgroundColor: option.color }]} />
+                          <Text style={[styles.pickerOptionText, { color: colors.text }]}>
+                            {option.label}
+                          </Text>
+                        </View>
+                        {status === option.value && <Check size={18} color={colors.primary} />}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 )}
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.toggleLabel, { color: colors.text }]}>
-                    {visibility === 'public' ? 'Public' : 'Members Only'}
-                  </Text>
-                  <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
-                    {visibility === 'public' 
-                      ? 'Visible to everyone, including visitors' 
-                      : 'Only visible to logged-in members'}
-                  </Text>
-                </View>
               </View>
-              <Switch
-                value={visibility === 'members_only'}
-                onValueChange={(value) => setVisibility(value ? 'members_only' : 'public')}
-                trackColor={{ false: colors.border, true: colors.warning }}
-                thumbColor={colors.textOnPrimary}
-              />
-            </View>
 
-            {/* Featured Toggle */}
-            <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.toggleInfo}>
-                <Star size={20} color={isFeatured ? colors.eventFeaturedGold : colors.textSecondary} fill={isFeatured ? colors.eventFeaturedGold : 'none'} />
-                <View>
-                  <Text style={[styles.toggleLabel, { color: colors.text }]}>Featured Event</Text>
-                  <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
-                    Highlight on the Events page
-                  </Text>
-                </View>
-              </View>
-              <Switch
-                value={isFeatured}
-                onValueChange={setIsFeatured}
-                trackColor={{ false: colors.border, true: colors.eventFeaturedGold }}
-                thumbColor={colors.textOnPrimary}
-              />
-            </View>
-          </View>
-
-          {/* Basic Info Section */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Basic Information</Text>
-
-            {/* Title */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Event Title *</Text>
-              <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <FileText size={20} color={colors.textSecondary} />
-                <TextInput
-                  style={[styles.input, { color: colors.text }]}
-                  placeholder="Enter event title"
-                  placeholderTextColor={colors.textSecondary}
-                  value={title}
-                  onChangeText={setTitle}
-                  maxLength={100}
-                />
-              </View>
-            </View>
-
-            {/* Category */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Category *</Text>
-              <TouchableOpacity
-                style={[styles.selectContainer, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={() => setShowCategoryPicker(!showCategoryPicker)}
-              >
-                <Text style={[styles.selectText, { color: colors.text }]}>
-                  {selectedCategory?.label}
-                </Text>
-                <ChevronDown size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
-
-              {showCategoryPicker && (
-                <View style={[styles.pickerOptions, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  {CATEGORY_OPTIONS.map((option) => (
-                    <TouchableOpacity
-                      key={option.value}
-                      style={[styles.pickerOption, category === option.value && { backgroundColor: colors.background }]}
-                      onPress={() => {
-                        setCategory(option.value);
-                        setShowCategoryPicker(false);
-                      }}
-                    >
-                      <Text style={[styles.pickerOptionText, { color: colors.text }]}>
-                        {option.label}
-                      </Text>
-                      {category === option.value && <Check size={18} color={colors.primary} />}
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
-
-            {/* Description */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Description *</Text>
-              <View style={[styles.textAreaContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <TextInput
-                  style={[styles.textArea, { color: colors.text }]}
-                  placeholder="Describe your event..."
-                  placeholderTextColor={colors.textSecondary}
-                  value={description}
-                  onChangeText={setDescription}
-                  multiline
-                  numberOfLines={4}
-                  maxLength={1000}
-                  textAlignVertical="top"
-                />
-              </View>
-              <Text style={[styles.charCount, { color: colors.textSecondary }]}>
-                {description.length}/1000
-              </Text>
-            </View>
-
-            {/* Image Upload */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Cover Image</Text>
+              {/* Visibility */}
               <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={styles.toggleInfo}>
-                  <ImageIcon size={20} color={autoCropImage ? colors.primary : colors.textSecondary} />
+                  {visibility === 'public' ? (
+                    <Globe size={20} color={colors.success} />
+                  ) : (
+                    <Lock size={20} color={colors.warning} />
+                  )}
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.toggleLabel, { color: colors.text }]}>Auto-crop image</Text>
+                    <Text style={[styles.toggleLabel, { color: colors.text }]}>
+                      {visibility === 'public' ? 'Public' : 'Members Only'}
+                    </Text>
                     <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
-                      Off = upload full image • On = crop to 16:9
+                      {visibility === 'public'
+                        ? 'Visible to everyone, including visitors'
+                        : 'Only visible to logged-in members'}
                     </Text>
                   </View>
                 </View>
                 <Switch
-                  value={autoCropImage}
-                  onValueChange={setAutoCropImage}
-                  trackColor={{ false: colors.border, true: colors.primary }}
+                  value={visibility === 'members_only'}
+                  onValueChange={(value) => setVisibility(value ? 'members_only' : 'public')}
+                  trackColor={{ false: colors.border, true: colors.warning }}
                   thumbColor={colors.textOnPrimary}
                 />
               </View>
-              {!imageUri && !imageUrl ? (
-                <TouchableOpacity
-                  style={[styles.uploadButton, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={handlePickImage}
-                  disabled={uploadingImage}
-                >
-                  {uploadingImage ? (
-                    <ActivityIndicator size="small" color={colors.primary} />
-                  ) : (
-                    <>
-                      <Upload size={20} color={colors.primary} />
-                      <Text style={[styles.uploadButtonText, { color: colors.primary }]}>Upload Image</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              ) : (
-                <View style={[styles.imagePreviewContainer, { borderColor: colors.border }]}>
-                  <Image
-                    source={{ uri: imageUri || imageUrl }}
-                    style={styles.imagePreview}
-                    resizeMode={autoCropImage ? 'cover' : 'contain'}
+
+              {/* Featured Toggle */}
+              <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.toggleInfo}>
+                  <Star size={20} color={isFeatured ? colors.eventFeaturedGold : colors.textSecondary} fill={isFeatured ? colors.eventFeaturedGold : 'none'} />
+                  <View>
+                    <Text style={[styles.toggleLabel, { color: colors.text }]}>Featured Event</Text>
+                    <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
+                      Highlight on the Events page
+                    </Text>
+                  </View>
+                </View>
+                <Switch
+                  value={isFeatured}
+                  onValueChange={setIsFeatured}
+                  trackColor={{ false: colors.border, true: colors.eventFeaturedGold }}
+                  thumbColor={colors.textOnPrimary}
+                />
+              </View>
+            </View>
+
+            {/* Basic Info Section */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Basic Information</Text>
+
+              {/* Title */}
+              <View style={styles.inputGroup}>
+                <Text style={[styles.inputLabel, { color: colors.text }]}>Event Title *</Text>
+                <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <FileText size={20} color={colors.textSecondary} />
+                  <TextInput
+                    style={[styles.input, { color: colors.text }]}
+                    placeholder="Enter event title"
+                    placeholderTextColor={colors.textSecondary}
+                    value={title}
+                    onChangeText={setTitle}
+                    maxLength={100}
                   />
+                </View>
+              </View>
+
+              {/* Category */}
+              <View style={styles.inputGroup}>
+                <Text style={[styles.inputLabel, { color: colors.text }]}>Category *</Text>
+                <TouchableOpacity
+                  style={[styles.selectContainer, { backgroundColor: colors.card, borderColor: colors.border }]}
+                  onPress={() => setShowCategoryPicker(!showCategoryPicker)}
+                >
+                  <Text style={[styles.selectText, { color: colors.text }]}>
+                    {selectedCategory?.label}
+                  </Text>
+                  <ChevronDown size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+
+                {showCategoryPicker && (
+                  <View style={[styles.pickerOptions, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    {CATEGORY_OPTIONS.map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[styles.pickerOption, category === option.value && { backgroundColor: colors.background }]}
+                        onPress={() => {
+                          setCategory(option.value);
+                          setShowCategoryPicker(false);
+                        }}
+                      >
+                        <Text style={[styles.pickerOptionText, { color: colors.text }]}>
+                          {option.label}
+                        </Text>
+                        {category === option.value && <Check size={18} color={colors.primary} />}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Description */}
+              <View style={styles.inputGroup}>
+                <Text style={[styles.inputLabel, { color: colors.text }]}>Description *</Text>
+                <View style={[styles.textAreaContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <TextInput
+                    style={[styles.textArea, { color: colors.text }]}
+                    placeholder="Describe your event..."
+                    placeholderTextColor={colors.textSecondary}
+                    value={description}
+                    onChangeText={setDescription}
+                    multiline
+                    numberOfLines={4}
+                    maxLength={1000}
+                    textAlignVertical="top"
+                  />
+                </View>
+                <Text style={[styles.charCount, { color: colors.textSecondary }]}>
+                  {description.length}/1000
+                </Text>
+              </View>
+
+              {/* Image Upload */}
+              <View style={styles.inputGroup}>
+                <Text style={[styles.inputLabel, { color: colors.text }]}>Cover Image</Text>
+                <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <View style={styles.toggleInfo}>
+                    <ImageIcon size={20} color={autoCropImage ? colors.primary : colors.textSecondary} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.toggleLabel, { color: colors.text }]}>Auto-crop image</Text>
+                      <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
+                        Off = upload full image • On = crop to 16:9
+                      </Text>
+                    </View>
+                  </View>
+                  <Switch
+                    value={autoCropImage}
+                    onValueChange={setAutoCropImage}
+                    trackColor={{ false: colors.border, true: colors.primary }}
+                    thumbColor={colors.textOnPrimary}
+                  />
+                </View>
+                {!imageUri && !imageUrl ? (
                   <TouchableOpacity
-                    style={styles.removeImageButton}
-                    onPress={() => {
-                      setImageUri(null);
-                      setImageUrl('');
-                    }}
-                  >
-                    <X size={18} color={colors.textOnPrimary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.changeImageButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+                    style={[styles.uploadButton, { backgroundColor: colors.card, borderColor: colors.border }]}
                     onPress={handlePickImage}
                     disabled={uploadingImage}
                   >
@@ -742,333 +735,404 @@ export default function EditEventScreen() {
                       <ActivityIndicator size="small" color={colors.primary} />
                     ) : (
                       <>
-                        <ImageIcon size={16} color={colors.primary} />
-                        <Text style={[styles.changeImageText, { color: colors.primary }]}>Change</Text>
+                        <Upload size={20} color={colors.primary} />
+                        <Text style={[styles.uploadButtonText, { color: colors.primary }]}>Upload Image</Text>
                       </>
                     )}
                   </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          </View>
-
-          {/* Location Section */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Location</Text>
-
-            <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.toggleInfo}>
-                <Video size={20} color={isVirtual ? colors.primary : colors.textSecondary} />
-                <View>
-                  <Text style={[styles.toggleLabel, { color: colors.text }]}>Virtual Event</Text>
-                  <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
-                    Online event via Zoom, Meet, etc.
-                  </Text>
-                </View>
-              </View>
-              <Switch
-                value={isVirtual}
-                onValueChange={setIsVirtual}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={colors.textOnPrimary}
-              />
-            </View>
-
-            {isVirtual ? (
-              <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: colors.text }]}>Meeting Link *</Text>
-                <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <Link size={20} color={colors.textSecondary} />
-                  <TextInput
-                    style={[styles.input, { color: colors.text }]}
-                    placeholder="https://zoom.us/j/..."
-                    placeholderTextColor={colors.textSecondary}
-                    value={virtualLink}
-                    onChangeText={setVirtualLink}
-                    autoCapitalize="none"
-                    keyboardType="url"
-                  />
-                </View>
-              </View>
-            ) : (
-              <>
-                <View style={styles.inputGroup}>
-                  <Text style={[styles.inputLabel, { color: colors.text }]}>Location Name *</Text>
-                  <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                    <MapPin size={20} color={colors.textSecondary} />
-                    <TextInput
-                      style={[styles.input, { color: colors.text }]}
-                      placeholder="e.g., Devon House, Kingston"
-                      placeholderTextColor={colors.textSecondary}
-                      value={location}
-                      onChangeText={(text) => {
-                        setLocation(text);
-                        // Clear previous timeout
-                        if (geocodeTimeoutRef.current) {
-                          clearTimeout(geocodeTimeoutRef.current);
-                        }
-                        // Auto-geocode after user stops typing
-                        geocodeTimeoutRef.current = setTimeout(() => {
-                          if (text.trim()) {
-                            handleLocationGeocode(text);
-                          }
-                        }, 800);
+                ) : (
+                  <View style={[styles.imagePreviewContainer, { borderColor: colors.border }]}>
+                    <Image
+                      source={{ uri: imageUri || imageUrl }}
+                      style={styles.imagePreview}
+                      resizeMode={autoCropImage ? 'cover' : 'contain'}
+                    />
+                    <TouchableOpacity
+                      style={styles.removeImageButton}
+                      onPress={() => {
+                        setImageUri(null);
+                        setImageUrl('');
                       }}
-                    />
-                    {isGeocodingLocation && (
-                      <ActivityIndicator size="small" color={colors.primary} />
-                    )}
-                  </View>
-                  {geocodingLocation && !geocodingLocation.success && (
-                    <Text style={[styles.errorText, { color: colors.error }]}>
-                      {geocodingLocation.error}
-                    </Text>
-                  )}
-                  {geocodingLocation?.success && geocodingLocation.formattedAddress && (
-                    <Text style={[styles.successText, { color: colors.success }]}>
-                      ✓ {geocodingLocation.formattedAddress}
-                    </Text>
-                  )}
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={[styles.inputLabel, { color: colors.text }]}>Full Address</Text>
-                  <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                    <MapPin size={20} color={colors.textSecondary} />
-                    <TextInput
-                      style={[styles.input, { color: colors.text }]}
-                      placeholder="Auto-filled from location or enter manually"
-                      placeholderTextColor={colors.textSecondary}
-                      value={locationAddress}
-                      onChangeText={setLocationAddress}
-                    />
-                  </View>
-                </View>
-
-                {latitude && longitude && (
-                  <View style={styles.inputGroup}>
-                    <Text style={[styles.inputLabel, { color: colors.text }]}>Coordinates</Text>
-                    <Text style={[styles.coordinateText, { color: colors.textSecondary }]}>
-                      {latitude.toFixed(6)}, {longitude.toFixed(6)}
-                    </Text>
+                    >
+                      <X size={18} color={colors.textOnPrimary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.changeImageButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+                      onPress={handlePickImage}
+                      disabled={uploadingImage}
+                    >
+                      {uploadingImage ? (
+                        <ActivityIndicator size="small" color={colors.primary} />
+                      ) : (
+                        <>
+                          <ImageIcon size={16} color={colors.primary} />
+                          <Text style={[styles.changeImageText, { color: colors.primary }]}>Change</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
                   </View>
                 )}
+              </View>
+            </View>
 
+            {/* Location Section */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Location</Text>
+
+              <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.toggleInfo}>
+                  <Video size={20} color={isVirtual ? colors.primary : colors.textSecondary} />
+                  <View>
+                    <Text style={[styles.toggleLabel, { color: colors.text }]}>Virtual Event</Text>
+                    <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
+                      Online event via Zoom, Meet, etc.
+                    </Text>
+                  </View>
+                </View>
+                <Switch
+                  value={isVirtual}
+                  onValueChange={setIsVirtual}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor={colors.textOnPrimary}
+                />
+              </View>
+
+              {isVirtual ? (
                 <View style={styles.inputGroup}>
-                  <Text style={[styles.inputLabel, { color: colors.text }]}>Google Maps Link</Text>
+                  <Text style={[styles.inputLabel, { color: colors.text }]}>Meeting Link *</Text>
                   <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
                     <Link size={20} color={colors.textSecondary} />
                     <TextInput
                       style={[styles.input, { color: colors.text }]}
-                      placeholder="https://maps.google.com/..."
+                      placeholder="https://zoom.us/j/..."
                       placeholderTextColor={colors.textSecondary}
-                      value={mapLink}
-                      onChangeText={setMapLink}
+                      value={virtualLink}
+                      onChangeText={setVirtualLink}
                       autoCapitalize="none"
                       keyboardType="url"
                     />
                   </View>
                 </View>
-              </>
-            )}
-          </View>
+              ) : (
+                <>
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.inputLabel, { color: colors.text }]}>Location Name *</Text>
+                    <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                      <MapPin size={20} color={colors.textSecondary} />
+                      <TextInput
+                        style={[styles.input, { color: colors.text }]}
+                        placeholder="e.g., Devon House, Kingston"
+                        placeholderTextColor={colors.textSecondary}
+                        value={location}
+                        onChangeText={(text) => {
+                          setLocation(text);
+                          // Clear previous timeout
+                          if (geocodeTimeoutRef.current) {
+                            clearTimeout(geocodeTimeoutRef.current);
+                          }
+                          // Auto-geocode after user stops typing
+                          geocodeTimeoutRef.current = setTimeout(() => {
+                            if (text.trim()) {
+                              handleLocationGeocode(text);
+                            }
+                          }, 800);
+                        }}
+                      />
+                      {isGeocodingLocation && (
+                        <ActivityIndicator size="small" color={colors.primary} />
+                      )}
+                    </View>
+                    {geocodingLocation && !geocodingLocation.success && (
+                      <Text style={[styles.errorText, { color: colors.error }]}>
+                        {geocodingLocation.error}
+                      </Text>
+                    )}
+                    {geocodingLocation?.success && geocodingLocation.formattedAddress && (
+                      <Text style={[styles.successText, { color: colors.success }]}>
+                        ✓ {geocodingLocation.formattedAddress}
+                      </Text>
+                    )}
+                  </View>
 
-          {/* Date & Time Section */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Date & Time</Text>
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.inputLabel, { color: colors.text }]}>Full Address</Text>
+                    <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                      <MapPin size={20} color={colors.textSecondary} />
+                      <TextInput
+                        style={[styles.input, { color: colors.text }]}
+                        placeholder="Auto-filled from location or enter manually"
+                        placeholderTextColor={colors.textSecondary}
+                        value={locationAddress}
+                        onChangeText={setLocationAddress}
+                      />
+                    </View>
+                  </View>
 
-            <CrossPlatformDateTimePicker
-              mode="date"
-              value={eventDate}
-              onChange={(date) => date && setEventDate(date)}
-              minimumDate={new Date()}
-              label="Event Date *"
-              colors={colors}
-            />
+                  {latitude && longitude && (
+                    <View style={styles.inputGroup}>
+                      <Text style={[styles.inputLabel, { color: colors.text }]}>Coordinates</Text>
+                      <Text style={[styles.coordinateText, { color: colors.textSecondary }]}>
+                        {latitude.toFixed(6)}, {longitude.toFixed(6)}
+                      </Text>
+                    </View>
+                  )}
 
-            <View style={styles.row}>
-              <View style={{ flex: 1 }}>
-                <CrossPlatformDateTimePicker
-                  mode="time"
-                  value={startTime}
-                  onChange={(date) => date && setStartTime(date)}
-                  label="Start Time *"
-                  colors={colors}
-                />
-              </View>
-
-              <View style={{ flex: 1 }}>
-                <CrossPlatformDateTimePicker
-                  mode="time"
-                  value={endTime || new Date()}
-                  onChange={(date) => setEndTime(date)}
-                  label="End Time"
-                  placeholder="Not set"
-                  colors={colors}
-                />
-              </View>
-            </View>
-          </View>
-
-          {/* Capacity Section */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Capacity & Registration</Text>
-
-            <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.toggleInfo}>
-                <Users size={20} color={hasCapacity ? colors.primary : colors.textSecondary} />
-                <View>
-                  <Text style={[styles.toggleLabel, { color: colors.text }]}>Limited Capacity</Text>
-                </View>
-              </View>
-              <Switch
-                value={hasCapacity}
-                onValueChange={setHasCapacity}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={colors.textOnPrimary}
-              />
-            </View>
-
-            {hasCapacity && (
-              <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: colors.text }]}>Maximum Capacity *</Text>
-                <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <Users size={20} color={colors.textSecondary} />
-                  <TextInput
-                    style={[styles.input, { color: colors.text }]}
-                    placeholder="e.g., 50"
-                    placeholderTextColor={colors.textSecondary}
-                    value={capacity}
-                    onChangeText={setCapacity}
-                    keyboardType="number-pad"
-                  />
-                </View>
-              </View>
-            )}
-
-            <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.toggleInfo}>
-                <FileText size={20} color={registrationRequired ? colors.primary : colors.textSecondary} />
-                <View>
-                  <Text style={[styles.toggleLabel, { color: colors.text }]}>Require Registration</Text>
-                  <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
-                    Users must register to attend
-                  </Text>
-                </View>
-              </View>
-              <Switch
-                value={registrationRequired}
-                onValueChange={setRegistrationRequired}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={colors.textOnPrimary}
-              />
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.inputLabel, { color: colors.text }]}>Google Maps Link</Text>
+                    <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                      <Link size={20} color={colors.textSecondary} />
+                      <TextInput
+                        style={[styles.input, { color: colors.text }]}
+                        placeholder="https://maps.google.com/..."
+                        placeholderTextColor={colors.textSecondary}
+                        value={mapLink}
+                        onChangeText={setMapLink}
+                        autoCapitalize="none"
+                        keyboardType="url"
+                      />
+                    </View>
+                  </View>
+                </>
+              )}
             </View>
 
-            {registrationRequired && (
+            {/* Date & Time Section */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Date & Time</Text>
+
               <CrossPlatformDateTimePicker
                 mode="date"
-                value={registrationDeadline || new Date()}
-                onChange={(date) => setRegistrationDeadline(date)}
+                value={eventDate}
+                onChange={(date) => date && setEventDate(date)}
                 minimumDate={new Date()}
-                label="Registration Deadline"
-                placeholder="Not set (optional)"
+                label="Event Date *"
                 colors={colors}
               />
-            )}
-          </View>
 
-          {/* Pricing Section */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Pricing</Text>
-
-            <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.toggleInfo}>
-                <DollarSign size={20} color={isFree ? colors.success : colors.textSecondary} />
-                <View>
-                  <Text style={[styles.toggleLabel, { color: colors.text }]}>Free Event</Text>
-                </View>
-              </View>
-              <Switch
-                value={isFree}
-                onValueChange={setIsFree}
-                trackColor={{ false: colors.border, true: colors.success }}
-                thumbColor={colors.textOnPrimary}
-              />
-            </View>
-
-            {!isFree && (
-              <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: colors.text }]}>Ticket Price (JMD) *</Text>
-                <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <Text style={[styles.currencyPrefix, { color: colors.textSecondary }]}>J$</Text>
-                  <TextInput
-                    style={[styles.input, { color: colors.text }]}
-                    placeholder="0"
-                    placeholderTextColor={colors.textSecondary}
-                    value={ticketPrice}
-                    onChangeText={setTicketPrice}
-                    keyboardType="number-pad"
+              <View style={styles.row}>
+                <View style={{ flex: 1 }}>
+                  <CrossPlatformDateTimePicker
+                    mode="time"
+                    value={startTime}
+                    onChange={(date) => date && setStartTime(date)}
+                    label="Start Time *"
+                    colors={colors}
                   />
                 </View>
-                <Text style={[styles.inputHint, { color: colors.textSecondary }]}>
-                  Payments are processed securely via eZeePayments
-                </Text>
-              </View>
-            )}
-          </View>
 
-          {/* Contact Section */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Contact Information</Text>
-
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Contact Name</Text>
-              <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <User size={20} color={colors.textSecondary} />
-                <TextInput
-                  style={[styles.input, { color: colors.text }]}
-                  placeholder="John Smith"
-                  placeholderTextColor={colors.textSecondary}
-                  value={contactName}
-                  onChangeText={setContactName}
-                  autoCapitalize="words"
-                />
+                <View style={{ flex: 1 }}>
+                  <CrossPlatformDateTimePicker
+                    mode="time"
+                    value={endTime || new Date()}
+                    onChange={(date) => setEndTime(date)}
+                    label="End Time"
+                    placeholder="Not set"
+                    colors={colors}
+                  />
+                </View>
               </View>
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Contact Email</Text>
-              <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Mail size={20} color={colors.textSecondary} />
-                <TextInput
-                  style={[styles.input, { color: colors.text }]}
-                  placeholder="contact@example.com"
-                  placeholderTextColor={colors.textSecondary}
-                  value={contactEmail}
-                  onChangeText={setContactEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
+            {/* Capacity Section */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Capacity & Registration</Text>
+
+              <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.toggleInfo}>
+                  <Users size={20} color={hasCapacity ? colors.primary : colors.textSecondary} />
+                  <View>
+                    <Text style={[styles.toggleLabel, { color: colors.text }]}>Limited Capacity</Text>
+                  </View>
+                </View>
+                <Switch
+                  value={hasCapacity}
+                  onValueChange={setHasCapacity}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor={colors.textOnPrimary}
                 />
+              </View>
+
+              {hasCapacity && (
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.inputLabel, { color: colors.text }]}>Maximum Capacity *</Text>
+                  <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <Users size={20} color={colors.textSecondary} />
+                    <TextInput
+                      style={[styles.input, { color: colors.text }]}
+                      placeholder="e.g., 50"
+                      placeholderTextColor={colors.textSecondary}
+                      value={capacity}
+                      onChangeText={setCapacity}
+                      keyboardType="number-pad"
+                    />
+                  </View>
+                </View>
+              )}
+
+              <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.toggleInfo}>
+                  <FileText size={20} color={registrationRequired ? colors.primary : colors.textSecondary} />
+                  <View>
+                    <Text style={[styles.toggleLabel, { color: colors.text }]}>Require Registration</Text>
+                    <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
+                      Users must register to attend
+                    </Text>
+                  </View>
+                </View>
+                <Switch
+                  value={registrationRequired}
+                  onValueChange={setRegistrationRequired}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor={colors.textOnPrimary}
+                />
+              </View>
+
+              {registrationRequired && (
+                <CrossPlatformDateTimePicker
+                  mode="date"
+                  value={registrationDeadline || new Date()}
+                  onChange={(date) => setRegistrationDeadline(date)}
+                  minimumDate={new Date()}
+                  label="Registration Deadline"
+                  placeholder="Not set (optional)"
+                  colors={colors}
+                />
+              )}
+            </View>
+
+            {/* Pricing Section */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Pricing</Text>
+
+              <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.toggleInfo}>
+                  <DollarSign size={20} color={isFree ? colors.success : colors.textSecondary} />
+                  <View>
+                    <Text style={[styles.toggleLabel, { color: colors.text }]}>Free Event</Text>
+                  </View>
+                </View>
+                <Switch
+                  value={isFree}
+                  onValueChange={setIsFree}
+                  trackColor={{ false: colors.border, true: colors.success }}
+                  thumbColor={colors.textOnPrimary}
+                />
+              </View>
+
+              {!isFree && (
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.inputLabel, { color: colors.text }]}>Ticket Price (JMD) *</Text>
+                  <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <Text style={[styles.currencyPrefix, { color: colors.textSecondary }]}>J$</Text>
+                    <TextInput
+                      style={[styles.input, { color: colors.text }]}
+                      placeholder="0"
+                      placeholderTextColor={colors.textSecondary}
+                      value={ticketPrice}
+                      onChangeText={setTicketPrice}
+                      keyboardType="number-pad"
+                    />
+                  </View>
+                  <Text style={[styles.inputHint, { color: colors.textSecondary }]}>
+                    Payments are processed securely via eZeePayments
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Contact Section */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Contact Information</Text>
+
+              <View style={styles.inputGroup}>
+                <Text style={[styles.inputLabel, { color: colors.text }]}>Contact Name</Text>
+                <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <User size={20} color={colors.textSecondary} />
+                  <TextInput
+                    style={[styles.input, { color: colors.text }]}
+                    placeholder="John Smith"
+                    placeholderTextColor={colors.textSecondary}
+                    value={contactName}
+                    onChangeText={setContactName}
+                    autoCapitalize="words"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={[styles.inputLabel, { color: colors.text }]}>Contact Email</Text>
+                <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Mail size={20} color={colors.textSecondary} />
+                  <TextInput
+                    style={[styles.input, { color: colors.text }]}
+                    placeholder="contact@example.com"
+                    placeholderTextColor={colors.textSecondary}
+                    value={contactEmail}
+                    onChangeText={setContactEmail}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={[styles.inputLabel, { color: colors.text }]}>Contact Phone</Text>
+                <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Phone size={20} color={colors.textSecondary} />
+                  <TextInput
+                    style={[styles.input, { color: colors.text }]}
+                    placeholder="+1 876 555 0123"
+                    placeholderTextColor={colors.textSecondary}
+                    value={contactPhone}
+                    onChangeText={setContactPhone}
+                    keyboardType="phone-pad"
+                  />
+                </View>
               </View>
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Contact Phone</Text>
-              <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Phone size={20} color={colors.textSecondary} />
-                <TextInput
-                  style={[styles.input, { color: colors.text }]}
-                  placeholder="+1 876 555 0123"
-                  placeholderTextColor={colors.textSecondary}
-                  value={contactPhone}
-                  onChangeText={setContactPhone}
-                  keyboardType="phone-pad"
+
+
+            {/* Notification Settings */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Notification Settings</Text>
+
+              <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.toggleInfo}>
+                  <Users size={20} color={notifyUsers ? colors.primary : colors.textSecondary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.toggleLabel, { color: colors.text }]}>Notify Attendees</Text>
+                    <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
+                      Send a push notification to all registered attendees about this update.
+                    </Text>
+                  </View>
+                </View>
+                <Switch
+                  value={notifyUsers}
+                  onValueChange={setNotifyUsers}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor={'#FFF'}
                 />
               </View>
-            </View>
-          </View>
 
-        </ScrollView>
+              {notifyUsers && (
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.inputLabel, { color: colors.text }]}>Message to Attendees *</Text>
+                  <View style={[styles.textAreaContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <TextInput
+                      style={[styles.textArea, { color: colors.text, minHeight: 80 }]}
+                      value={updateMessage}
+                      onChangeText={setUpdateMessage}
+                      placeholder="e.g., The start time has been changed to 10:00 AM"
+                      placeholderTextColor={colors.textSecondary}
+                      multiline
+                    />
+                  </View>
+                </View>
+              )}
+            </View>
+
+          </ScrollView>
         </WebContainer>
       </KeyboardAvoidingView>
 
@@ -1101,7 +1165,7 @@ export default function EditEventScreen() {
         onConfirm={alertConfig.onConfirm}
         showCancel={!!alertConfig.onConfirm}
       />
-    </View>
+    </View >
   );
 }
 

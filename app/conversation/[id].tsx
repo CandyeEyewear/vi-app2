@@ -235,19 +235,19 @@ export default function ConversationScreen() {
   };
 
   // Parse attachments and reply data from text field (temporary workaround until columns are added)
-  const parseAttachmentsFromText = (text: string): { 
-    text: string; 
+  const parseAttachmentsFromText = (text: string): {
+    text: string;
     attachments?: Message['attachments'];
     replyTo?: Message['replyTo'];
   } => {
     if (!text) {
       return { text: '' };
     }
-    
+
     let messageText = text;
     let attachments: Message['attachments'] = undefined;
     let replyTo: Message['replyTo'] = undefined;
-    
+
     // Parse reply data first (it comes before attachments in the text)
     if (messageText.includes('__REPLY_TO__:')) {
       const replyParts = messageText.split('__REPLY_TO__:');
@@ -268,7 +268,7 @@ export default function ConversationScreen() {
         console.error('Error parsing reply data from message text:', e);
       }
     }
-    
+
     // Parse attachments (after reply data)
     if (messageText.includes('__ATTACHMENTS__:')) {
       const attachmentParts = messageText.split('__ATTACHMENTS__:');
@@ -279,7 +279,7 @@ export default function ConversationScreen() {
         console.error('Error parsing attachments from message text:', e);
       }
     }
-    
+
     return { text: messageText, attachments, replyTo };
   };
 
@@ -290,7 +290,7 @@ export default function ConversationScreen() {
       (e) => {
         const height = e.endCoordinates.height;
         setKeyboardHeight(height);
-        
+
         // Ultra smooth animation with easing - no gaps
         Animated.timing(keyboardAnim, {
           toValue: height,
@@ -298,7 +298,7 @@ export default function ConversationScreen() {
           easing: Easing.bezier(0.25, 0.1, 0.25, 1), // Smooth cubic bezier easing
           useNativeDriver: false,
         }).start();
-        
+
         // Scroll to bottom when keyboard appears
         setTimeout(() => {
           flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
@@ -310,7 +310,7 @@ export default function ConversationScreen() {
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
       (e) => {
         setKeyboardHeight(0);
-        
+
         // Ultra smooth animation - smooth transition back with easing
         Animated.timing(keyboardAnim, {
           toValue: 0,
@@ -332,10 +332,10 @@ export default function ConversationScreen() {
 
     loadMessages();
     markAsRead(id);
-    
+
     // Subscribe to new messages (INSERT)
     const messagesChannel = supabase.channel(`conversation:${id}`);
-    
+
     messagesChannel
       .on(
         'postgres_changes',
@@ -351,7 +351,7 @@ export default function ConversationScreen() {
 
           // Use parsed reply data if available, otherwise try to fetch from database (fallback)
           let replyTo: Message['replyTo'] = parsedReplyTo;
-          
+
           // Fallback: If reply data wasn't in text field, try to fetch from database
           if (!replyTo && payload.new.reply_to_message_id) {
             const { data: replyData } = await supabase
@@ -359,16 +359,16 @@ export default function ConversationScreen() {
               .select('id, sender_id, text')
               .eq('id', payload.new.reply_to_message_id)
               .single();
-            
+
             if (replyData) {
               const replySenderId = replyData.sender_id;
-              const replySenderName = replySenderId === user?.id 
-                ? 'You' 
+              const replySenderName = replySenderId === user?.id
+                ? 'You'
                 : (otherUser?.fullName || 'User');
-              
+
               // Parse attachments from reply message text
               const { text: replyText } = parseAttachmentsFromText(replyData.text);
-              
+
               replyTo = {
                 id: replyData.id,
                 senderId: replySenderId,
@@ -393,13 +393,13 @@ export default function ConversationScreen() {
 
           // PREPEND new message so it appears at the *bottom* with inverted list
           setMessages(prev => mergeUnique([newMessage], prev));
-          
+
           // Delivery & read receipts
           if (newMessage.senderId !== user?.id) {
             markMessageDelivered(newMessage.id);
             markAsRead(id);
           }
-          
+
           // Scroll to "bottom" (offset 0 when inverted)
           requestAnimationFrame(() => {
             flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
@@ -421,16 +421,16 @@ export default function ConversationScreen() {
             prev.map((msg) =>
               msg.id === payload.new.id
                 ? {
-                    ...msg,
-                    read: payload.new.read,
-                    status: payload.new.status || msg.status,
-                    deletedAt: payload.new.deleted_at || undefined,
-                    text: payload.new.text,
-                  }
+                  ...msg,
+                  read: payload.new.read,
+                  status: payload.new.status || msg.status,
+                  deletedAt: payload.new.deleted_at || undefined,
+                  text: payload.new.text,
+                }
                 : msg
             )
           );
-          
+
           // If message was deleted, refresh conversations to update the last message in chat list
           if (payload.new.deleted_at) {
             refreshConversations();
@@ -454,13 +454,13 @@ export default function ConversationScreen() {
       .on('presence', { event: 'sync' }, () => {
         const state = presenceChannel.presenceState();
         const presences = Object.values(state).flat() as any[];
-        
+
         // Check if other user is online in this chat
         const otherUserPresence = presences.find(
           (p: any) => p.user_id === otherUser?.id
         );
         setOtherUserOnline(!!otherUserPresence);
-        
+
         // Check typing status
         const someoneTyping = presences.some(
           (p: any) => p.user_id !== user.id && p.typing
@@ -528,7 +528,7 @@ export default function ConversationScreen() {
       // Get all reply message IDs that we need to fetch
       const replyMessageIds = (data ?? [])
         .map((msg: any) => msg.reply_to_message_id)
-        .filter((id: string | null) => id !== null) as string[];
+        .filter((id: string | null) => id != null) as string[]; // Used != null to catch both null and undefined
 
       // Fetch reply messages in batch if any exist
       let replyMessagesMap: Record<string, any> = {};
@@ -537,7 +537,7 @@ export default function ConversationScreen() {
           .from('messages')
           .select('id, sender_id, text, created_at')
           .in('id', replyMessageIds);
-        
+
         if (replyData) {
           replyMessagesMap = replyData.reduce((acc: Record<string, any>, msg: any) => {
             acc[msg.id] = msg;
@@ -550,7 +550,7 @@ export default function ConversationScreen() {
         // Get sender name for reply
         let replySenderName = '';
         const replyMessage = msg.reply_to_message_id ? replyMessagesMap[msg.reply_to_message_id] : null;
-        
+
         if (replyMessage) {
           const replySenderId = replyMessage.sender_id;
           if (replySenderId === user?.id) {
@@ -563,10 +563,10 @@ export default function ConversationScreen() {
 
         // Parse attachments and reply data from text field
         const { text: messageText, attachments: parsedAttachments, replyTo: parsedReplyTo } = parseAttachmentsFromText(msg.text);
-        
+
         // Use parsed reply data if available, otherwise use fetched reply message (fallback)
         let finalReplyTo: Message['replyTo'] = parsedReplyTo;
-        
+
         // Fallback: If reply data wasn't in text field, use fetched reply message
         if (!finalReplyTo && msg.reply_to_message_id && replyMessage) {
           const { text: replyText } = parseAttachmentsFromText(replyMessage.text);
@@ -623,7 +623,7 @@ export default function ConversationScreen() {
   const handleTextChange = (text: string) => {
     setInputText(text);
     if (!id || !presenceChannelRef.current) return;
-    
+
     // Update typing status via presence channel
     if (text.length > 0 && !isTyping) {
       setIsTyping(true);
@@ -634,7 +634,7 @@ export default function ConversationScreen() {
         typing: true,
       });
     }
-    
+
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
       setIsTyping(false);
@@ -670,17 +670,17 @@ export default function ConversationScreen() {
     Keyboard.dismiss();
 
     const textToSend = trimmedText;
-    
+
     // Prepare reply data if replying
     const replyData = replyingTo ? {
       id: replyingTo.id,
       senderId: replyingTo.senderId,
-      senderName: replyingTo.senderId === user?.id 
-        ? 'You' 
+      senderName: replyingTo.senderId === user?.id
+        ? 'You'
         : otherUser?.fullName || 'User',
       text: replyingTo.text,
     } : undefined;
-    
+
     // Clear input immediately for better UX
     setInputText('');
     setReplyingTo(null); // Clear reply
@@ -690,7 +690,7 @@ export default function ConversationScreen() {
       console.log('handleSend: Sending message', { id, textToSend, hasReply: !!replyData });
       const response = await sendMessage(id, textToSend, replyData);
       console.log('handleSend: Response', response);
-      
+
       if (!response.success) {
         // Restore input text on error
         setInputText(textToSend);
@@ -741,7 +741,7 @@ export default function ConversationScreen() {
                 Alert.alert('Permission needed', 'Please grant camera permissions to take photos.');
                 return;
               }
-              
+
               const result = await ImagePicker.launchCameraAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 allowsEditing: false,
@@ -757,7 +757,7 @@ export default function ConversationScreen() {
                 Alert.alert('Permission needed', 'Please grant photo library permissions to select images.');
                 return;
               }
-              
+
               const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 allowsEditing: false,
@@ -785,7 +785,7 @@ export default function ConversationScreen() {
                   Alert.alert('Permission needed', 'Please grant camera permissions to take photos.');
                   return;
                 }
-                
+
                 const result = await ImagePicker.launchCameraAsync({
                   mediaTypes: ImagePicker.MediaTypeOptions.Images,
                   allowsEditing: false,
@@ -805,7 +805,7 @@ export default function ConversationScreen() {
                   Alert.alert('Permission needed', 'Please grant photo library permissions to select images.');
                   return;
                 }
-                
+
                 const result = await ImagePicker.launchImageLibraryAsync({
                   mediaTypes: ImagePicker.MediaTypeOptions.Images,
                   allowsEditing: false,
@@ -846,7 +846,7 @@ export default function ConversationScreen() {
       if (!response.ok) {
         throw new Error('File does not exist or cannot be read');
       }
-      
+
       const blob = await response.blob();
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -894,7 +894,7 @@ export default function ConversationScreen() {
     try {
       setSending(true);
       const imageUrl = await uploadImage(imagePreview.uri);
-      
+
       if (!imageUrl) {
         // uploadImage already handles errors and resets uploadingImage
         return;
@@ -902,30 +902,30 @@ export default function ConversationScreen() {
 
       // Send message with attachment
       const textToSend = inputText.trim() || '';
-      
+
       // Prepare reply data if replying
       const replyData = replyingTo ? {
         id: replyingTo.id,
         senderId: replyingTo.senderId,
-        senderName: replyingTo.senderId === user?.id 
-          ? 'You' 
+        senderName: replyingTo.senderId === user?.id
+          ? 'You'
           : otherUser?.fullName || 'User',
         text: replyingTo.text,
       } : undefined;
-      
+
       const attachments = [{
         type: 'image' as const,
         url: imageUrl,
         thumbnail: imageUrl, // Use same URL as thumbnail for now
       }];
-      
+
       const response = await sendMessage(id, textToSend, replyData, attachments);
-      
+
       if (response.success) {
         setImagePreview(null);
         setInputText('');
         setReplyingTo(null);
-        
+
         // Scroll to bottom
         requestAnimationFrame(() => {
           flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
@@ -981,10 +981,10 @@ export default function ConversationScreen() {
             prev.map((m) =>
               m.id === message.id
                 ? {
-                    ...m,
-                    deletedAt,
-                    text: 'This message was deleted',
-                  }
+                  ...m,
+                  deletedAt,
+                  text: 'This message was deleted',
+                }
                 : m
             )
           );
@@ -1088,74 +1088,74 @@ export default function ConversationScreen() {
                 isDeleted && styles.messageBubbleDeleted,
               ]}
             >
-          {/* Reply Quote Preview */}
-          {item.replyTo && !isDeleted && (
-            <View style={[styles.replyQuote, isMe && styles.replyQuoteMe]}>
-              <View style={styles.replyQuoteBorder} />
-              <View style={styles.replyQuoteContent}>
-                <Text style={[styles.replyQuoteName, isMe && styles.replyQuoteNameMe]}>
-                  {replySenderName}
-                </Text>
+              {/* Reply Quote Preview */}
+              {item.replyTo && !isDeleted && (
+                <View style={[styles.replyQuote, isMe && styles.replyQuoteMe]}>
+                  <View style={styles.replyQuoteBorder} />
+                  <View style={styles.replyQuoteContent}>
+                    <Text style={[styles.replyQuoteName, isMe && styles.replyQuoteNameMe]}>
+                      {replySenderName}
+                    </Text>
+                    <LinkText
+                      text={item.replyTo.text}
+                      style={[styles.replyQuoteText, isMe && styles.replyQuoteTextMe]}
+                      numberOfLines={2}
+                      selectable
+                      linkStyle={isMe ? { color: '#FFFFFF', textDecorationLine: 'underline' } : undefined}
+                    />
+                  </View>
+                </View>
+              )}
+
+              {/* Attachments - WhatsApp Style (Edge-to-Edge) */}
+              {hasAttachments && (
+                <View style={styles.attachmentsContainer}>
+                  {item.attachments!.map((attachment, index) => {
+                    if (attachment.type === 'image') {
+                      return (
+                        <TouchableOpacity
+                          key={index}
+                          onPress={() => {
+                            // Open full-screen image viewer for already-sent images
+                            setViewingImage(attachment.url);
+                          }}
+                          activeOpacity={0.9}
+                          style={styles.imageAttachmentWrapper}
+                        >
+                          <Image
+                            source={{ uri: attachment.thumbnail || attachment.url }}
+                            style={[
+                              styles.messageImage,
+                              // Apply bubble corners to image - sharp bottom corner if no text below
+                              !hasText ? (
+                                isMe
+                                  ? { borderBottomRightRadius: 0 } // Sharp corner bottom-right for sent
+                                  : { borderBottomLeftRadius: 0 }  // Sharp corner bottom-left for received
+                              ) : undefined
+                            ]}
+                            resizeMode="cover"
+                          />
+                        </TouchableOpacity>
+                      );
+                    }
+                    return null;
+                  })}
+                </View>
+              )}
+
+              {/* Message Text - Only show if there's text */}
+              {hasText && (
                 <LinkText
-                  text={item.replyTo.text}
-                  style={[styles.replyQuoteText, isMe && styles.replyQuoteTextMe]}
-                  numberOfLines={2}
+                  text={isDeleted ? '🚫 This message was deleted' : item.text}
+                  style={[
+                    styles.messageText,
+                    isMe && styles.messageTextMe,
+                    isDeleted && styles.messageTextDeleted,
+                  ]}
                   selectable
                   linkStyle={isMe ? { color: '#FFFFFF', textDecorationLine: 'underline' } : undefined}
                 />
-              </View>
-            </View>
-          )}
-
-          {/* Attachments - WhatsApp Style (Edge-to-Edge) */}
-          {hasAttachments && (
-            <View style={styles.attachmentsContainer}>
-              {item.attachments!.map((attachment, index) => {
-                if (attachment.type === 'image') {
-                  return (
-                    <TouchableOpacity
-                      key={index}
-                      onPress={() => {
-                        // Open full-screen image viewer for already-sent images
-                        setViewingImage(attachment.url);
-                      }}
-                      activeOpacity={0.9}
-                      style={styles.imageAttachmentWrapper}
-                    >
-                      <Image
-                        source={{ uri: attachment.thumbnail || attachment.url }}
-                        style={[
-                          styles.messageImage,
-                          // Apply bubble corners to image - sharp bottom corner if no text below
-                          !hasText ? (
-                            isMe
-                              ? { borderBottomRightRadius: 0 } // Sharp corner bottom-right for sent
-                              : { borderBottomLeftRadius: 0 }  // Sharp corner bottom-left for received
-                          ) : undefined
-                        ]}
-                        resizeMode="cover"
-                      />
-                    </TouchableOpacity>
-                  );
-                }
-                return null;
-              })}
-            </View>
-          )}
-
-          {/* Message Text - Only show if there's text */}
-          {hasText && (
-            <LinkText
-              text={isDeleted ? '🚫 This message was deleted' : item.text}
-              style={[
-                styles.messageText,
-                isMe && styles.messageTextMe,
-                isDeleted && styles.messageTextDeleted,
-              ]}
-              selectable
-              linkStyle={isMe ? { color: '#FFFFFF', textDecorationLine: 'underline' } : undefined}
-            />
-          )}
+              )}
             </View>
 
             {/* Timestamp outside bubble - industry best practice */}
@@ -1168,8 +1168,8 @@ export default function ConversationScreen() {
 
             {showSeenLabel && <Text style={[styles.seenLabel, isMe && styles.seenLabelMe]}>Seen</Text>}
           </View>
-      </Pressable>
-    </SwipeableMessage>
+        </Pressable>
+      </SwipeableMessage>
     );
   };
 
@@ -1200,8 +1200,8 @@ export default function ConversationScreen() {
         <TouchableOpacity onPress={() => goBack('/(tabs)/messages')} style={styles.backButton}>
           <ChevronLeft size={28} color={Colors.light.primary} />
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.headerUser} 
+        <TouchableOpacity
+          style={styles.headerUser}
           onPress={handleUserTap}
           activeOpacity={0.7}
         >
@@ -1248,295 +1248,295 @@ export default function ConversationScreen() {
         keyboardVerticalOffset={0}
         enabled={Platform.OS === 'ios'}
       >
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.light.primary} />
-        </View>
-      ) : (
-        <>
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            keyExtractor={(item) => String(item.id)}
-            renderItem={renderMessage}
-            contentContainerStyle={[
-              styles.messagesList,
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.light.primary} />
+          </View>
+        ) : (
+          <>
+            <FlatList
+              ref={flatListRef}
+              data={messages}
+              keyExtractor={(item) => String(item.id)}
+              renderItem={renderMessage}
+              contentContainerStyle={[
+                styles.messagesList,
                 {
                   paddingTop: headerHeight, // Space for fixed header
                   paddingBottom: 16,
                 },
-            ]}
-            inverted={true}
-            onEndReached={handleLoadMore}
-            onEndReachedThreshold={0.5}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
-            ListFooterComponent={
-              loadingMore ? (
-                <View style={styles.loadingMoreContainer}>
-                  <ActivityIndicator size="small" color={Colors.light.primary} />
-                  <Text style={styles.loadingMoreText}>Loading older messages...</Text>
-                </View>
-              ) : !hasMore && messages.length > 0 ? (
-                <View style={styles.endOfMessagesContainer}>
-                  <Text style={styles.endOfMessagesText}>• Beginning of conversation •</Text>
-                </View>
-              ) : null
-            }
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No messages yet</Text>
-                <Text style={styles.emptySubtext}>Start the conversation!</Text>
-              </View>
-            }
-          />
-          {otherUserTyping && otherUser && (
-            <TypingIndicator userName={otherUser.fullName} />
-          )}
-        </>
-      )}
-
-      {/* Reply Preview Bar - shows ABOVE input */}
-      {replyingTo && (
-        <View style={styles.replyBar}>
-          <View style={styles.replyBarContent}>
-            <View style={styles.replyIndicator} />
-            <View style={styles.replyTextContainer}>
-              <Text style={styles.replyName}>
-                Replying to {replyingTo.senderId === user?.id ? 'yourself' : otherUser?.fullName || 'User'}
-              </Text>
-              <LinkText
-                text={replyingTo.text}
-                style={styles.replyText}
-                numberOfLines={1}
-                selectable
-              />
-            </View>
-          </View>
-          <TouchableOpacity 
-            onPress={() => setReplyingTo(null)}
-            style={styles.replyCancelButton}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <X size={20} color={Colors.light.textSecondary} />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Input Container - WhatsApp Style with ultra smooth keyboard transition */}
-      <Animated.View
-        style={[
-          styles.inputContainer,
-          {
-            paddingBottom: keyboardAnim.interpolate({
-              inputRange: [0, 1000],
-                outputRange: [Math.max(insets.bottom, 8), 8],
-              extrapolate: 'clamp',
-            }),
-              marginBottom: Platform.OS === 'android' ? keyboardHeight : 0,
-          },
-        ]}
-      >
-        <View style={styles.inputWrapper}>
-          {/* Emoji Button - Always visible */}
-          <TouchableOpacity
-            style={styles.iconButton}
-            onPress={() => setShowEmojiPicker(true)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Smile size={24} color={Colors.light.textSecondary} />
-          </TouchableOpacity>
-
-          {/* Text Input */}
-          <TextInput
-            style={styles.input}
-            placeholder={replyingTo ? "Type a reply..." : "Message"}
-            placeholderTextColor={Colors.light.textSecondary}
-            value={inputText}
-            onChangeText={handleTextChange}
-            multiline
-            maxLength={1000}
-            onSubmitEditing={handleSend}
-            returnKeyType="default"
-            blurOnSubmit={false}
-            textAlignVertical="center"
-          />
-
-          {/* Right Side Buttons - Conditional based on typing state */}
-          {inputText.trim() ? (
-            // When typing: Show Send button
-            <TouchableOpacity
-              style={[
-                styles.sendButton,
-                sending && styles.sendButtonDisabled,
               ]}
-              onPress={handleSend}
-              disabled={sending}
-              activeOpacity={0.7}
+              inverted={true}
+              onEndReached={handleLoadMore}
+              onEndReachedThreshold={0.5}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              ListFooterComponent={
+                loadingMore ? (
+                  <View style={styles.loadingMoreContainer}>
+                    <ActivityIndicator size="small" color={Colors.light.primary} />
+                    <Text style={styles.loadingMoreText}>Loading older messages...</Text>
+                  </View>
+                ) : !hasMore && messages.length > 0 ? (
+                  <View style={styles.endOfMessagesContainer}>
+                    <Text style={styles.endOfMessagesText}>• Beginning of conversation •</Text>
+                  </View>
+                ) : null
+              }
+              ListEmptyComponent={
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>No messages yet</Text>
+                  <Text style={styles.emptySubtext}>Start the conversation!</Text>
+                </View>
+              }
+            />
+            {otherUserTyping && otherUser && (
+              <TypingIndicator userName={otherUser.fullName} />
+            )}
+          </>
+        )}
+
+        {/* Reply Preview Bar - shows ABOVE input */}
+        {replyingTo && (
+          <View style={styles.replyBar}>
+            <View style={styles.replyBarContent}>
+              <View style={styles.replyIndicator} />
+              <View style={styles.replyTextContainer}>
+                <Text style={styles.replyName}>
+                  Replying to {replyingTo.senderId === user?.id ? 'yourself' : otherUser?.fullName || 'User'}
+                </Text>
+                <LinkText
+                  text={replyingTo.text}
+                  style={styles.replyText}
+                  numberOfLines={1}
+                  selectable
+                />
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={() => setReplyingTo(null)}
+              style={styles.replyCancelButton}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              {sending ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Send size={20} color="#FFFFFF" />
-              )}
+              <X size={20} color={Colors.light.textSecondary} />
             </TouchableOpacity>
-          ) : (
-            // When not typing: Show Camera button
+          </View>
+        )}
+
+        {/* Input Container - WhatsApp Style with ultra smooth keyboard transition */}
+        <Animated.View
+          style={[
+            styles.inputContainer,
+            {
+              paddingBottom: keyboardAnim.interpolate({
+                inputRange: [0, 1000],
+                outputRange: [Math.max(insets.bottom, 8), 8],
+                extrapolate: 'clamp',
+              }),
+              marginBottom: Platform.OS === 'android' ? keyboardHeight : 0,
+            },
+          ]}
+        >
+          <View style={styles.inputWrapper}>
+            {/* Emoji Button - Always visible */}
             <TouchableOpacity
               style={styles.iconButton}
-              onPress={handleImagePicker}
+              onPress={() => setShowEmojiPicker(true)}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Paperclip size={24} color={Colors.light.textSecondary} />
+              <Smile size={24} color={Colors.light.textSecondary} />
             </TouchableOpacity>
-          )}
-        </View>
-      </Animated.View>
 
-      {/* Image Preview Modal */}
-      <Modal
-        visible={!!imagePreview}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setImagePreview(null)}
-      >
-        <View style={styles.imagePreviewModal}>
-          <View style={styles.imagePreviewContent}>
-            <View style={styles.imagePreviewHeader}>
-              <Text style={styles.imagePreviewTitle}>Preview Image</Text>
-              <TouchableOpacity onPress={() => setImagePreview(null)}>
-                <X size={24} color={Colors.light.text} />
-              </TouchableOpacity>
-            </View>
-            {imagePreview && (
-              <Image source={{ uri: imagePreview.uri }} style={styles.imagePreviewImage} />
-            )}
-            <View style={styles.imagePreviewActions}>
+            {/* Text Input */}
+            <TextInput
+              style={styles.input}
+              placeholder={replyingTo ? "Type a reply..." : "Message"}
+              placeholderTextColor={Colors.light.textSecondary}
+              value={inputText}
+              onChangeText={handleTextChange}
+              multiline
+              maxLength={1000}
+              onSubmitEditing={handleSend}
+              returnKeyType="default"
+              blurOnSubmit={false}
+              textAlignVertical="center"
+            />
+
+            {/* Right Side Buttons - Conditional based on typing state */}
+            {inputText.trim() ? (
+              // When typing: Show Send button
               <TouchableOpacity
-                style={[styles.imagePreviewButton, styles.imagePreviewCancelButton]}
-                onPress={() => setImagePreview(null)}
+                style={[
+                  styles.sendButton,
+                  sending && styles.sendButtonDisabled,
+                ]}
+                onPress={handleSend}
+                disabled={sending}
+                activeOpacity={0.7}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Text style={styles.imagePreviewCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.imagePreviewButton, styles.imagePreviewSendButton]}
-                onPress={handleSendWithImage}
-                disabled={uploadingImage}
-              >
-                {uploadingImage ? (
+                {sending ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.imagePreviewSendText}>Send</Text>
+                  <Send size={20} color="#FFFFFF" />
                 )}
               </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Full-Screen Image Viewer Modal - For viewing already-sent images */}
-      <Modal
-        visible={!!viewingImage}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setViewingImage(null)}
-      >
-        <View style={styles.imageViewerModal}>
-          {/* Close button - positioned with safe area insets */}
-          <TouchableOpacity
-            style={[styles.imageViewerCloseButton, { top: insets.top + 10 }]}
-            onPress={() => setViewingImage(null)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <X size={28} color="#FFFFFF" />
-          </TouchableOpacity>
-          
-          {/* Full-screen image */}
-          {viewingImage && (
-            <Image
-              source={{ uri: viewingImage }}
-              style={styles.imageViewerImage}
-              resizeMode="contain"
-            />
-          )}
-        </View>
-      </Modal>
-
-      {/* Emoji Picker Modal */}
-      <Modal
-        visible={showEmojiPicker}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowEmojiPicker(false)}
-      >
-        <View style={styles.emojiPickerModal}>
-          <View style={styles.emojiPickerContent}>
-            <View style={styles.emojiPickerHeader}>
-              <Text style={styles.emojiPickerTitle}>Choose an emoji</Text>
-              <TouchableOpacity onPress={() => setShowEmojiPicker(false)}>
-                <X size={24} color={Colors.light.text} />
+            ) : (
+              // When not typing: Show Camera button
+              <TouchableOpacity
+                style={styles.iconButton}
+                onPress={handleImagePicker}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Paperclip size={24} color={Colors.light.textSecondary} />
               </TouchableOpacity>
-            </View>
-            <ScrollView 
-              style={styles.emojiScrollView}
-              contentContainerStyle={styles.emojiGrid}
-              showsVerticalScrollIndicator={true}
-            >
-              {[
-                '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂',
-                '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩',
-                '😘', '😗', '😚', '😙', '😋', '😛', '😜', '🤪',
-                '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '🤐', '🤨',
-                '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥',
-                '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕',
-                '🤢', '🤮', '🤧', '🥵', '🥶', '😵', '😵‍💫', '🤯',
-                '🤠', '🥳', '😎', '🤓', '🧐', '😕', '😟', '🙁',
-                '☹️', '😮', '😯', '😲', '😳', '🥺', '😦', '😧',
-                '😨', '😰', '😥', '😢', '😭', '😱', '😖', '😣',
-                '😞', '😓', '😩', '😫', '🥱', '😤', '😡', '😠',
-                '🤬', '😈', '👿', '💀', '☠️', '💩', '🤡', '👹',
-                '👺', '👻', '👽', '👾', '🤖', '😺', '😸', '😹',
-                '😻', '😼', '😽', '🙀', '😿', '😾', '❤️', '🧡',
-                '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔',
-                '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝',
-                '👍', '👎', '👌', '✌️', '🤞', '🤟', '🤘', '🤙',
-                '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️', '💪',
-                '🦾', '🦿', '🦵', '🦶', '👂', '🦻', '👃', '🧠',
-                '🦷', '🦴', '👀', '👁️', '👅', '👄', '💋', '💘',
-                '💝', '💖', '💗', '💓', '💞', '💕', '❣️', '💔',
-                '❤️‍🔥', '❤️‍🩹', '🧡', '💛', '💚', '💙', '💜', '🖤',
-                '🤍', '🤎', '💯', '💢', '💥', '💫', '💦', '💨',
-                '🕳️', '💣', '💬', '👁️‍🗨️', '🗨️', '🗯️', '💭', '💤',
-                '👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤌', '🤏',
-                '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆',
-                '🖕', '👇', '☝️', '👍', '👎', '✊', '👊', '🤛',
-                '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️',
-                '💪', '🦾', '🦿', '🦵', '🦶', '👂', '🦻', '👃',
-              ].map((emoji, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.emojiButton}
-                  onPress={() => handleEmojiSelect(emoji)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.emojiText}>{emoji}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+            )}
           </View>
-        </View>
-      </Modal>
+        </Animated.View>
 
-      {/* Profile Action Sheet */}
-      {otherUser && (
-        <ProfileActionSheet
-          visible={showProfileActionSheet}
-          onClose={() => setShowProfileActionSheet(false)}
-          userId={otherUser.id}
-          userName={otherUser.fullName}
-        />
-      )}
+        {/* Image Preview Modal */}
+        <Modal
+          visible={!!imagePreview}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setImagePreview(null)}
+        >
+          <View style={styles.imagePreviewModal}>
+            <View style={styles.imagePreviewContent}>
+              <View style={styles.imagePreviewHeader}>
+                <Text style={styles.imagePreviewTitle}>Preview Image</Text>
+                <TouchableOpacity onPress={() => setImagePreview(null)}>
+                  <X size={24} color={Colors.light.text} />
+                </TouchableOpacity>
+              </View>
+              {imagePreview && (
+                <Image source={{ uri: imagePreview.uri }} style={styles.imagePreviewImage} />
+              )}
+              <View style={styles.imagePreviewActions}>
+                <TouchableOpacity
+                  style={[styles.imagePreviewButton, styles.imagePreviewCancelButton]}
+                  onPress={() => setImagePreview(null)}
+                >
+                  <Text style={styles.imagePreviewCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.imagePreviewButton, styles.imagePreviewSendButton]}
+                  onPress={handleSendWithImage}
+                  disabled={uploadingImage}
+                >
+                  {uploadingImage ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.imagePreviewSendText}>Send</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Full-Screen Image Viewer Modal - For viewing already-sent images */}
+        <Modal
+          visible={!!viewingImage}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setViewingImage(null)}
+        >
+          <View style={styles.imageViewerModal}>
+            {/* Close button - positioned with safe area insets */}
+            <TouchableOpacity
+              style={[styles.imageViewerCloseButton, { top: insets.top + 10 }]}
+              onPress={() => setViewingImage(null)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <X size={28} color="#FFFFFF" />
+            </TouchableOpacity>
+
+            {/* Full-screen image */}
+            {viewingImage && (
+              <Image
+                source={{ uri: viewingImage }}
+                style={styles.imageViewerImage}
+                resizeMode="contain"
+              />
+            )}
+          </View>
+        </Modal>
+
+        {/* Emoji Picker Modal */}
+        <Modal
+          visible={showEmojiPicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowEmojiPicker(false)}
+        >
+          <View style={styles.emojiPickerModal}>
+            <View style={styles.emojiPickerContent}>
+              <View style={styles.emojiPickerHeader}>
+                <Text style={styles.emojiPickerTitle}>Choose an emoji</Text>
+                <TouchableOpacity onPress={() => setShowEmojiPicker(false)}>
+                  <X size={24} color={Colors.light.text} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView
+                style={styles.emojiScrollView}
+                contentContainerStyle={styles.emojiGrid}
+                showsVerticalScrollIndicator={true}
+              >
+                {[
+                  '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂',
+                  '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩',
+                  '😘', '😗', '😚', '😙', '😋', '😛', '😜', '🤪',
+                  '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '🤐', '🤨',
+                  '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥',
+                  '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕',
+                  '🤢', '🤮', '🤧', '🥵', '🥶', '😵', '😵‍💫', '🤯',
+                  '🤠', '🥳', '😎', '🤓', '🧐', '😕', '😟', '🙁',
+                  '☹️', '😮', '😯', '😲', '😳', '🥺', '😦', '😧',
+                  '😨', '😰', '😥', '😢', '😭', '😱', '😖', '😣',
+                  '😞', '😓', '😩', '😫', '🥱', '😤', '😡', '😠',
+                  '🤬', '😈', '👿', '💀', '☠️', '💩', '🤡', '👹',
+                  '👺', '👻', '👽', '👾', '🤖', '😺', '😸', '😹',
+                  '😻', '😼', '😽', '🙀', '😿', '😾', '❤️', '🧡',
+                  '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔',
+                  '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝',
+                  '👍', '👎', '👌', '✌️', '🤞', '🤟', '🤘', '🤙',
+                  '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️', '💪',
+                  '🦾', '🦿', '🦵', '🦶', '👂', '🦻', '👃', '🧠',
+                  '🦷', '🦴', '👀', '👁️', '👅', '👄', '💋', '💘',
+                  '💝', '💖', '💗', '💓', '💞', '💕', '❣️', '💔',
+                  '❤️‍🔥', '❤️‍🩹', '🧡', '💛', '💚', '💙', '💜', '🖤',
+                  '🤍', '🤎', '💯', '💢', '💥', '💫', '💦', '💨',
+                  '🕳️', '💣', '💬', '👁️‍🗨️', '🗨️', '🗯️', '💭', '💤',
+                  '👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤌', '🤏',
+                  '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆',
+                  '🖕', '👇', '☝️', '👍', '👎', '✊', '👊', '🤛',
+                  '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️',
+                  '💪', '🦾', '🦿', '🦵', '🦶', '👂', '🦻', '👃',
+                ].map((emoji, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.emojiButton}
+                    onPress={() => handleEmojiSelect(emoji)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.emojiText}>{emoji}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Profile Action Sheet */}
+        {otherUser && (
+          <ProfileActionSheet
+            visible={showProfileActionSheet}
+            onClose={() => setShowProfileActionSheet(false)}
+            userId={otherUser.id}
+            userName={otherUser.fullName}
+          />
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

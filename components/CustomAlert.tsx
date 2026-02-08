@@ -3,7 +3,7 @@
  * Themed alert modal to replace native Alert.alert()
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -44,21 +44,20 @@ export default function CustomAlert({
   onConfirm, // NEW
   showCancel = false, // NEW
 }: CustomAlertProps) {
-  // Avoid noisy logs on every render (especially when hidden)
-  if (__DEV__ && visible) {
-    console.log('[CUSTOM ALERT] Rendering:', { visible, title, message });
-  }
+  useEffect(() => {
+    console.log('[CUSTOM ALERT] Visibility changed:', { visible, title, message, type });
+  }, [visible, title, message, type]);
 
   // NEW: Build buttons based on props
   const finalButtons: AlertButton[] = buttons || (
     showCancel && onConfirm
       ? [
-          { text: 'Cancel', style: 'cancel', onPress: onClose },
-          { text: 'Confirm', style: type === 'error' ? 'destructive' : 'default', onPress: onConfirm },
-        ]
+        { text: 'Cancel', style: 'cancel', onPress: onClose },
+        { text: 'Confirm', style: type === 'error' ? 'destructive' : 'default', onPress: onConfirm },
+      ]
       : [{ text: 'OK', style: 'default', onPress: onClose }]
   );
-  
+
   const getIcon = () => {
     const iconSize = 48;
     switch (type) {

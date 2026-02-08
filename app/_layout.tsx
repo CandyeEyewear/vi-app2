@@ -24,6 +24,7 @@ import { setupFCMHandlers } from '../services/fcmNotifications';
 import { setupWebNotificationHandler, setWebNotificationHandler } from '../services/webNotifications';
 import { useAlert } from '../hooks/useAlert';
 import CustomAlert from '../components/CustomAlert';
+import { AlertProvider } from '../contexts/AlertContext';
 import { isWeb } from '../utils/platform';
 
 Sentry.init({
@@ -36,7 +37,7 @@ Sentry.init({
 if (isWeb) {
   try {
     require('../global.css');
-  } catch {}
+  } catch { }
 }
 
 // Import splash screen with error handling
@@ -103,7 +104,7 @@ function AppContent() {
   useEffect(() => {
     if (!isInitializing && SplashScreen) {
       const timer = setTimeout(() => {
-        SplashScreen.hideAsync().catch(() => {});
+        SplashScreen.hideAsync().catch(() => { });
       }, 300);
       return () => clearTimeout(timer);
     }
@@ -176,9 +177,9 @@ function AppContent() {
           message: config.message,
           buttons: config.onPress
             ? [
-                { text: 'View', style: 'default', onPress: config.onPress },
-                { text: 'Dismiss', style: 'cancel' },
-              ]
+              { text: 'View', style: 'default', onPress: config.onPress },
+              { text: 'Dismiss', style: 'cancel' },
+            ]
             : [{ text: 'OK', style: 'default' }],
         });
       });
@@ -213,7 +214,7 @@ function AppContent() {
 
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data;
-      
+
       if (data.type && data.id) {
         switch (data.type) {
           case 'circle_request':
@@ -254,10 +255,10 @@ function AppContent() {
     // Handle deep links for payment redirects and other URLs
     const handleDeepLink = (url: string) => {
       if (!url) return;
-      
+
       logger.info('[DEEP LINK] Received URL', { url });
       const parsed = Linking.parse(url);
-      
+
       // Handle payment redirects (vibe://payment/success or vibe://payment/cancel)
       if (parsed.scheme === 'vibe' && parsed.path) {
         if (parsed.path.includes('payment/success')) {
@@ -265,14 +266,14 @@ function AppContent() {
           const orderId = parsed.queryParams?.orderId;
           const returnPathRaw = parsed.queryParams?.returnPath || parsed.queryParams?.return_path;
           const returnPath = Array.isArray(returnPathRaw) ? returnPathRaw[0] : returnPathRaw;
-          
-          logger.info('[DEEP LINK] Payment success redirect detected - navigating to success page first', { 
-            path: parsed.path, 
+
+          logger.info('[DEEP LINK] Payment success redirect detected - navigating to success page first', {
+            path: parsed.path,
             orderId,
             returnPathRaw,
             returnPath
           });
-          
+
           // Refresh user data to get updated membership status
           if (refreshUser) {
             logger.info('[DEEP LINK] Refreshing user data after payment success...');
@@ -280,7 +281,7 @@ function AppContent() {
               logger.error('[DEEP LINK] Error refreshing user after payment:', error);
             });
           }
-          
+
           // Navigate to success page first, which will then redirect to returnPath after countdown
           const successParams: any = {};
           if (orderId) {
@@ -290,7 +291,7 @@ function AppContent() {
           if (returnPath) {
             successParams.returnPath = returnPath;
           }
-          
+
           router.replace({
             pathname: '/payment/success',
             params: successParams
@@ -305,7 +306,7 @@ function AppContent() {
           const returnPathRaw = parsed.queryParams?.returnPath || parsed.queryParams?.return_path;
           const returnPath = Array.isArray(returnPathRaw) ? returnPathRaw[0] : returnPathRaw;
 
-          logger.info('[DEEP LINK] Payment cancel redirect detected', { 
+          logger.info('[DEEP LINK] Payment cancel redirect detected', {
             path: parsed.path,
             orderId: orderIdValue,
             returnPathRaw,
@@ -321,7 +322,7 @@ function AppContent() {
           return;
         }
       }
-      
+
       // Handle web URLs
       if (parsed.hostname === 'vibe.volunteersinc.org' || parsed.scheme === 'vibe') {
         if (parsed.path === '/invite' || parsed.path?.includes('invite')) {
@@ -334,7 +335,7 @@ function AppContent() {
           }
         }
       }
-      
+
       logger.info('[DEEP LINK] Letting expo-router handle', { url });
     };
 
@@ -416,15 +417,17 @@ export default function RootLayout() {
         <AuthProvider>
           <FeedProvider>
             <MessagingProvider>
-              {isWeb ? (
-                <MobileWebSafeContainer>
-                  <AppContent />
-                </MobileWebSafeContainer>
-              ) : (
-                <View style={styles.container}>
-                  <AppContent />
-                </View>
-              )}
+              <AlertProvider>
+                {isWeb ? (
+                  <MobileWebSafeContainer>
+                    <AppContent />
+                  </MobileWebSafeContainer>
+                ) : (
+                  <View style={styles.container}>
+                    <AppContent />
+                  </View>
+                )}
+              </AlertProvider>
             </MessagingProvider>
           </FeedProvider>
         </AuthProvider>
@@ -442,13 +445,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#0944a2',
     ...(Platform.OS === 'web'
       ? {
-          position: 'fixed' as any,
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 9999,
-        }
+        position: 'fixed' as any,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 9999,
+      }
       : {}),
   },
   splashImage: {

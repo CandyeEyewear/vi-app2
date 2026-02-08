@@ -85,15 +85,15 @@ export default function ViewProfileScreen() {
   const [hasIncomingRequest, setHasIncomingRequest] = useState(false);
   const [circleLoading, setCircleLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('posts');
-  
+
   // Posts tab state
   const [userPosts, setUserPosts] = useState<Post[]>([]);
   const [postsLoading, setPostsLoading] = useState(false);
-  
+
   // Check-ins tab state
   const [checkIns, setCheckIns] = useState<CheckInData[]>([]);
   const [checkInsLoading, setCheckInsLoading] = useState(false);
-  
+
   // Shoutouts state
   const [shoutoutsReceived, setShoutoutsReceived] = useState(0);
 
@@ -225,7 +225,7 @@ export default function ViewProfileScreen() {
         .select('status')
         .eq('user_id', currentUser.id)
         .eq('circle_user_id', profileUser?.id || slug)
-        .single();
+        .maybeSingle(); // Changed from .single() to .maybeSingle()
 
       if (outgoingError && outgoingError.code !== 'PGRST116') {
         console.error('Error checking outgoing circle status:', outgoingError);
@@ -244,7 +244,7 @@ export default function ViewProfileScreen() {
         .eq('user_id', profileUser?.id || slug)
         .eq('circle_user_id', currentUser.id)
         .eq('status', 'pending')
-        .single();
+        .maybeSingle(); // Changed from .single() to .maybeSingle()
 
       if (incomingError && incomingError.code !== 'PGRST116') {
         console.error('Error checking incoming circle status:', incomingError);
@@ -258,10 +258,10 @@ export default function ViewProfileScreen() {
 
   const loadUserPosts = async () => {
     if (!profileUser) return;
-    
+
     try {
       setPostsLoading(true);
-      
+
       // Query posts where user_id = profile_user_id
       const { data: postsData, error } = await supabase
         .from('posts')
@@ -424,14 +424,14 @@ export default function ViewProfileScreen() {
 
   const loadShoutoutsReceived = async () => {
     if (!profileUser) return;
-    
+
     try {
       const { count, error } = await supabase
         .from('posts')
         .select('*', { count: 'exact', head: true })
         .eq('post_type', 'shoutout')
         .eq('shoutout_user_id', profileUser.id);
-      
+
       if (error) throw error;
       setShoutoutsReceived(count || 0);
     } catch (error) {
@@ -482,6 +482,8 @@ export default function ViewProfileScreen() {
         message: `${currentUser.fullName} wants to add you to their circle`,
         link: `/profile/${currentUser.id}`,
         related_id: currentUser.id,
+        is_read: false, // Added missing column
+        created_at: new Date().toISOString(), // Added missing column
       });
 
       try {
@@ -809,7 +811,7 @@ export default function ViewProfileScreen() {
             {/* Organization Details */}
             <View style={[styles.aboutSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <Text style={[styles.aboutSectionTitle, { color: colors.text }]}>Organization Details</Text>
-              
+
               {profileUser?.organization_data?.registration_number && (
                 <View style={styles.orgDetailRow}>
                   <Text style={[styles.orgDetailLabel, { color: colors.textSecondary }]}>Registration Number:</Text>
@@ -818,7 +820,7 @@ export default function ViewProfileScreen() {
                   </Text>
                 </View>
               )}
-              
+
               {profileUser?.organization_data?.organization_size && (
                 <View style={styles.orgDetailRow}>
                   <Text style={[styles.orgDetailLabel, { color: colors.textSecondary }]}>Organization Size:</Text>
@@ -827,7 +829,7 @@ export default function ViewProfileScreen() {
                   </Text>
                 </View>
               )}
-              
+
               {profileUser?.organization_data?.contact_person_name && (
                 <View style={styles.orgDetailRow}>
                   <Text style={[styles.orgDetailLabel, { color: colors.textSecondary }]}>Contact Person:</Text>

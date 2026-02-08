@@ -1,9 +1,9 @@
 /**
  * Search Screen
- * Search for users by full name, first name, or last name
+ * Find volunteers with server-side debounced search.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -29,6 +29,11 @@ interface SearchUser {
   avatar_url: string | null;
 }
 
+const SEARCH_LIMIT = 50;
+const SEARCH_DEBOUNCE_MS = 250;
+
+const escapeLike = (value: string) => value.replace(/[%_]/g, '\\$&');
+
 export default function SearchScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
@@ -38,208 +43,196 @@ export default function SearchScreen() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchUser[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [allUsers, setAllUsers] = useState<SearchUser[]>([]);
   const [pendingRequests, setPendingRequests] = useState<SearchUser[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const requestIdRef = useRef(0);
 
-  // Load all users and pending requests on mount
-   useEffect(() => {
-     loadAllUsers();
-     loadPendingRequests();
-   }, []);
-
-  // Search when query changes
-  useEffect(() => {
-    if (searchQuery.trim()) {
-      performSearch(searchQuery);
-    } else {
-      setSearchResults(allUsers);
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
     }
-  }, [searchQuery, allUsers]);
-
-  const loadAllUsers = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, full_name, location, avatar_url')
-        .neq('id', user?.id) // Exclude current user
-        .order('full_name', { ascending: true });
-
-
-      if (error) throw error;
-
-      setAllUsers(data || []);
-      setSearchResults(data || []);
-    } catch (error) {
-      console.error('Error loading users:', error);
-    } finally {
-      setLoading(false);
-    }
+    router.replace('/(tabs)/messages');
   };
 
-const loadPendingRequests = async () => {
-  try {
-    // First, get the pending circle requests
-    const { data: circleData, error: circleError } = await supabase
-      .from('user_circles')
-      .select('user_id')
-      .eq('circle_user_id', user?.id)
-      .eq('status', 'pending');
-
-    if (circleError) throw circleError;
-
-    if (!circleData || circleData.length === 0) {
+  useEffect(() => {
+    if (!user?.id) {
+      setSearchResults([]);
       setPendingRequests([]);
+      setLoadingUsers(false);
+      setLoadingRequests(false);
       return;
     }
 
-    // Extract user IDs
-    const userIds = circleData.map(item => item.user_id);
+    const timeout = setTimeout(() => {
+      loadUsers(user.id, searchQuery);
+    }, SEARCH_DEBOUNCE_MS);
 
-    // Then, fetch user details for those IDs
-    const { data: usersData, error: usersError } = await supabase
-      .from('users')
-      .select('id, full_name, location, avatar_url')
-      .in('id', userIds);
+    return () => clearTimeout(timeout);
+  }, [user?.id, searchQuery]);
 
-    if (usersError) throw usersError;
+  useEffect(() => {
+    if (!user?.id) return;
+    loadPendingRequests(user.id);
+  }, [user?.id]);
 
-    const requests: SearchUser[] = usersData?.map((user: any) => ({
-      id: user.id,
-      full_name: user.full_name,
-      location: user.location,
-      avatar_url: user.avatar_url,
-    })) || [];
+  const loadUsers = async (currentUserId: string, rawQuery: string) => {
+    const requestId = ++requestIdRef.current;
+    setLoadingUsers(true);
 
-    setPendingRequests(requests);
-  } catch (error) {
-    console.error('Error loading pending requests:', error);
-  }
-};  const performSearch = (query: string) => {
-    const lowerQuery = query.toLowerCase().trim();
-    
-    const filtered = allUsers.filter(user => {
-      const fullName = user.full_name.toLowerCase();
-      const nameParts = fullName.split(' ');
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts[nameParts.length - 1] || '';
+    try {
+      const query = rawQuery.trim();
+      let dbQuery = supabase
+        .from('users')
+        .select('id, full_name, location, avatar_url')
+        .neq('id', currentUserId)
+        .order('full_name', { ascending: true })
+        .limit(SEARCH_LIMIT);
 
-      // Search by full name, first name, or last name
-      return (
-        fullName.includes(lowerQuery) ||
-        firstName.includes(lowerQuery) ||
-        lastName.includes(lowerQuery)
-      );
-    });
+      if (query.length > 0) {
+        dbQuery = dbQuery.ilike('full_name', `%${escapeLike(query)}%`);
+      }
 
+      const { data, error } = await dbQuery;
+      if (error) throw error;
 
-
-    setSearchResults(filtered);
+      // Ignore stale responses from older requests.
+      if (requestId !== requestIdRef.current) return;
+      setSearchResults((data || []) as SearchUser[]);
+    } catch (error) {
+      console.error('Error loading users:', error);
+      if (requestId === requestIdRef.current) {
+        setSearchResults([]);
+      }
+    } finally {
+      if (requestId === requestIdRef.current) {
+        setLoadingUsers(false);
+      }
+    }
   };
 
-const handleAcceptRequest = async (requestUserId: string) => {
-     try {
-       // Step 1: Accept the incoming request (A→B)
-       const { error: acceptError } = await supabase
-         .from('user_circles')
-         .update({ status: 'accepted' })
-         .eq('user_id', requestUserId)
-         .eq('circle_user_id', user?.id)
-         .eq('status', 'pending');
+  const loadPendingRequests = async (currentUserId: string) => {
+    setLoadingRequests(true);
+    try {
+      const { data: circleData, error: circleError } = await supabase
+        .from('user_circles')
+        .select('user_id')
+        .eq('circle_user_id', currentUserId)
+        .eq('status', 'pending');
+      if (circleError) throw circleError;
 
-       if (acceptError) throw acceptError;
+      if (!circleData || circleData.length === 0) {
+        setPendingRequests([]);
+        return;
+      }
 
-       // Step 2: Create the reverse relationship (B→A)
-       const { error: reverseError } = await supabase
-         .from('user_circles')
-         .insert({
-           user_id: user?.id,
-           circle_user_id: requestUserId,
-           status: 'accepted',
-         });
+      const userIds = circleData.map((item) => item.user_id);
 
-       if (reverseError) throw reverseError;
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('id, full_name, location, avatar_url')
+        .in('id', userIds);
+      if (usersError) throw usersError;
 
-       // Reload pending requests to refresh the list
-       await loadPendingRequests();
-       
-       // Show success message
-       console.log('Request accepted!');
-     } catch (error) {
-       console.error('Error accepting request:', error);
-     }
-   };
+      setPendingRequests((usersData || []) as SearchUser[]);
+    } catch (error) {
+      console.error('Error loading pending requests:', error);
+      setPendingRequests([]);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
 
-   const handleRejectRequest = async (requestUserId: string) => {
-     try {
-       // Delete the incoming request (A→B)
-       const { error: deleteError } = await supabase
-         .from('user_circles')
-         .delete()
-         .eq('user_id', requestUserId)
-         .eq('circle_user_id', user?.id);
+  const handleAcceptRequest = async (requestUserId: string) => {
+    if (!user?.id) return;
 
-       if (deleteError) throw deleteError;
+    try {
+      const { error: acceptError } = await supabase
+        .from('user_circles')
+        .update({ status: 'accepted' })
+        .eq('user_id', requestUserId)
+        .eq('circle_user_id', user.id)
+        .eq('status', 'pending');
+      if (acceptError) throw acceptError;
 
-       // Also delete any reverse relationship (B→A) if it exists
-       await supabase
-         .from('user_circles')
-         .delete()
-         .eq('user_id', user?.id)
-         .eq('circle_user_id', requestUserId);
+      const { error: reverseError } = await supabase
+        .from('user_circles')
+        .insert({
+          user_id: user.id,
+          circle_user_id: requestUserId,
+          status: 'accepted',
+        });
+      if (reverseError) throw reverseError;
 
-       // Reload pending requests to refresh the list
-       await loadPendingRequests();
-       
-       // Show success message
-       console.log('Request rejected!');
-     } catch (error) {
-       console.error('Error rejecting request:', error);
-     }
-   };
+      await loadPendingRequests(user.id);
+    } catch (error) {
+      console.error('Error accepting request:', error);
+    }
+  };
 
-const renderPendingRequest = ({ item }: { item: SearchUser }) => (
-     <View style={[styles.requestCard, { backgroundColor: colors.background, borderColor: colors.primary }]}>
-       <View style={styles.requestInfo}>
-         {item.avatar_url ? (
-           <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
-         ) : (
-           <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: colors.primary }]}>
-             <Text style={styles.avatarText}>
-               {item.full_name.charAt(0).toUpperCase()}
-             </Text>
-           </View>
-         )}
-         <View style={styles.userDetails}>
-           <Text style={[styles.userName, { color: colors.text }]}>{item.full_name}</Text>
-           {item.location && (
-             <Text style={[styles.userLocation, { color: colors.textSecondary }]}>{item.location}</Text>
-           )}
-           <Text style={[styles.requestLabel, { color: colors.primary }]}>wants to add you to their circle</Text>
-         </View>
-       </View>
-       <View style={styles.requestActions}>
-         <TouchableOpacity
-           style={[styles.acceptButton, { backgroundColor: colors.primary }]}
-           onPress={() => handleAcceptRequest(item.id)}
-         >
-           <Text style={styles.acceptButtonText}>Accept</Text>
-         </TouchableOpacity>
-         <TouchableOpacity
-           style={[styles.rejectButton, { borderColor: colors.border }]}
-           onPress={() => handleRejectRequest(item.id)}
-         >
-           <Text style={[styles.rejectButtonText, { color: colors.textSecondary }]}>Reject</Text>
-         </TouchableOpacity>
-       </View>
-     </View>
-   );
+  const handleRejectRequest = async (requestUserId: string) => {
+    if (!user?.id) return;
+
+    try {
+      const { error: deleteError } = await supabase
+        .from('user_circles')
+        .delete()
+        .eq('user_id', requestUserId)
+        .eq('circle_user_id', user.id);
+      if (deleteError) throw deleteError;
+
+      await supabase
+        .from('user_circles')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('circle_user_id', requestUserId);
+
+      await loadPendingRequests(user.id);
+    } catch (error) {
+      console.error('Error rejecting request:', error);
+    }
+  };
+
+  const renderPendingRequest = (item: SearchUser) => (
+    <View style={[styles.requestCard, { backgroundColor: colors.background, borderColor: colors.primary }]}>
+      <View style={styles.requestInfo}>
+        {item.avatar_url ? (
+          <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
+        ) : (
+          <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: colors.primary }]}>
+            <Text style={styles.avatarText}>{item.full_name.charAt(0).toUpperCase()}</Text>
+          </View>
+        )}
+        <View style={styles.userDetails}>
+          <Text style={[styles.userName, { color: colors.text }]}>{item.full_name}</Text>
+          {item.location ? (
+            <Text style={[styles.userLocation, { color: colors.textSecondary }]}>{item.location}</Text>
+          ) : null}
+          <Text style={[styles.requestLabel, { color: colors.primary }]}>wants to add you to their circle</Text>
+        </View>
+      </View>
+      <View style={styles.requestActions}>
+        <TouchableOpacity
+          style={[styles.acceptButton, { backgroundColor: colors.primary }]}
+          onPress={() => handleAcceptRequest(item.id)}
+        >
+          <Text style={styles.acceptButtonText}>Accept</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.rejectButton, { borderColor: colors.border }]}
+          onPress={() => handleRejectRequest(item.id)}
+        >
+          <Text style={[styles.rejectButtonText, { color: colors.textSecondary }]}>Reject</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 
   const renderUser = ({ item }: { item: SearchUser }) => (
     <TouchableOpacity
       style={[styles.userCard, { backgroundColor: colors.background, borderBottomColor: colors.border }]}
-      onPress={() => router.push(`/profile/${item.slug || item.id}`)}
+      onPress={() => router.push(`/profile/${item.id}` as any)}
       activeOpacity={0.7}
     >
       <View style={styles.userInfo}>
@@ -247,97 +240,93 @@ const renderPendingRequest = ({ item }: { item: SearchUser }) => (
           <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
         ) : (
           <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: colors.primary }]}>
-            <Text style={styles.avatarText}>
-              {item.full_name.charAt(0).toUpperCase()}
-            </Text>
+            <Text style={styles.avatarText}>{item.full_name.charAt(0).toUpperCase()}</Text>
           </View>
         )}
         <View style={styles.userDetails}>
           <Text style={[styles.userName, { color: colors.text }]}>{item.full_name}</Text>
-          {item.location && (
+          {item.location ? (
             <Text style={[styles.userLocation, { color: colors.textSecondary }]}>{item.location}</Text>
-          )}
+          ) : null}
         </View>
       </View>
       <UserPlus size={20} color={colors.primary} />
     </TouchableOpacity>
   );
 
+  const pendingHeader = useMemo(() => {
+    if (pendingRequests.length === 0 || searchQuery.trim().length > 0) return null;
+    return (
+      <View>
+        <Text style={[styles.sectionHeader, { color: colors.text }]}>
+          Circle Requests ({pendingRequests.length})
+        </Text>
+        {pendingRequests.map((request) => (
+          <View key={request.id}>
+            {renderPendingRequest(request)}
+          </View>
+        ))}
+        <Text style={[styles.sectionHeader, { color: colors.text, marginTop: 16 }]}>All Volunteers</Text>
+      </View>
+    );
+  }, [pendingRequests, searchQuery, colors.text, colors.textSecondary, colors.primary, colors.border, colors.background]);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.card }]}>
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 12, backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+      <View
+        style={[
+          styles.header,
+          { paddingTop: insets.top + 12, backgroundColor: colors.background, borderBottomColor: colors.border },
+        ]}
+      >
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <ChevronLeft size={28} color={colors.primary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Find Volunteers</Text>
         <View style={{ width: 40 }} />
       </View>
 
-    {/* Search Input */}
-   <View style={[styles.searchContainer, { backgroundColor: colors.background }]}>
-     <View style={[styles.searchInputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-       <SearchIcon size={20} color={colors.textSecondary} />
-       <TextInput
-         style={[styles.searchInput, { color: colors.text }]}
-         placeholder="Search by name..."
-         placeholderTextColor={colors.textSecondary}
-         value={searchQuery}
-         onChangeText={(text) => {
-           console.log('Typing:', text); // Debug log
-           setSearchQuery(text);
-         }}
-         autoFocus
-         returnKeyType="search"
-       />
-     </View>
-   </View>
+      <View style={[styles.searchContainer, { backgroundColor: colors.background }]}>
+        <View style={[styles.searchInputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <SearchIcon size={20} color={colors.textSecondary} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.text }]}
+            placeholder="Search by name..."
+            placeholderTextColor={colors.textSecondary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoFocus
+            returnKeyType="search"
+          />
+        </View>
+      </View>
 
-      {/* Results */}
-      {loading ? (
+      {loadingUsers || loadingRequests ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
-       <FlatList
-     data={searchResults}
-     keyExtractor={(item) => item.id}
-     renderItem={renderUser}
-     contentContainerStyle={styles.listContent}
-     ListHeaderComponent={
-       pendingRequests.length > 0 ? (
-         <View>
-           <Text style={[styles.sectionHeader, { color: colors.text }]}>
-             Circle Requests ({pendingRequests.length})
-           </Text>
-           {pendingRequests.map((request) => (
-             <View key={request.id}>
-               {renderPendingRequest({ item: request })}
-             </View>
-           ))}
-           <Text style={[styles.sectionHeader, { color: colors.text, marginTop: 16 }]}>
-             All Volunteers
-           </Text>
-         </View>
-       ) : null
-     }
-     ListEmptyComponent={
-       <View style={styles.emptyContainer}>
-         <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-           {searchQuery ? 'No volunteers found' : 'No volunteers available'}
-         </Text>
-       </View>
-     }
-   />
+        <FlatList
+          data={searchResults}
+          keyExtractor={(item) => item.id}
+          renderItem={renderUser}
+          contentContainerStyle={styles.listContent}
+          ListHeaderComponent={pendingHeader}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                {searchQuery ? 'No volunteers found' : 'No volunteers available'}
+              </Text>
+            </View>
+          }
+        />
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -356,19 +345,19 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   searchContainer: {
-     paddingHorizontal: 16,
-     paddingVertical: 12,
-   },
-   searchInputContainer: {
-     flexDirection: 'row',
-     alignItems: 'center',
-     paddingHorizontal: 12,
-     paddingVertical: 8,
-     borderRadius: 8,
-     borderWidth: 1,
-     gap: 8,
-   },
-     searchInput: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 8,
+  },
+  searchInput: {
     flex: 1,
     fontSize: 16,
     paddingVertical: 8,
@@ -429,54 +418,54 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
   },
-sectionHeader: {
-     fontSize: 18,
-     fontWeight: 'bold',
-     paddingHorizontal: 4,
-     paddingVertical: 12,
-   },
-   requestCard: {
-     backgroundColor: Colors.light.background,
-     padding: 16,
-     borderRadius: 12,
-     marginBottom: 12,
-     borderWidth: 2,
-   },
-   requestInfo: {
-     flexDirection: 'row',
-     alignItems: 'center',
-     marginBottom: 12,
-   },
-   requestLabel: {
-     fontSize: 13,
-     fontWeight: '600',
-     marginTop: 4,
-   },
-   requestActions: {
-     flexDirection: 'row',
-     gap: 12,
-   },
-   acceptButton: {
-     flex: 1,
-     paddingVertical: 10,
-     borderRadius: 8,
-     alignItems: 'center',
-   },
-   acceptButtonText: {
-     fontSize: 15,
-     fontWeight: '600',
-     color: '#FFFFFF',
-   },
-   rejectButton: {
-     flex: 1,
-     paddingVertical: 10,
-     borderRadius: 8,
-     alignItems: 'center',
-     backgroundColor: Colors.light.card,
-     borderWidth: 1,
-   },
-   rejectButtonText: {
-     fontSize: 15,
-     fontWeight: '600',
-   },
+  sectionHeader: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    paddingHorizontal: 4,
+    paddingVertical: 12,
+  },
+  requestCard: {
+    backgroundColor: Colors.light.background,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 2,
+  },
+  requestInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  requestLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  requestActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  acceptButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  acceptButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  rejectButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: Colors.light.card,
+    borderWidth: 1,
+  },
+  rejectButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
 });

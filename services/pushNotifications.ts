@@ -281,9 +281,24 @@ async function sendFCMNotificationViaEdgeFunction(
   data?: any
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) {
+      console.error('[FCM] ❌ Failed to get session:', sessionError);
+      return { success: false, error: sessionError.message };
+    }
+
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) {
+      console.error('[FCM] ❌ No active auth session for Edge Function call');
+      return { success: false, error: 'Not authenticated' };
+    }
+
     const { data: result, error } = await supabase.functions.invoke(
       'send-fcm-notification',
       {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: { userId, title, body, data },
       }
     );
