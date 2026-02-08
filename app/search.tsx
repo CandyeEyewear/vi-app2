@@ -276,7 +276,11 @@ export default function SearchScreen() {
       <View
         style={[
           styles.header,
-          { paddingTop: insets.top + 12, backgroundColor: colors.background, borderBottomColor: colors.border },
+          {
+            paddingTop: insets.top + 12,
+            backgroundColor: colors.background,
+            borderBottomColor: colors.border,
+          },
         ]}
       >
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
@@ -287,7 +291,12 @@ export default function SearchScreen() {
       </View>
 
       <View style={[styles.searchContainer, { backgroundColor: colors.background }]}>
-        <View style={[styles.searchInputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View
+          style={[
+            styles.searchInputContainer,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+        >
           <SearchIcon size={20} color={colors.textSecondary} />
           <TextInput
             style={[styles.searchInput, { color: colors.text }]}
