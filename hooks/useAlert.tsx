@@ -14,33 +14,10 @@ interface AlertConfig {
   buttons?: AlertButton[];
 }
 
+import { useAlertContext } from '../contexts/AlertContext';
+
 export function useAlert() {
-  const [alertConfig, setAlertConfig] = useState<AlertConfig | null>(null);
-  const [visible, setVisible] = useState(false);
-
-  const showAlert = useCallback((config: AlertConfig) => {
-    setAlertConfig(config);
-    setVisible(true);
-  }, []);
-
-  const hideAlert = useCallback(() => {
-    setVisible(false);
-    // Clear config after animation
-    setTimeout(() => setAlertConfig(null), 300);
-  }, []);
-
-  return {
-    alertProps: {
-      visible,
-      type: alertConfig?.type || 'info',
-      title: alertConfig?.title || '',
-      message: alertConfig?.message,
-      buttons: alertConfig?.buttons,
-      onClose: hideAlert,
-    },
-    showAlert,
-    hideAlert,
-  };
+  return useAlertContext();
 }
 
 // ---- Standardized helpers (consistent titles + default buttons) ----

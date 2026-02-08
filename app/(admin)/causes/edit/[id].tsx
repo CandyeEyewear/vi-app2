@@ -105,8 +105,12 @@ export default function EditCauseScreen() {
   const [isFeatured, setIsFeatured] = useState(false);
   const [visibility, setVisibility] = useState<VisibilityType>('public');
   const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
-  
+
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Notification state
+  const [notifyUsers, setNotifyUsers] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState('');
 
   // Alert state
   const [alertVisible, setAlertVisible] = useState(false);
@@ -348,10 +352,31 @@ export default function EditCauseScreen() {
 
       if (error) throw error;
 
+      if (error) throw error;
+
+      // Handle Notifications
+      if (notifyUsers) {
+        try {
+          const { error: notifyError } = await supabase.rpc('notify_cause_update', {
+            p_cause_id: id,
+            p_title: title.trim(),
+            p_changes: updateMessage.trim() || 'Details have been updated.'
+          });
+
+          if (notifyError) {
+            console.error('Error sending notifications:', notifyError);
+            showAlert('warning', 'Saved with Warning', 'Cause updated but failed to notify donors.', () => router.back());
+            return;
+          }
+        } catch (err) {
+          console.error('Notification exception:', err);
+        }
+      }
+
       showAlert(
         'success',
         'Success! ✅',
-        'Cause has been updated successfully.',
+        'Cause has been updated successfully' + (notifyUsers ? ' and donors notified.' : '.'),
         () => router.back()
       );
     } catch (error) {
@@ -417,333 +442,376 @@ export default function EditCauseScreen() {
 
       <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <WebContainer>
-        <ScrollView
-          style={styles.scrollView}
+          <ScrollView
+            style={styles.scrollView}
             contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Status */}
-          <View style={styles.section}>
-            <Text style={[styles.label, { color: colors.text }]}>Status</Text>
-            <TouchableOpacity
-              style={[styles.selector, { backgroundColor: colors.card, borderColor: colors.border }]}
-              onPress={() => setShowStatusPicker(!showStatusPicker)}
-            >
-              <View style={[styles.statusDot, { backgroundColor: selectedStatus?.color }]} />
-              <Text style={[styles.selectorText, { color: colors.text }]}>
-                {selectedStatus?.label}
-              </Text>
-              <ChevronDown size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-
-            {showStatusPicker && (
-              <View style={[styles.pickerOptions, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                {STATUS_OPTIONS.map((option) => (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[
-                      styles.pickerOption,
-                      status === option.value && { backgroundColor: colors.background },
-                    ]}
-                    onPress={() => {
-                      setStatus(option.value);
-                      setShowStatusPicker(false);
-                    }}
-                  >
-                    <View style={styles.statusOptionRow}>
-                      <View style={[styles.statusDot, { backgroundColor: option.color }]} />
-                      <Text style={[styles.pickerOptionText, { color: colors.text }]}>
-                        {option.label}
-                      </Text>
-                    </View>
-                    {status === option.value && <Check size={20} color="#38B6FF" />}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </View>
-
-          {/* Title */}
-          <View style={styles.section}>
-            <Text style={[styles.label, { color: colors.text }]}>
-              Title <Text style={styles.required}>*</Text>
-            </Text>
-            <View style={[
-              styles.inputContainer, 
-              { backgroundColor: colors.card, borderColor: errors.title ? colors.error : colors.border }
-            ]}>
-              <Heart size={20} color={colors.textSecondary} />
-              <TextInput
-                style={[styles.input, { color: colors.text }]}
-                placeholder="Give your cause a compelling title"
-                placeholderTextColor={colors.textSecondary}
-                value={title}
-                onChangeText={setTitle}
-                maxLength={100}
-              />
-            </View>
-            {errors.title && (
-              <Text style={[styles.errorMessage, { color: colors.error }]}>{errors.title}</Text>
-            )}
-          </View>
-
-          {/* Description */}
-          <View style={styles.section}>
-            <Text style={[styles.label, { color: colors.text }]}>
-              Description <Text style={styles.required}>*</Text>
-            </Text>
-            <View style={[
-              styles.textAreaContainer, 
-              { backgroundColor: colors.card, borderColor: errors.description ? colors.error : colors.border }
-            ]}>
-              <TextInput
-                style={[styles.textArea, { color: colors.text }]}
-                placeholder="Describe your cause..."
-                placeholderTextColor={colors.textSecondary}
-                value={description}
-                onChangeText={setDescription}
-                multiline
-                numberOfLines={5}
-                maxLength={2000}
-                textAlignVertical="top"
-              />
-            </View>
-            {errors.description && (
-              <Text style={[styles.errorMessage, { color: colors.error }]}>{errors.description}</Text>
-            )}
-          </View>
-
-          {/* Category */}
-          <View style={styles.section}>
-            <Text style={[styles.label, { color: colors.text }]}>Category</Text>
-            <TouchableOpacity
-              style={[styles.selector, { backgroundColor: colors.card, borderColor: colors.border }]}
-              onPress={() => setShowCategoryPicker(!showCategoryPicker)}
-            >
-              <Text style={[styles.selectorText, { color: colors.text }]}>
-                {selectedCategory?.emoji} {selectedCategory?.label}
-              </Text>
-              <ChevronDown size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-
-            {showCategoryPicker && (
-              <View style={[styles.pickerOptions, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                {CATEGORY_OPTIONS.map((option) => (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[
-                      styles.pickerOption,
-                      category === option.value && { backgroundColor: colors.background },
-                    ]}
-                    onPress={() => {
-                      setCategory(option.value);
-                      setShowCategoryPicker(false);
-                    }}
-                  >
-                    <Text style={[styles.pickerOptionText, { color: colors.text }]}>
-                      {option.emoji} {option.label}
-                    </Text>
-                    {category === option.value && <Check size={20} color="#38B6FF" />}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </View>
-
-          {/* Goal Amount */}
-          <View style={styles.section}>
-            <Text style={[styles.label, { color: colors.text }]}>
-              Fundraising Goal (JMD) <Text style={styles.required}>*</Text>
-            </Text>
-            <View style={[
-              styles.inputContainer, 
-              { backgroundColor: colors.card, borderColor: errors.goalAmount ? colors.error : colors.border }
-            ]}>
-              <Target size={20} color={colors.textSecondary} />
-              <Text style={[styles.currencyPrefix, { color: colors.textSecondary }]}>J$</Text>
-              <TextInput
-                style={[styles.input, { color: colors.text }]}
-                placeholder="500,000"
-                placeholderTextColor={colors.textSecondary}
-                value={goalAmount}
-                onChangeText={(text) => setGoalAmount(text.replace(/[^0-9]/g, ''))}
-                keyboardType="numeric"
-              />
-            </View>
-            {errors.goalAmount && (
-              <Text style={[styles.errorMessage, { color: colors.error }]}>{errors.goalAmount}</Text>
-            )}
-          </View>
-
-          {/* End Date */}
-          <CrossPlatformDateTimePicker
-            mode="date"
-            value={endDate || new Date()}
-            onChange={(date) => setEndDate(date)}
-            minimumDate={new Date()}
-            label="End Date (Optional)"
-            placeholder="Not set (optional)"
-            colors={colors}
-            error={errors.endDate}
-          />
-          <Text style={[styles.helperText, { color: colors.textSecondary }]}>
-            Leave empty for ongoing campaigns
-          </Text>
-
-          {/* Minimum Donation */}
-          <View style={styles.section}>
-            <Text style={[styles.label, { color: colors.text }]}>Minimum Donation (Optional)</Text>
-            <View style={[
-              styles.inputContainer, 
-              { backgroundColor: colors.card, borderColor: errors.minimumDonation ? colors.error : colors.border }
-            ]}>
-              <DollarSign size={20} color={colors.textSecondary} />
-              <Text style={[styles.currencyPrefix, { color: colors.textSecondary }]}>J$</Text>
-              <TextInput
-                style={[styles.input, { color: colors.text }]}
-                placeholder="100"
-                placeholderTextColor={colors.textSecondary}
-                value={minimumDonation}
-                onChangeText={(text) => setMinimumDonation(text.replace(/[^0-9]/g, ''))}
-                keyboardType="numeric"
-              />
-            </View>
-          </View>
-
-          {/* Image Upload */}
-          <View style={styles.section}>
-            <Text style={[styles.label, { color: colors.text }]}>Cause Image (Optional)</Text>
-            
-            {!imageUri && !imageUrl ? (
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* Status */}
+            <View style={styles.section}>
+              <Text style={[styles.label, { color: colors.text }]}>Status</Text>
               <TouchableOpacity
-                style={[styles.uploadButton, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={handlePickImage}
-                activeOpacity={0.7}
+                style={[styles.selector, { backgroundColor: colors.card, borderColor: colors.border }]}
+                onPress={() => setShowStatusPicker(!showStatusPicker)}
               >
-                <Upload size={24} color={colors.textSecondary} />
-                <View style={styles.uploadButtonText}>
-                  <Text style={[styles.uploadButtonTitle, { color: colors.text }]}>
-                    Upload Image
-                  </Text>
-                  <Text style={[styles.uploadButtonSubtitle, { color: colors.textSecondary }]}>
-                    Tap to select from gallery
-                  </Text>
-                </View>
+                <View style={[styles.statusDot, { backgroundColor: selectedStatus?.color }]} />
+                <Text style={[styles.selectorText, { color: colors.text }]}>
+                  {selectedStatus?.label}
+                </Text>
+                <ChevronDown size={20} color={colors.textSecondary} />
               </TouchableOpacity>
-            ) : (
-              <View style={styles.imagePreviewContainer}>
-                <View style={styles.imagePreview}>
-                  <Image
-                    source={{ uri: imageUri || imageUrl }}
-                    style={styles.previewImage}
-                    resizeMode="cover"
-                  />
-                  <TouchableOpacity
-                    style={styles.removeImageButton}
-                    onPress={() => {
-                      setImageUri(null);
-                      setImageUrl('');
-                    }}
-                  >
-                    <X size={20} color="#FFFFFF" />
-                  </TouchableOpacity>
+
+              {showStatusPicker && (
+                <View style={[styles.pickerOptions, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  {STATUS_OPTIONS.map((option) => (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[
+                        styles.pickerOption,
+                        status === option.value && { backgroundColor: colors.background },
+                      ]}
+                      onPress={() => {
+                        setStatus(option.value);
+                        setShowStatusPicker(false);
+                      }}
+                    >
+                      <View style={styles.statusOptionRow}>
+                        <View style={[styles.statusDot, { backgroundColor: option.color }]} />
+                        <Text style={[styles.pickerOptionText, { color: colors.text }]}>
+                          {option.label}
+                        </Text>
+                      </View>
+                      {status === option.value && <Check size={20} color="#38B6FF" />}
+                    </TouchableOpacity>
+                  ))}
                 </View>
-                {uploadingImage && (
-                  <View style={styles.uploadingOverlay}>
-                    <ActivityIndicator size="large" color="#FFFFFF" />
-                    <Text style={styles.uploadingText}>Uploading...</Text>
+              )}
+            </View>
+
+            {/* Title */}
+            <View style={styles.section}>
+              <Text style={[styles.label, { color: colors.text }]}>
+                Title <Text style={styles.required}>*</Text>
+              </Text>
+              <View style={[
+                styles.inputContainer,
+                { backgroundColor: colors.card, borderColor: errors.title ? colors.error : colors.border }
+              ]}>
+                <Heart size={20} color={colors.textSecondary} />
+                <TextInput
+                  style={[styles.input, { color: colors.text }]}
+                  placeholder="Give your cause a compelling title"
+                  placeholderTextColor={colors.textSecondary}
+                  value={title}
+                  onChangeText={setTitle}
+                  maxLength={100}
+                />
+              </View>
+              {errors.title && (
+                <Text style={[styles.errorMessage, { color: colors.error }]}>{errors.title}</Text>
+              )}
+            </View>
+
+            {/* Description */}
+            <View style={styles.section}>
+              <Text style={[styles.label, { color: colors.text }]}>
+                Description <Text style={styles.required}>*</Text>
+              </Text>
+              <View style={[
+                styles.textAreaContainer,
+                { backgroundColor: colors.card, borderColor: errors.description ? colors.error : colors.border }
+              ]}>
+                <TextInput
+                  style={[styles.textArea, { color: colors.text }]}
+                  placeholder="Describe your cause..."
+                  placeholderTextColor={colors.textSecondary}
+                  value={description}
+                  onChangeText={setDescription}
+                  multiline
+                  numberOfLines={5}
+                  maxLength={2000}
+                  textAlignVertical="top"
+                />
+              </View>
+              {errors.description && (
+                <Text style={[styles.errorMessage, { color: colors.error }]}>{errors.description}</Text>
+              )}
+            </View>
+
+            {/* Category */}
+            <View style={styles.section}>
+              <Text style={[styles.label, { color: colors.text }]}>Category</Text>
+              <TouchableOpacity
+                style={[styles.selector, { backgroundColor: colors.card, borderColor: colors.border }]}
+                onPress={() => setShowCategoryPicker(!showCategoryPicker)}
+              >
+                <Text style={[styles.selectorText, { color: colors.text }]}>
+                  {selectedCategory?.emoji} {selectedCategory?.label}
+                </Text>
+                <ChevronDown size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+
+              {showCategoryPicker && (
+                <View style={[styles.pickerOptions, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  {CATEGORY_OPTIONS.map((option) => (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[
+                        styles.pickerOption,
+                        category === option.value && { backgroundColor: colors.background },
+                      ]}
+                      onPress={() => {
+                        setCategory(option.value);
+                        setShowCategoryPicker(false);
+                      }}
+                    >
+                      <Text style={[styles.pickerOptionText, { color: colors.text }]}>
+                        {option.emoji} {option.label}
+                      </Text>
+                      {category === option.value && <Check size={20} color="#38B6FF" />}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            {/* Goal Amount */}
+            <View style={styles.section}>
+              <Text style={[styles.label, { color: colors.text }]}>
+                Fundraising Goal (JMD) <Text style={styles.required}>*</Text>
+              </Text>
+              <View style={[
+                styles.inputContainer,
+                { backgroundColor: colors.card, borderColor: errors.goalAmount ? colors.error : colors.border }
+              ]}>
+                <Target size={20} color={colors.textSecondary} />
+                <Text style={[styles.currencyPrefix, { color: colors.textSecondary }]}>J$</Text>
+                <TextInput
+                  style={[styles.input, { color: colors.text }]}
+                  placeholder="500,000"
+                  placeholderTextColor={colors.textSecondary}
+                  value={goalAmount}
+                  onChangeText={(text) => setGoalAmount(text.replace(/[^0-9]/g, ''))}
+                  keyboardType="numeric"
+                />
+              </View>
+              {errors.goalAmount && (
+                <Text style={[styles.errorMessage, { color: colors.error }]}>{errors.goalAmount}</Text>
+              )}
+            </View>
+
+            {/* End Date */}
+            <CrossPlatformDateTimePicker
+              mode="date"
+              value={endDate || new Date()}
+              onChange={(date) => setEndDate(date)}
+              minimumDate={new Date()}
+              label="End Date (Optional)"
+              placeholder="Not set (optional)"
+              colors={colors}
+              error={errors.endDate}
+            />
+            <Text style={[styles.helperText, { color: colors.textSecondary }]}>
+              Leave empty for ongoing campaigns
+            </Text>
+
+            {/* Minimum Donation */}
+            <View style={styles.section}>
+              <Text style={[styles.label, { color: colors.text }]}>Minimum Donation (Optional)</Text>
+              <View style={[
+                styles.inputContainer,
+                { backgroundColor: colors.card, borderColor: errors.minimumDonation ? colors.error : colors.border }
+              ]}>
+                <DollarSign size={20} color={colors.textSecondary} />
+                <Text style={[styles.currencyPrefix, { color: colors.textSecondary }]}>J$</Text>
+                <TextInput
+                  style={[styles.input, { color: colors.text }]}
+                  placeholder="100"
+                  placeholderTextColor={colors.textSecondary}
+                  value={minimumDonation}
+                  onChangeText={(text) => setMinimumDonation(text.replace(/[^0-9]/g, ''))}
+                  keyboardType="numeric"
+                />
+              </View>
+            </View>
+
+            {/* Image Upload */}
+            <View style={styles.section}>
+              <Text style={[styles.label, { color: colors.text }]}>Cause Image (Optional)</Text>
+
+              {!imageUri && !imageUrl ? (
+                <TouchableOpacity
+                  style={[styles.uploadButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+                  onPress={handlePickImage}
+                  activeOpacity={0.7}
+                >
+                  <Upload size={24} color={colors.textSecondary} />
+                  <View style={styles.uploadButtonText}>
+                    <Text style={[styles.uploadButtonTitle, { color: colors.text }]}>
+                      Upload Image
+                    </Text>
+                    <Text style={[styles.uploadButtonSubtitle, { color: colors.textSecondary }]}>
+                      Tap to select from gallery
+                    </Text>
                   </View>
-                )}
-              </View>
-            )}
-            
-            {errors.imageUrl && (
-              <Text style={[styles.errorMessage, { color: colors.error }]}>{errors.imageUrl}</Text>
-            )}
-          </View>
-
-          {/* Toggle Options */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Settings</Text>
-
-            {/* Public Donations */}
-            <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.toggleInfo}>
-                {isDonationsPublic ? <Eye size={20} color="#38B6FF" /> : <EyeOff size={20} color={colors.textSecondary} />}
-                <View style={styles.toggleTextContainer}>
-                  <Text style={[styles.toggleLabel, { color: colors.text }]}>Show Donors Publicly</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.imagePreviewContainer}>
+                  <View style={styles.imagePreview}>
+                    <Image
+                      source={{ uri: imageUri || imageUrl }}
+                      style={styles.previewImage}
+                      resizeMode="cover"
+                    />
+                    <TouchableOpacity
+                      style={styles.removeImageButton}
+                      onPress={() => {
+                        setImageUri(null);
+                        setImageUrl('');
+                      }}
+                    >
+                      <X size={20} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
+                  {uploadingImage && (
+                    <View style={styles.uploadingOverlay}>
+                      <ActivityIndicator size="large" color="#FFFFFF" />
+                      <Text style={styles.uploadingText}>Uploading...</Text>
+                    </View>
+                  )}
                 </View>
-              </View>
-              <Switch
-                value={isDonationsPublic}
-                onValueChange={setIsDonationsPublic}
-                trackColor={{ false: colors.border, true: '#38B6FF' }}
-                thumbColor="#FFFFFF"
-              />
+              )}
+
+              {errors.imageUrl && (
+                <Text style={[styles.errorMessage, { color: colors.error }]}>{errors.imageUrl}</Text>
+              )}
             </View>
 
-            {/* Allow Recurring */}
-            <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.toggleInfo}>
-                <RefreshCw size={20} color={allowRecurring ? '#38B6FF' : colors.textSecondary} />
-                <View style={styles.toggleTextContainer}>
-                  <Text style={[styles.toggleLabel, { color: colors.text }]}>Allow Recurring Donations</Text>
+            {/* Toggle Options */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Settings</Text>
+
+              {/* Public Donations */}
+              <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.toggleInfo}>
+                  {isDonationsPublic ? <Eye size={20} color="#38B6FF" /> : <EyeOff size={20} color={colors.textSecondary} />}
+                  <View style={styles.toggleTextContainer}>
+                    <Text style={[styles.toggleLabel, { color: colors.text }]}>Show Donors Publicly</Text>
+                  </View>
                 </View>
+                <Switch
+                  value={isDonationsPublic}
+                  onValueChange={setIsDonationsPublic}
+                  trackColor={{ false: colors.border, true: '#38B6FF' }}
+                  thumbColor="#FFFFFF"
+                />
               </View>
-              <Switch
-                value={allowRecurring}
-                onValueChange={setAllowRecurring}
-                trackColor={{ false: colors.border, true: '#38B6FF' }}
-                thumbColor="#FFFFFF"
-              />
+
+              {/* Allow Recurring */}
+              <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.toggleInfo}>
+                  <RefreshCw size={20} color={allowRecurring ? '#38B6FF' : colors.textSecondary} />
+                  <View style={styles.toggleTextContainer}>
+                    <Text style={[styles.toggleLabel, { color: colors.text }]}>Allow Recurring Donations</Text>
+                  </View>
+                </View>
+                <Switch
+                  value={allowRecurring}
+                  onValueChange={setAllowRecurring}
+                  trackColor={{ false: colors.border, true: '#38B6FF' }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
+
+              {/* Visibility */}
+              <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.toggleInfo}>
+                  {visibility === 'public' ? (
+                    <Globe size={20} color="#4CAF50" />
+                  ) : (
+                    <Lock size={20} color="#FF9800" />
+                  )}
+                  <View style={styles.toggleTextContainer}>
+                    <Text style={[styles.toggleLabel, { color: colors.text }]}>
+                      {visibility === 'public' ? 'Public' : 'Members Only'}
+                    </Text>
+                    <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
+                      {visibility === 'public'
+                        ? 'Visible to everyone, including visitors'
+                        : 'Only visible to logged-in members'}
+                    </Text>
+                  </View>
+                </View>
+                <Switch
+                  value={visibility === 'members_only'}
+                  onValueChange={(value) => setVisibility(value ? 'members_only' : 'public')}
+                  trackColor={{ false: colors.border, true: '#FF9800' }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
+
+              {/* Featured */}
+              <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.toggleInfo}>
+                  <Star size={20} color={isFeatured ? '#FFD700' : colors.textSecondary} />
+                  <View style={styles.toggleTextContainer}>
+                    <Text style={[styles.toggleLabel, { color: colors.text }]}>Featured Cause</Text>
+                  </View>
+                </View>
+                <Switch
+                  value={isFeatured}
+                  onValueChange={setIsFeatured}
+                  trackColor={{ false: colors.border, true: '#FFD700' }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
             </View>
 
-            {/* Visibility */}
-            <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.toggleInfo}>
-                {visibility === 'public' ? (
-                  <Globe size={20} color="#4CAF50" />
-                ) : (
-                  <Lock size={20} color="#FF9800" />
-                )}
-                <View style={styles.toggleTextContainer}>
-                  <Text style={[styles.toggleLabel, { color: colors.text }]}>
-                    {visibility === 'public' ? 'Public' : 'Members Only'}
+
+
+            {/* Notification Settings */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Notification Settings</Text>
+
+              <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.toggleInfo}>
+                  <Target size={20} color={notifyUsers ? colors.primary : colors.textSecondary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.toggleLabel, { color: colors.text }]}>Notify Donors</Text>
+                    <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
+                      Send a push notification to all donors of this cause.
+                    </Text>
+                  </View>
+                </View>
+                <Switch
+                  value={notifyUsers}
+                  onValueChange={setNotifyUsers}
+                  trackColor={{ false: colors.border, true: '#38B6FF' }}
+                  thumbColor={'#FFF'}
+                />
+              </View>
+
+              {notifyUsers && (
+                <View style={styles.section}>
+                  <Text style={[styles.label, { color: colors.text }]}>
+                    Message to Donors <Text style={styles.required}>*</Text>
                   </Text>
-                  <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
-                    {visibility === 'public' 
-                      ? 'Visible to everyone, including visitors' 
-                      : 'Only visible to logged-in members'}
-                  </Text>
+                  <View style={[styles.textAreaContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <TextInput
+                      style={[styles.textArea, { color: colors.text, minHeight: 80 }]}
+                      value={updateMessage}
+                      onChangeText={setUpdateMessage}
+                      placeholder="e.g., We have reached 50% of our goal thanks to you!"
+                      placeholderTextColor={colors.textSecondary}
+                      multiline
+                    />
+                  </View>
                 </View>
-              </View>
-              <Switch
-                value={visibility === 'members_only'}
-                onValueChange={(value) => setVisibility(value ? 'members_only' : 'public')}
-                trackColor={{ false: colors.border, true: '#FF9800' }}
-                thumbColor="#FFFFFF"
-              />
+              )}
             </View>
 
-            {/* Featured */}
-            <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.toggleInfo}>
-                <Star size={20} color={isFeatured ? '#FFD700' : colors.textSecondary} />
-                <View style={styles.toggleTextContainer}>
-                  <Text style={[styles.toggleLabel, { color: colors.text }]}>Featured Cause</Text>
-                </View>
-              </View>
-              <Switch
-                value={isFeatured}
-                onValueChange={setIsFeatured}
-                trackColor={{ false: colors.border, true: '#FFD700' }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
-          </View>
-
-        </ScrollView>
+          </ScrollView>
         </WebContainer>
       </KeyboardAvoidingView>
 
@@ -776,7 +844,7 @@ export default function EditCauseScreen() {
         onConfirm={alertConfig.onConfirm}
         showCancel={!!alertConfig.onConfirm}
       />
-    </View>
+    </View >
   );
 }
 

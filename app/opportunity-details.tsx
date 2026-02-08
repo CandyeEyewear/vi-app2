@@ -308,7 +308,7 @@ export default function OpportunityDetailsScreen() {
         opportunity.timeStart,
         'America/Jamaica' // Default timezone, adjust if needed
       );
-      
+
       const endDate = opportunity.timeEnd
         ? createEventDateTime(dateStart, opportunity.timeEnd, 'America/Jamaica')
         : calculateEndDate(startDate, undefined, 2);
@@ -416,9 +416,9 @@ export default function OpportunityDetailsScreen() {
             </AnimatedPressable>
           </View>
         </View>
-        
+
         {/* Modern Loading Skeleton */}
-        <ScrollView 
+        <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.loadingContainer}
         >
@@ -432,7 +432,7 @@ export default function OpportunityDetailsScreen() {
               marginBottom: 0,
             }}
           />
-          
+
           {/* Content Skeleton */}
           <View style={{ padding: 16 }}>
             {/* Badge Row */}
@@ -440,45 +440,45 @@ export default function OpportunityDetailsScreen() {
               <ShimmerSkeleton colors={colors} style={{ width: 80, height: 24, borderRadius: 12 }} />
               <ShimmerSkeleton colors={colors} style={{ width: 70, height: 24, borderRadius: 12 }} />
             </View>
-            
+
             {/* Title */}
-            <ShimmerSkeleton 
-              colors={colors} 
-              style={{ width: '90%', height: 32, borderRadius: 8, marginBottom: 8 }} 
+            <ShimmerSkeleton
+              colors={colors}
+              style={{ width: '90%', height: 32, borderRadius: 8, marginBottom: 8 }}
             />
-            <ShimmerSkeleton 
-              colors={colors} 
-              style={{ width: '70%', height: 32, borderRadius: 8, marginBottom: 16 }} 
+            <ShimmerSkeleton
+              colors={colors}
+              style={{ width: '70%', height: 32, borderRadius: 8, marginBottom: 16 }}
             />
-            
+
             {/* Organization */}
-            <ShimmerSkeleton 
-              colors={colors} 
-              style={{ width: '50%', height: 18, borderRadius: 8, marginBottom: 24 }} 
+            <ShimmerSkeleton
+              colors={colors}
+              style={{ width: '50%', height: 18, borderRadius: 8, marginBottom: 24 }}
             />
-            
+
             {/* Info Cards Grid */}
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
               {[...Array(4)].map((_, i) => (
-                <ShimmerSkeleton 
+                <ShimmerSkeleton
                   key={i}
-                  colors={colors} 
-                  style={{ width: '48%', height: 100, borderRadius: 12 }} 
+                  colors={colors}
+                  style={{ width: '48%', height: 100, borderRadius: 12 }}
                 />
               ))}
             </View>
-            
+
             {/* Description */}
             {[...Array(5)].map((_, i) => (
-              <ShimmerSkeleton 
+              <ShimmerSkeleton
                 key={`desc-${i}`}
-                colors={colors} 
-                style={{ 
-                  width: i === 4 ? '60%' : '100%', 
-                  height: 16, 
-                  borderRadius: 8, 
-                  marginBottom: 8 
-                }} 
+                colors={colors}
+                style={{
+                  width: i === 4 ? '60%' : '100%',
+                  height: 16,
+                  borderRadius: 8,
+                  marginBottom: 8
+                }}
               />
             ))}
           </View>
@@ -528,11 +528,11 @@ export default function OpportunityDetailsScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Animated Header */}
-      <Animated.View 
+      <Animated.View
         style={[
-          styles.header, 
-          { 
-            paddingTop: insets.top + responsive.spacing.lg, 
+          styles.header,
+          {
+            paddingTop: insets.top + responsive.spacing.lg,
             borderBottomColor: colors.border,
             backgroundColor: colors.background,
             opacity: headerOpacity,
@@ -553,7 +553,7 @@ export default function OpportunityDetailsScreen() {
           >
             <ChevronLeft size={responsive.iconSize.lg} color={colors.text} />
           </AnimatedPressable>
-          
+
           {/* Right Actions */}
           <View style={styles.headerActions}>
             {/* Share Button */}
@@ -572,7 +572,7 @@ export default function OpportunityDetailsScreen() {
                 <Share2 size={responsive.iconSize.md} color={colors.text} />
               </AnimatedPressable>
             )}
-            
+
             {/* Save/Bookmark Button */}
             {!isAdmin && (
               <AnimatedPressable
@@ -581,11 +581,11 @@ export default function OpportunityDetailsScreen() {
                 style={({ pressed }) => [
                   styles.roundedIconButton,
                   {
-                    backgroundColor: pressed 
-                      ? colors.primarySoft 
-                      : isSaved 
-                      ? colors.primarySoft 
-                      : colors.surfaceElevated,
+                    backgroundColor: pressed
+                      ? colors.primarySoft
+                      : isSaved
+                        ? colors.primarySoft
+                        : colors.surfaceElevated,
                   },
                 ]}
                 onPress={toggleSave}
@@ -598,15 +598,15 @@ export default function OpportunityDetailsScreen() {
                 )}
               </AnimatedPressable>
             )}
-            
+
             {/* Admin edit/delete moved to Admin Dashboard -> Opportunities */}
           </View>
         </View>
       </Animated.View>
 
-      <Animated.ScrollView 
-        style={styles.scrollView} 
-        contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+      <Animated.ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 180 }}
         showsVerticalScrollIndicator={false}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
@@ -775,7 +775,8 @@ export default function OpportunityDetailsScreen() {
           style={[
             styles.bottomBar,
             {
-              paddingBottom: insets.bottom + responsive.spacing.md,
+              bottom: insets.bottom,
+              paddingBottom: responsive.spacing.lg,
               backgroundColor: colors.background,
               borderTopColor: colors.border,
             },
@@ -1025,6 +1026,10 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   bottomBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     paddingHorizontal: 16,
     paddingTop: 16,
     borderTopWidth: 1,

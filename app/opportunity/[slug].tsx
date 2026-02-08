@@ -97,16 +97,16 @@ interface MemoizedHeroImageProps {
 const MemoizedHeroImage = React.memo<MemoizedHeroImageProps>(
   ({ imageUrl, categoryColor, category, isVerified, successColor }) => {
     if (!imageUrl) return null;
-    
+
     return (
       <View style={memoImageStyles.heroContainer}>
-        <Image 
-          source={{ uri: imageUrl }} 
+        <Image
+          source={{ uri: imageUrl }}
           style={memoImageStyles.heroImage}
         />
-        <LinearGradient 
-          colors={['transparent', 'rgba(0,0,0,0.7)']} 
-          style={memoImageStyles.heroGradient} 
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.7)']}
+          style={memoImageStyles.heroGradient}
         />
         <View style={[memoImageStyles.heroBadge, { backgroundColor: categoryColor }]}>
           <Text style={memoImageStyles.heroBadgeText}>{category.toUpperCase()}</Text>
@@ -265,11 +265,11 @@ export default function OpportunityDetailsScreen() {
   const { user, isAdmin, isSup } = useAuth();
   const { shareOpportunityToFeed } = useFeed();
   const params = useLocalSearchParams();
-  
+
   // Support both [slug].tsx route and legacy [id].tsx route
   // The route param will be in params.slug for [slug].tsx or params.id for [id].tsx
   const identifier = (params.slug || params.id) as string;
-  
+
   // Helper to check if string is a valid UUID
   const isValidUUID = (str: string): boolean => {
     if (!str) return false;
@@ -299,7 +299,7 @@ export default function OpportunityDetailsScreen() {
   const [savingBookmark, setSavingBookmark] = useState(false);
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertConfig, setAlertConfig] = useState({ title: '', message: '', type: 'success' as const });
-  
+
   // Flag to prevent unnecessary reloading
   const [dataLoaded, setDataLoaded] = useState(false);
 
@@ -316,7 +316,7 @@ export default function OpportunityDetailsScreen() {
   // ============================================================================
   // DATA LOADING - Protected against reload loops
   // ============================================================================
-  
+
   // Step 1: Load opportunity details first (by slug or UUID)
   useEffect(() => {
     if (identifier && !dataLoaded) {
@@ -346,11 +346,11 @@ export default function OpportunityDetailsScreen() {
   const loadOpportunityDetails = async () => {
     try {
       setLoading(true);
-      
+
       // Query by UUID if valid, otherwise query by slug (with UUID fallback)
       let data = null;
       let error = null;
-      
+
       if (isValidUUID(identifier)) {
         // It's a UUID, query by id directly
         const result = await supabase
@@ -367,7 +367,7 @@ export default function OpportunityDetailsScreen() {
           .select('*')
           .eq('slug', identifier)
           .maybeSingle();
-        
+
         if (slugResult.data) {
           data = slugResult.data;
         } else {
@@ -780,7 +780,7 @@ export default function OpportunityDetailsScreen() {
 
       {/* CONTENT BY TAB */}
       {activeTab === 'details' ? (
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}>
           {/* HERO IMAGE WITH GRADIENT - Memoized to prevent reload loop */}
           <MemoizedHeroImage
             imageUrl={opportunity.imageUrl}
@@ -843,7 +843,7 @@ export default function OpportunityDetailsScreen() {
               </View>
 
               {/* Location - tappable */}
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.infoRow}
                 onPress={opportunity.mapLink ? () => Linking.openURL(opportunity.mapLink!) : undefined}
                 disabled={!opportunity.mapLink}
@@ -1020,7 +1020,7 @@ export default function OpportunityDetailsScreen() {
 
       {/* BOTTOM ACTION BAR */}
       {!isAdmin && (
-        <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12, backgroundColor: colors.background, borderTopColor: colors.border }]}>
+        <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 24, backgroundColor: colors.background, borderTopColor: colors.border, paddingTop: 12 }]}>
           {isSignedUp ? (
             <AnimatedPressable onPress={handleCancelSignup} disabled={submitting} style={{ flex: 1 }}>
               <View style={styles.actionBtnShadow}>
@@ -1123,7 +1123,7 @@ export default function OpportunityDetailsScreen() {
 // ============================================================================
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  
+
   // Header
   header: {
     flexDirection: 'row',
@@ -1297,7 +1297,15 @@ const styles = StyleSheet.create({
   checkInBtnText: { color: '#FFF', fontSize: 17, fontWeight: '700' },
 
   // Bottom Bar
-  bottomBar: { paddingHorizontal: 16, paddingTop: 12, borderTopWidth: 1 },
+  bottomBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: 1
+  },
   actionBtnShadow: { position: 'absolute', top: 4, left: 0, right: 0, bottom: -4 },
   actionBtnShadowInner: { flex: 1, borderRadius: 14, opacity: 0.4 },
   actionBtn: { paddingVertical: 16, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },

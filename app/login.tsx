@@ -22,7 +22,7 @@ import { useRouter, Redirect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
-import CustomAlert from '../components/CustomAlert';
+import { useAlert } from '../hooks/useAlert';
 import { supabase } from '../services/supabase';
 import Button from '../components/Button';
 
@@ -37,12 +37,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [alertVisible, setAlertVisible] = useState(false);
-  const [alertConfig, setAlertConfig] = useState({
-    title: '',
-    message: '',
-    type: 'error' as 'success' | 'error' | 'warning',
-  });
+  const { showAlert } = useAlert();
   const [resendingEmail, setResendingEmail] = useState(false);
 
   // Redirect authenticated users away from login screen
@@ -52,10 +47,6 @@ export default function LoginScreen() {
     }
   }, [user, loading, router]);
 
-  const showAlert = (title: string, message: string, type: 'success' | 'error' | 'warning' = 'error') => {
-    setAlertConfig({ title, message, type });
-    setAlertVisible(true);
-  };
 
   // Don't render login form if user is already authenticated
   if (!loading && user) {
@@ -105,7 +96,7 @@ export default function LoginScreen() {
 
     if (!email || !password) {
       console.log('[LOGIN] Missing credentials, showing alert');
-      showAlert('Missing Information', 'Please fill in all fields', 'error');
+      showAlert({ title: 'Missing Information', message: 'Please fill in all fields', type: 'error' });
       return;
     }
 
@@ -132,10 +123,10 @@ export default function LoginScreen() {
         if (response.error) {
           const errorLower = response.error.toLowerCase();
           if (errorLower.includes('invalid login credentials') ||
-              errorLower.includes('invalid_credentials') ||
-              errorLower.includes('email not confirmed') ||
-              errorLower.includes('invalid password') ||
-              errorLower.includes('user not found')) {
+            errorLower.includes('invalid_credentials') ||
+            errorLower.includes('email not confirmed') ||
+            errorLower.includes('invalid password') ||
+            errorLower.includes('user not found')) {
             errorMessage = 'Invalid email or password. Please check your credentials and try again.';
           } else if (errorLower.includes('too many requests')) {
             errorMessage = 'Too many login attempts. Please wait a moment and try again.';
@@ -146,189 +137,180 @@ export default function LoginScreen() {
           }
         }
 
-        // Show alert immediately instead of using pendingError to avoid navigation issues
+        // Show alert immediately
         console.log('[LOGIN] Showing error alert:', errorMessage);
-        setTimeout(() => {
-          showAlert('Login Failed', errorMessage, 'error');
-        }, 100);
+        showAlert({ title: 'Login Failed', message: errorMessage, type: 'error' });
       }
     } catch (error) {
       console.error('[LOGIN] Exception in handleLogin:', error);
-      showAlert('Login Failed', 'An unexpected error occurred. Please try again.', 'error');
+      showAlert({ title: 'Login Failed', message: 'An unexpected error occurred. Please try again.', type: 'error' });
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <ScrollView 
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: styles.scrollContent.paddingBottom + insets.bottom + 80 }
-        ]}
+    <>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.container}
       >
-        {/* Logo Section */}
-        <View style={styles.logoSection}>
-          <Image 
-            source={require('../assets/images/icon.png')} 
-            style={styles.logoImage}
-            resizeMode="contain"
-          />
-          <Text style={styles.tagline}>Changing Communities Through Volunteerism</Text>
-        </View>
-
-        {/* Form Section */}
-        <View style={styles.formSection}>
-          <Text style={styles.title}>Welcome Back!</Text>
-          <Text style={styles.subtitle}>Sign in to continue volunteering</Text>
-          {needsVerification && (
-            <View
-              style={{
-                backgroundColor: '#e3f2fd',
-                borderLeftWidth: 4,
-                borderLeftColor: '#4A90E2',
-                padding: 16,
-                marginBottom: 20,
-                borderRadius: 8,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 4,
-                elevation: 3,
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: 16,
-                  fontWeight: '600',
-                  color: '#2c3e50',
-                  marginBottom: 8,
-                }}
-              >
-                📧 Verify Your Email
-              </Text>
-              <Text
-                style={{
-                  fontSize: 14,
-                  color: '#555',
-                  lineHeight: 20,
-                }}
-              >
-                We sent a verification link to{' '}
-                <Text style={{ fontWeight: '600' }}>{userEmail}</Text>. Please check your
-                inbox (and spam folder) to verify your account before logging in.
-              </Text>
-              <Button
-                variant="primary"
-                loading={resendingEmail}
-                disabled={resendingEmail}
-                onPress={handleResendVerification}
-                style={{ marginTop: 12, alignSelf: 'flex-start' }}
-              >
-                Resend Verification Link
-              </Button>
-            </View>
-          )}
-
-          {/* Email Input */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="your.email@example.com"
-              placeholderTextColor={Colors.light.textSecondary}
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              editable={!loading}
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: styles.scrollContent.paddingBottom + insets.bottom + 80 }
+          ]}
+        >
+          {/* Logo Section */}
+          <View style={styles.logoSection}>
+            <Image
+              source={require('../assets/images/icon.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
             />
+            <Text style={styles.tagline}>Changing Communities Through Volunteerism</Text>
           </View>
 
-          {/* Password Input */}
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Password</Text>
-            <View style={styles.passwordContainer}>
+          {/* Form Section */}
+          <View style={styles.formSection}>
+            <Text style={styles.title}>Welcome Back!</Text>
+            <Text style={styles.subtitle}>Sign in to continue volunteering</Text>
+            {needsVerification && (
+              <View
+                style={{
+                  backgroundColor: '#e3f2fd',
+                  borderLeftWidth: 4,
+                  borderLeftColor: '#4A90E2',
+                  padding: 16,
+                  marginBottom: 20,
+                  borderRadius: 8,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.1,
+                  shadowRadius: 4,
+                  elevation: 3,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 16,
+                    fontWeight: '600',
+                    color: '#2c3e50',
+                    marginBottom: 8,
+                  }}
+                >
+                  📧 Verify Your Email
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    color: '#555',
+                    lineHeight: 20,
+                  }}
+                >
+                  We sent a verification link to{' '}
+                  <Text style={{ fontWeight: '600' }}>{userEmail}</Text>. Please check your
+                  inbox (and spam folder) to verify your account before logging in.
+                </Text>
+                <Button
+                  variant="primary"
+                  loading={resendingEmail}
+                  disabled={resendingEmail}
+                  onPress={handleResendVerification}
+                  style={{ marginTop: 12, alignSelf: 'flex-start' }}
+                >
+                  Resend Verification Link
+                </Button>
+              </View>
+            )}
+
+            {/* Email Input */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Email</Text>
               <TextInput
-                style={styles.passwordInput}
-                placeholder="Enter your password"
+                style={styles.input}
+                placeholder="your.email@example.com"
                 placeholderTextColor={Colors.light.textSecondary}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
                 editable={!loading}
               />
+            </View>
+
+            {/* Password Input */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder="Enter your password"
+                  placeholderTextColor={Colors.light.textSecondary}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  editable={!loading}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.eyeButton}
+                >
+                  <Text style={styles.eyeText}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Forgot Password */}
+            <TouchableOpacity
+              style={styles.forgotPassword}
+              onPress={() => {
+                setTimeout(() => {
+                  router.push('/forgot-password');
+                }, 100);
+              }}
+            >
+              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+            </TouchableOpacity>
+
+            {/* Login Button */}
+            <Button
+              variant="primary"
+              size="lg"
+              onPress={handleLogin}
+              disabled={loading}
+              loading={loading}
+              style={styles.loginButton}
+            >
+              Sign In
+            </Button>
+
+            {/* Register Link */}
+            <View style={styles.registerContainer}>
+              <Text style={styles.registerText}>Don't have an account? </Text>
               <TouchableOpacity
-                onPress={() => setShowPassword(!showPassword)}
-                style={styles.eyeButton}
+                onPress={() => {
+                  setTimeout(() => {
+                    router.push('/register');
+                  }, 100);
+                }}
               >
-                <Text style={styles.eyeText}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+                <Text style={styles.registerLink}>Create Account</Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Forgot Password */}
-          <TouchableOpacity 
-            style={styles.forgotPassword}
-            onPress={() => {
-              setTimeout(() => {
-                router.push('/forgot-password');
-              }, 100);
-            }}
-          >
-            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-          </TouchableOpacity>
-
-          {/* Login Button */}
-          <Button
-            variant="primary"
-            size="lg"
-            onPress={handleLogin}
-            disabled={loading}
-            loading={loading}
-            style={styles.loginButton}
-          >
-            Sign In
-          </Button>
-
-          {/* Register Link */}
-          <View style={styles.registerContainer}>
-            <Text style={styles.registerText}>Don't have an account? </Text>
-            <TouchableOpacity
-              onPress={() => {
-                setTimeout(() => {
-                  router.push('/register');
-                }, 100);
-              }}
-            >
-              <Text style={styles.registerLink}>Create Account</Text>
+          {/* Footer */}
+          <View style={styles.footer}>
+            <TouchableOpacity onPress={handleTerms}>
+              <Text style={styles.footerLink}>Terms of Service</Text>
+            </TouchableOpacity>
+            <Text style={styles.footerDivider}>•</Text>
+            <TouchableOpacity onPress={handlePrivacyPolicy}>
+              <Text style={styles.footerLink}>Privacy Policy</Text>
             </TouchableOpacity>
           </View>
-        </View>
-
-        {/* Footer */}
-        <View style={styles.footer}>
-          <TouchableOpacity onPress={handleTerms}>
-            <Text style={styles.footerLink}>Terms of Service</Text>
-          </TouchableOpacity>
-          <Text style={styles.footerDivider}>•</Text>
-          <TouchableOpacity onPress={handlePrivacyPolicy}>
-            <Text style={styles.footerLink}>Privacy Policy</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-
-      {/* Custom Alert */}
-      <CustomAlert
-        visible={alertVisible}
-        title={alertConfig.title}
-        message={alertConfig.message}
-        type={alertConfig.type}
-        onClose={() => setAlertVisible(false)}
-      />
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </>
   );
 }
 
