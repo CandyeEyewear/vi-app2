@@ -56,6 +56,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
 
   // Debounce and loading guard refs to prevent API request explosion
   const loadingInProgressRef = useRef(false);
+  const pendingLoadRef = useRef(false);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const DEBOUNCE_MS = 500; // Wait 500ms before loading after rapid events
 
@@ -111,9 +112,9 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   }, [conversations]);
 
   // Helper function to check if a user is online
-  const isUserOnline = (userId: string): boolean => {
+  const isUserOnline = useCallback((userId: string): boolean => {
     return onlineUsers.has(userId);
-  };
+  }, [onlineUsers]);
 
   // Load conversations on mount - SIMPLE LIKE NOTIFICATIONS
   useEffect(() => {
@@ -343,14 +344,25 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     };
   }, [userId, updateOnlineStatus]);
 
-  const loadConversations = async () => {
-    if (!user) return;
+  const loadConversations = useCallback(async () => {
+    if (!userId) return;
 
     // Prevent overlapping loads - if already loading, skip this call
     if (loadingInProgressRef.current) {
+      // Queue a single follow-up refresh so updates are not dropped while loading
+      pendingLoadRef.current = true;
       console.log('[MESSAGING] loadConversations skipped - already loading');
       return;
     }
+
+    // Safety valve: prevent stuck loading state
+    const loadingTimeout = setTimeout(() => {
+      if (loadingInProgressRef.current) {
+        console.warn('[MESSAGING] loadConversations safety valve triggered - resetting loading state');
+        loadingInProgressRef.current = false;
+        setLoading(false);
+      }
+    }, 30000); // 30 second timeout
 
     try {
       loadingInProgressRef.current = true;
@@ -359,80 +371,108 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       const { data: conversationsData, error: conversationsError } = await supabase
         .from('conversations')
         .select('*')
-        .contains('participants', [user.id])
-        .not('deleted_by', 'cs', `["${user.id}"]`)
+        .contains('participants', [userId])
         .order('updated_at', { ascending: false });
 
       if (conversationsError) throw conversationsError;
 
+      const visibleConversations = (conversationsData || []).filter((conv: any) => {
+        const deletedBy: string[] | null = conv.deleted_by ?? null;
+        return !Array.isArray(deletedBy) || !deletedBy.includes(userId);
+      });
+
+      const withTimeout = async <T,>(promise: Promise<T>, ms: number): Promise<T> => {
+        return await Promise.race([
+          promise,
+          new Promise<T>((_, reject) => {
+            setTimeout(() => reject(new Error('Conversation details query timed out')), ms);
+          }),
+        ]);
+      };
+
       // For each conversation, get participant details and last message
       const conversationsWithDetails = await Promise.all(
-        conversationsData.map(async (conv) => {
-          // Get participant details with online status
-          const { data: usersData } = await supabase
-            .from('users')
-            .select('*')
-            .in('id', conv.participants);
+        visibleConversations.map(async (conv) => {
+          try {
+            const detailPromise = (async () => {
+              // Get participant details with online status
+              const { data: usersData } = await supabase
+                .from('users')
+                .select('*')
+                .in('id', conv.participants);
 
-          const participantDetails = usersData?.map((u) => ({
-            id: u.id,
-            email: u.email,
-            fullName: u.full_name,
-            phone: u.phone,
-            location: u.location,
-            bio: u.bio,
-            areasOfExpertise: u.areas_of_expertise,
-            education: u.education,
-            avatarUrl: u.avatar_url,
-            role: u.role,
-            membershipTier: u.membership_tier,
-            membershipStatus: u.membership_status,
-            is_partner_organization: u.is_partner_organization,
-            totalHours: u.total_hours,
-            activitiesCompleted: u.activities_completed,
-            organizationsHelped: u.organizations_helped,
-            achievements: [],
-            onlineStatus: u.online_status,
-            lastSeen: u.last_seen,
-            createdAt: u.created_at,
-            updatedAt: u.updated_at,
-          })) || [];
+              const participantDetails = usersData?.map((u) => ({
+                id: u.id,
+                email: u.email,
+                fullName: u.full_name,
+                phone: u.phone,
+                location: u.location,
+                bio: u.bio,
+                areasOfExpertise: u.areas_of_expertise,
+                education: u.education,
+                avatarUrl: u.avatar_url,
+                role: u.role,
+                membershipTier: u.membership_tier,
+                membershipStatus: u.membership_status,
+                is_partner_organization: u.is_partner_organization,
+                totalHours: u.total_hours,
+                activitiesCompleted: u.activities_completed,
+                organizationsHelped: u.organizations_helped,
+                achievements: [],
+                onlineStatus: u.online_status,
+                lastSeen: u.last_seen,
+                createdAt: u.created_at,
+                updatedAt: u.updated_at,
+              })) || [];
 
-          // Get last message (excluding deleted messages)
-          const { data: messagesData } = await supabase
-            .from('messages')
-            .select('*')
-            .eq('conversation_id', conv.id)
-            .is('deleted_at', null) // Only get non-deleted messages
-            .order('created_at', { ascending: false })
-            .limit(1);
+              // Get last message (excluding deleted messages)
+              const { data: messagesData } = await supabase
+                .from('messages')
+                .select('*')
+                .eq('conversation_id', conv.id)
+                .is('deleted_at', null)
+                .order('created_at', { ascending: false })
+                .limit(1);
 
-          const lastMessage = messagesData?.[0] ? {
-            id: messagesData[0].id,
-            conversationId: messagesData[0].conversation_id,
-            senderId: messagesData[0].sender_id,
-            text: messagesData[0].text,
-            read: messagesData[0].read,
-            status: messagesData[0].status || 'sent',
-            createdAt: messagesData[0].created_at,
-          } : undefined;
+              const lastMessage = messagesData?.[0] ? {
+                id: messagesData[0].id,
+                conversationId: messagesData[0].conversation_id,
+                senderId: messagesData[0].sender_id,
+                text: messagesData[0].text,
+                read: messagesData[0].read,
+                status: messagesData[0].status || 'sent',
+                createdAt: messagesData[0].created_at,
+              } : undefined;
 
-          // Count ONLY unread messages that YOU didn't send
-          const { count: unreadCount } = await supabase
-            .from('messages')
-            .select('*', { count: 'exact', head: true })
-            .eq('conversation_id', conv.id)
-            .eq('read', false)
-            .neq('sender_id', user.id);
+              // Count ONLY unread messages that YOU didn't send
+              const { count: unreadCount } = await supabase
+                .from('messages')
+                .select('*', { count: 'exact', head: true })
+                .eq('conversation_id', conv.id)
+                .eq('read', false)
+                .neq('sender_id', userId);
 
-          return {
-            id: conv.id,
-            participants: conv.participants,
-            participantDetails,
-            lastMessage,
-            unreadCount: unreadCount || 0,
-            updatedAt: conv.updated_at,
-          } as Conversation;
+              return {
+                id: conv.id,
+                participants: conv.participants,
+                participantDetails,
+                lastMessage,
+                unreadCount: unreadCount || 0,
+                updatedAt: conv.updated_at,
+              } as Conversation;
+            })();
+
+            return await withTimeout(detailPromise, 10000);
+          } catch (err) {
+            console.error(`[MESSAGING] Error loading details for conversation ${conv.id}:`, err);
+            return {
+              id: conv.id,
+              participants: conv.participants,
+              participantDetails: [],
+              unreadCount: 0,
+              updatedAt: conv.updated_at,
+            } as Conversation;
+          }
         })
       );
 
@@ -440,10 +480,19 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Error loading conversations:', error);
     } finally {
+      clearTimeout(loadingTimeout);
       loadingInProgressRef.current = false;
       setLoading(false);
+
+      // If events arrived during load, run one catch-up pass.
+      if (pendingLoadRef.current) {
+        pendingLoadRef.current = false;
+        setTimeout(() => {
+          loadConversationsRef.current?.();
+        }, 0);
+      }
     }
-  };
+  }, [userId]);
 
   // Store the function in the ref so it can be called from earlier useEffects
   loadConversationsRef.current = loadConversations;
@@ -478,6 +527,30 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (existingConv) {
+        // If this conversation was previously soft-deleted by the current user,
+        // restore it so it can appear in recents again.
+        const existingDeletedBy = Array.isArray((existingConv as any).deleted_by)
+          ? ((existingConv as any).deleted_by as string[])
+          : [];
+        let restoredConversation = false;
+        if (existingDeletedBy.includes(user.id)) {
+          const restoredDeletedBy = existingDeletedBy.filter((id) => id !== user.id);
+          const { error: restoreError } = await supabase
+            .from('conversations')
+            .update({
+              deleted_by: restoredDeletedBy,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', existingConv.id);
+
+          if (restoreError) {
+            console.warn('[MESSAGING] Failed to restore deleted conversation visibility:', restoreError);
+          } else {
+            (existingConv as any).deleted_by = restoredDeletedBy;
+            restoredConversation = true;
+          }
+        }
+
         // Get participant details
         const { data: usersData } = await supabase
           .from('users')
@@ -513,6 +586,10 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
           unreadCount: 0,
           updatedAt: existingConv.updated_at,
         };
+
+        if (restoredConversation) {
+          loadConversationsRef.current?.();
+        }
 
         return { success: true, data: conversation };
       }
@@ -584,6 +661,24 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
+      // Ensure sender can see this conversation in recents if it was soft-deleted earlier.
+      const { data: conversationMeta } = await supabase
+        .from('conversations')
+        .select('deleted_by')
+        .eq('id', conversationId)
+        .maybeSingle();
+
+      const senderDeletedBy = Array.isArray(conversationMeta?.deleted_by)
+        ? (conversationMeta.deleted_by as string[])
+        : [];
+      if (senderDeletedBy.includes(user.id)) {
+        const restoredDeletedBy = senderDeletedBy.filter((id) => id !== user.id);
+        await supabase
+          .from('conversations')
+          .update({ deleted_by: restoredDeletedBy })
+          .eq('id', conversationId);
+      }
+
       // Build insert object - only include fields that exist in the database schema
       // Store attachments and reply data in text field (temporary workaround until columns are added)
       let messageText = text;
@@ -652,11 +747,12 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       .from('user_notification_settings')
       .select('messages_enabled')
       .eq('user_id', recipientId)
-      .single();
+      .maybeSingle(); // Changed from .single() to .maybeSingle()
 
     console.log('📊 Recipient notification settings:', settings);
 
-    const shouldSendNotification = settings?.messages_enabled === true;
+    // Default to true if settings are not found (opt-out model)
+    const shouldSendNotification = settings === null || settings.messages_enabled !== false;
     console.log('🔔 Should send push notification?', shouldSendNotification);
 
     if (shouldSendNotification) {
@@ -672,6 +768,8 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
           link: `/conversation/${conversationId}`,
           related_id: conversationId,
           sender_id: user.id,
+          is_read: false, // Added missing column
+          created_at: new Date().toISOString(), // Added missing column
         });
 
       console.log('📤 Sending push notification to recipient...');
@@ -808,6 +906,9 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         createdAt: data.created_at,
       };
 
+      // Keep inbox list in sync even if realtime delivery is delayed.
+      loadConversationsRef.current?.();
+
       return { success: true, data: message };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -832,9 +933,9 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const refreshConversations = async () => {
+  const refreshConversations = useCallback(async () => {
     await loadConversations();
-  };
+  }, [loadConversations]);
 
   const deleteConversation = async (conversationId: string) => {
     try {
