@@ -20,6 +20,7 @@ import AppDownloadBanner from '../components/AppDownloadBanner';
 import WebNavigation from '../components/WebNavigation';
 import { MobileWebSafeContainer } from '../components/MobileWebSafeContainer';
 import { logger } from '../utils/logger';
+import { supabase } from '../services/supabase';
 import { setupFCMHandlers } from '../services/fcmNotifications';
 import { setupWebNotificationHandler, setWebNotificationHandler } from '../services/webNotifications';
 import { useAlert } from '../hooks/useAlert';
@@ -258,6 +259,26 @@ function AppContent() {
 
       logger.info('[DEEP LINK] Received URL', { url });
       const parsed = Linking.parse(url);
+
+      // Handle email verification redirect (vibe://login?code=... or https://.../login?code=...)
+      const isLoginPath = parsed.path === 'login' || parsed.path === '/login';
+      if (isLoginPath) {
+        const code = parsed.queryParams?.code;
+        if (code) {
+          const codeStr = Array.isArray(code) ? code[0] : code;
+          logger.info('[DEEP LINK] Auth code detected, exchanging for session...');
+          supabase.auth.exchangeCodeForSession(codeStr).then(({ data, error }) => {
+            if (error) {
+              logger.error('[DEEP LINK] Code exchange failed:', error);
+              router.replace('/login' as any);
+            } else {
+              logger.info('[DEEP LINK] Session established via code exchange');
+              router.replace('/feed' as any);
+            }
+          });
+          return;
+        }
+      }
 
       // Handle payment redirects (vibe://payment/success or vibe://payment/cancel)
       if (parsed.scheme === 'vibe' && parsed.path) {

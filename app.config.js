@@ -151,6 +151,7 @@ export default {
       "expo-video",
       "expo-web-browser",
       "expo-updates",
+      "@react-native-google-signin/google-signin",
       // Sentry plugin is native-only, exclude from web builds
       ...(process.env.VERCEL
         ? []
