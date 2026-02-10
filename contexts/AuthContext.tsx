@@ -105,7 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (session) {
           console.log('[AUTH] ✅ Active session found');
           console.log('[AUTH] User ID:', session.user.id);
-          console.log('[AUTH] User email:', session.user.email);
+          console.log('[AUTH] Auth session detected');
           const needsSetup = session?.user?.user_metadata?.needs_password_setup === true;
           setNeedsPasswordSetup(needsSetup);
           if (needsSetup) {
@@ -497,10 +497,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         // Use the session user directly; `getUser()` can fail with "Auth session missing!" in edge cases.
         const sessionUser = session.user;
-        console.log('[AUTH] 📧 Session user email:', sessionUser.email);
-        console.log('[AUTH] 📋 Session user metadata:', JSON.stringify(sessionUser.user_metadata, null, 2));
+        console.log('[AUTH] Building missing profile from auth metadata');
         
         const metadata = sessionUser.user_metadata || {};
+        const isOrganization = metadata.account_type === 'organization';
         
         // Prepare profile data from metadata
         const newProfileData = {
@@ -521,9 +521,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           total_hours: 0,
           activities_completed: 0,
           organizations_helped: 0,
-          account_type: 'individual',
-          approval_status: 'approved',
+          account_type: isOrganization ? 'organization' : 'individual',
+          approval_status: isOrganization ? (metadata.approval_status || 'pending') : 'approved',
           is_partner_organization: false,
+          organization_data: isOrganization ? (metadata.organization_data || null) : null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
@@ -587,8 +588,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       console.log('[AUTH] ✅ Profile data retrieved from database');
-      console.log('[AUTH] Email:', profileData.email);
-      console.log('[AUTH] Full Name:', profileData.full_name);
       console.log('[AUTH] Role (from DB):', profileData.role);
       console.log('[AUTH] Role type:', typeof profileData.role);
 
@@ -640,7 +639,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async (data: LoginFormData): Promise<ApiResponse<User>> => {
     console.log('[AUTH] 🔑 Starting sign in process...');
-    console.log('[AUTH] Email:', data.email);
+    console.log('[AUTH] Sign in requested');
     // Debug: Capture call stack to trace what triggered signIn
     console.log('[AUTH] 🔍 signIn called from:', new Error().stack?.split('\n').slice(1, 6).join('\n  '));
 
@@ -701,6 +700,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!profileData) {
         console.log('[AUTH] ⚠️ No profile row found, creating from auth metadata...');
         const metadata = authData.user.user_metadata || {};
+        const isOrganization = metadata.account_type === 'organization';
 
         const newProfileData = {
           id: authData.user.id,
@@ -720,9 +720,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           total_hours: 0,
           activities_completed: 0,
           organizations_helped: 0,
-          account_type: 'individual',
-          approval_status: 'approved',
+          account_type: isOrganization ? 'organization' : 'individual',
+          approval_status: isOrganization ? (metadata.approval_status || 'pending') : 'approved',
           is_partner_organization: false,
+          organization_data: isOrganization ? (metadata.organization_data || null) : null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
@@ -757,7 +758,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       console.log('[AUTH] ✅ Profile fetched successfully');
-      console.log('[AUTH] Full Name:', profileData.full_name);
       console.log('[AUTH] Role:', profileData.role);
 
       // Transform database user to app User type
@@ -828,13 +828,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return 'Please enter a valid email address.';
     }
 
-    // Weak password
+    // Weak / pwned password
     if (
+      errorCode === 'weak_password' ||
       errorCode === 'password_too_short' ||
-      errorMessage.includes('password') && errorMessage.includes('short') ||
-      errorMessage.includes('password') && errorMessage.includes('weak')
+      (errorMessage.includes('password') && errorMessage.includes('short')) ||
+      (errorMessage.includes('password') && errorMessage.includes('weak'))
     ) {
-      return 'Password must be at least 6 characters long.';
+      const reasons = error.reasons || [];
+      if (reasons.includes('pwned') || errorMessage.includes('pwned') || errorMessage.includes('easy to guess')) {
+        return 'This password has appeared in a known data breach. Please choose a different, more unique password.';
+      }
+      return 'Password must be at least 8 characters long.';
     }
 
     // Network/connection errors
@@ -870,9 +875,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (data: RegisterFormData): Promise<ApiResponse<User>> => {
+    if (!data.password || data.password.length < 8) {
+      return { success: false, error: 'Password must be at least 8 characters long.' };
+    }
+
     try {
-      setLoading(true);
-      
+      // NOTE: Do NOT call setLoading(true) here. The global auth `loading` state
+      // is used by _layout.tsx to determine if the app is initializing. Toggling it
+      // during signup causes the navigation to reset (splash → / → /login), which
+      // clears the registration form on errors like weak_password.
+      // The register screen manages its own local loading state instead.
+
       console.log('[AUTH] 🚀 Starting signup process (SDK 54)');
       
       // Prepare metadata object
@@ -883,18 +896,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         bio: data.bio || '',
         areas_of_expertise: data.areasOfExpertise || [],
         education: data.education || '',
-        country: (data as any).country || 'Jamaica',
-        date_of_birth: (data as any).dateOfBirth || null,
-        invite_code: (data as any).inviteCode || null,
+        country: data.country || 'Jamaica',
+        date_of_birth: data.dateOfBirth || null,
+        invite_code: data.inviteCode || null,
+        account_type: data.accountType || 'individual',
+        approval_status: data.approvalStatus || (data.accountType === 'organization' ? 'pending' : 'approved'),
+        is_partner_organization: data.isPartnerOrganization === true,
+        organization_data: data.organizationData || null,
       };
 
       // 🔍 DEBUG: Log metadata being sent
       console.log('[AUTH] 📤 Metadata being sent to Supabase:');
-      console.log('[AUTH] Metadata object:', JSON.stringify(metadata, null, 2));
       console.log('[AUTH] Metadata keys:', Object.keys(metadata));
-      console.log('[AUTH] Full name:', metadata.full_name);
-      console.log('[AUTH] Phone:', metadata.phone);
-      console.log('[AUTH] Location:', metadata.location);
       
       // Determine signup confirmation redirect URL based on platform.
       // If Supabase email confirmations are enabled, this is where the "Confirm your email" link sends users.
@@ -925,32 +938,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else if (authData) {
         console.log('[AUTH] ✅ Signup successful response:');
         console.log('[AUTH] User ID:', authData.user?.id);
-        console.log('[AUTH] User email:', authData.user?.email);
+        console.log('[AUTH] Signup response received');
         console.log('[AUTH] Session exists:', !!authData.session);
         
-        // 🔍 DEBUG: Check if metadata was received by Supabase
         if (authData.user) {
-          console.log('[AUTH] 🔍 Checking raw_user_meta_data in response:');
-          console.log('[AUTH] user_metadata:', JSON.stringify(authData.user.user_metadata, null, 2));
-          console.log('[AUTH] app_metadata:', JSON.stringify(authData.user.app_metadata, null, 2));
-          
-          // Check if metadata fields are present
           const receivedMetadata = authData.user.user_metadata || {};
-          console.log('[AUTH] 📥 Received metadata fields:');
-          console.log('[AUTH] - full_name:', receivedMetadata.full_name || 'MISSING ❌');
-          console.log('[AUTH] - phone:', receivedMetadata.phone || 'MISSING ❌');
-          console.log('[AUTH] - location:', receivedMetadata.location || 'MISSING ❌');
-          console.log('[AUTH] - country:', receivedMetadata.country || 'MISSING ❌');
-          console.log('[AUTH] - date_of_birth:', receivedMetadata.date_of_birth || 'MISSING ❌');
-          console.log('[AUTH] - invite_code:', receivedMetadata.invite_code || 'MISSING ❌');
-          
-          // Warn if metadata is missing
           if (!receivedMetadata.full_name || !receivedMetadata.phone || !receivedMetadata.location) {
-            console.warn('[AUTH] ⚠️ WARNING: Some metadata fields are missing in the response!');
-            console.warn('[AUTH] This might indicate a serialization issue with SDK 54');
-            console.warn('[AUTH] Check if SecureStore + PKCE flow is working correctly');
-          } else {
-            console.log('[AUTH] ✅ All metadata fields present in response!');
+            console.warn('[AUTH] ⚠️ Some signup metadata fields were not returned in auth response');
           }
         }
       }
@@ -1093,7 +1087,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         error: error?.message || 'An unexpected error occurred during registration. Please try again.' 
       };
     } finally {
-      setLoading(false);
+      // No setLoading(false) needed — see comment at top of signUp()
     }
   };
 
@@ -1193,7 +1187,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const forgotPassword = async (email: string): Promise<ApiResponse<void>> => {
     console.log('[AUTH] 🔑 Starting forgot password process...');
-    console.log('[AUTH] Email:', email);
+    console.log('[AUTH] Forgot-password flow started');
     
     try {
       if (!email) {
@@ -1237,8 +1231,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log('[AUTH] 🔐 Starting password reset process...');
     
     try {
-      if (!newPassword || newPassword.length < 6) {
-        return { success: false, error: 'Password must be at least 6 characters' };
+      if (!newPassword || newPassword.length < 8) {
+        return { success: false, error: 'Password must be at least 8 characters' };
       }
 
       // Update password via Supabase

@@ -3,7 +3,7 @@
  * Allows users to choose between Individual or Organization registration
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,10 +13,12 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
+  Linking,
+  LayoutChangeEvent,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
 import CrossPlatformDateTimePicker from '../components/CrossPlatformDateTimePicker';
@@ -26,6 +28,8 @@ import Button from '../components/Button';
 import CountryPicker from '../components/CountryPicker';
 
 type AccountType = 'individual' | 'organization';
+type FormErrors = Record<string, string>;
+const VERIFICATION_NOTICE_KEY = 'pending_email_verification_notice';
 
 const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
@@ -89,12 +93,18 @@ export default function RegisterScreen() {
   });
 
   const [showPassword, setShowPassword] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [individualErrors, setIndividualErrors] = useState<FormErrors>({});
+  const [organizationErrors, setOrganizationErrors] = useState<FormErrors>({});
   const [dobDate, setDobDate] = useState<Date>(() => {
     return individualFormData.dateOfBirth ? new Date(individualFormData.dateOfBirth) : new Date(2000, 0, 1);
   });
   const [selectedFocus, setSelectedFocus] = useState<string[]>([]);
   const [showVerificationMessage, setShowVerificationMessage] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState('');
+  const scrollRef = useRef<ScrollView | null>(null);
+  const fieldLayouts = useRef<Record<string, number>>({});
+  const inputRefs = useRef<Record<string, TextInput | null>>({});
 
   // Industry focus options (for organizations)
   const industryOptions = [
@@ -114,6 +124,165 @@ export default function RegisterScreen() {
 
   // Organization size options
   const sizeOptions = ['1-10', '11-50', '51-200', '200+'];
+
+  const persistVerificationNotice = async (email: string) => {
+    try {
+      await AsyncStorage.setItem(
+        VERIFICATION_NOTICE_KEY,
+        JSON.stringify({
+          email: email.trim().toLowerCase(),
+          ts: Date.now(),
+        })
+      );
+    } catch (error) {
+      console.warn('[REGISTER] Failed to persist verification notice', error);
+    }
+  };
+
+  const setFieldLayout = (field: string) => (e: LayoutChangeEvent) => {
+    fieldLayouts.current[field] = e.nativeEvent.layout.y;
+  };
+
+  const setInputRef = (field: string) => (ref: TextInput | null) => {
+    inputRefs.current[field] = ref;
+  };
+
+  const focusFirstInvalidField = (errors: FormErrors, type: AccountType) => {
+    const fieldOrder =
+      type === 'individual'
+        ? ['fullName', 'email', 'phone', 'location', 'country', 'dateOfBirth', 'password', 'confirmPassword', 'terms']
+        : [
+            'organizationName',
+            'registrationNumber',
+            'organizationDescription',
+            'organizationSize',
+            'industryFocus',
+            'contactPersonName',
+            'email',
+            'phone',
+            'location',
+            'country',
+            'password',
+            'confirmPassword',
+            'terms',
+          ];
+
+    const firstInvalidField = fieldOrder.find((key) => !!errors[key]);
+    if (!firstInvalidField) return;
+
+    const y = fieldLayouts.current[firstInvalidField];
+    if (typeof y === 'number') {
+      scrollRef.current?.scrollTo({ y: Math.max(y - 24, 0), animated: true });
+    }
+
+    const input = inputRefs.current[firstInvalidField];
+    if (input) {
+      setTimeout(() => input.focus(), 120);
+    }
+  };
+
+  const validateEmailOnBlur = (type: AccountType) => {
+    const value = type === 'individual' ? individualFormData.email : organizationFormData.email;
+    const normalized = value.trim();
+
+    if (!normalized) return;
+
+    if (!isValidEmail(normalized)) {
+      if (type === 'individual') {
+        setIndividualErrors((prev) => ({ ...prev, email: 'Please enter a valid email address' }));
+      } else {
+        setOrganizationErrors((prev) => ({ ...prev, email: 'Please enter a valid email address' }));
+      }
+    }
+  };
+
+  const calculateAge = (dob: string) => {
+    const today = new Date();
+    const birthDate = new Date(dob);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
+  const getIndividualValidationErrors = (): FormErrors => {
+    const formData = individualFormData;
+    const errors: FormErrors = {};
+
+    if (!formData.fullName.trim()) errors.fullName = 'Full name is required';
+    if (!formData.email.trim()) errors.email = 'Email is required';
+    if (!formData.phone.trim()) errors.phone = 'Phone number is required';
+    if (!formData.location.trim()) errors.location = 'Location is required';
+    if (!formData.country.trim()) errors.country = 'Country is required';
+    if (!formData.password) errors.password = 'Password is required';
+    if (!formData.confirmPassword) errors.confirmPassword = 'Please confirm your password';
+    if (!formData.dateOfBirth) errors.dateOfBirth = 'Date of birth is required';
+    if (!acceptedTerms) errors.terms = 'You must accept the Terms and Privacy Policy';
+
+    if (formData.password && formData.password.length < 8) {
+      errors.password = 'Password must be at least 8 characters';
+    }
+
+    if (formData.password && formData.confirmPassword && formData.password !== formData.confirmPassword) {
+      errors.confirmPassword = 'Passwords do not match';
+    }
+
+    if (formData.email && !isValidEmail(formData.email)) {
+      errors.email = 'Please enter a valid email address';
+    }
+
+    if (formData.phone && !isValidPhone(formData.phone)) {
+      errors.phone = 'Please enter a valid phone number (7-15 digits)';
+    }
+
+    if (formData.dateOfBirth) {
+      const age = calculateAge(formData.dateOfBirth);
+      if (age < 18) {
+        errors.dateOfBirth = 'You must be 18 or older to register for VIbe';
+      }
+    }
+
+    return errors;
+  };
+
+  const getOrganizationValidationErrors = (): FormErrors => {
+    const formData = organizationFormData;
+    const errors: FormErrors = {};
+
+    if (!formData.organizationName.trim()) errors.organizationName = 'Organization name is required';
+    if (!formData.registrationNumber.trim()) errors.registrationNumber = 'Registration/Tax ID is required';
+    if (!formData.organizationDescription.trim()) errors.organizationDescription = 'Organization description is required';
+    if (!formData.contactPersonName.trim()) errors.contactPersonName = 'Contact person name is required';
+    if (!formData.email.trim()) errors.email = 'Organization email is required';
+    if (!formData.phone.trim()) errors.phone = 'Phone number is required';
+    if (!formData.location.trim()) errors.location = 'Location is required';
+    if (!formData.country.trim()) errors.country = 'Country is required';
+    if (!formData.password) errors.password = 'Password is required';
+    if (!formData.confirmPassword) errors.confirmPassword = 'Please confirm your password';
+    if (!formData.organizationSize) errors.organizationSize = 'Please select your organization size';
+    if (selectedFocus.length === 0) errors.industryFocus = 'Please select at least one industry focus area';
+    if (!acceptedTerms) errors.terms = 'You must accept the Terms and Privacy Policy';
+
+    if (formData.email && !isValidEmail(formData.email)) {
+      errors.email = 'Please enter a valid email address';
+    }
+
+    if (formData.phone && !isValidPhone(formData.phone)) {
+      errors.phone = 'Please enter a valid phone number (7-15 digits)';
+    }
+
+    if (formData.password && formData.password.length < 8) {
+      errors.password = 'Password must be at least 8 characters';
+    }
+
+    if (formData.password && formData.confirmPassword && formData.password !== formData.confirmPassword) {
+      errors.confirmPassword = 'Passwords do not match';
+    }
+
+    return errors;
+  };
 
   // Capture invite code from URL
   useEffect(() => {
@@ -137,55 +306,16 @@ export default function RegisterScreen() {
 
   const handleIndividualRegister = async () => {
     const formData = individualFormData;
+    const errors = getIndividualValidationErrors();
 
-    // Validation
-    if (!formData.fullName || !formData.email || !formData.phone || !formData.location || !formData.country || !formData.password) {
-      showAlert('Error', 'Please fill in all required fields');
+    if (Object.keys(errors).length > 0) {
+      setIndividualErrors(errors);
+      focusFirstInvalidField(errors, 'individual');
+      showAlert('Fix Required Fields', 'Please correct the highlighted fields.');
       return;
     }
 
-    if (formData.password !== formData.confirmPassword) {
-      showAlert('Error', 'Passwords do not match');
-      return;
-    }
-
-    if (formData.password.length < 6) {
-      showAlert('Error', 'Password must be at least 6 characters');
-      return;
-    }
-
-    if (!isValidEmail(formData.email)) {
-      showAlert('Error', 'Please enter a valid email address');
-      return;
-    }
-
-    if (!isValidPhone(formData.phone)) {
-      showAlert('Error', 'Please enter a valid phone number (7–15 digits)');
-      return;
-    }
-
-    if (!formData.dateOfBirth) {
-      showAlert('Error', 'Please enter your date of birth');
-      return;
-    }
-
-    const calculateAge = (dob: string) => {
-      const today = new Date();
-      const birthDate = new Date(dob);
-      let age = today.getFullYear() - birthDate.getFullYear();
-      const monthDiff = today.getMonth() - birthDate.getMonth();
-      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-        age--;
-      }
-      return age;
-    };
-
-    const age = calculateAge(formData.dateOfBirth);
-    if (age < 18) {
-      showAlert('Age Restriction', 'You must be 18 or older to register for VIbe', 'warning');
-      return;
-    }
-
+    setIndividualErrors({});
     setLoading(true);
 
     try {
@@ -205,7 +335,8 @@ export default function RegisterScreen() {
         ...(formData.country && { country: formData.country }),
         ...(formData.dateOfBirth && { dateOfBirth: formData.dateOfBirth }),
         ...(inviteCode && { inviteCode }),
-      } as any);
+        accountType: 'individual',
+      });
 
       if (!response.success) {
         showAlert('Registration Failed', response.error || 'An error occurred during registration');
@@ -213,14 +344,17 @@ export default function RegisterScreen() {
       }
 
       if ((response as any).requiresEmailConfirmation || !response.data) {
-        console.log('[REGISTER] Email confirmation required - showing message');
-        
         setVerificationEmail(formData.email);
         setShowVerificationMessage(true);
+        await persistVerificationNotice(formData.email);
 
-        setTimeout(() => {
-          router.replace('/login?needsVerification=true&email=' + encodeURIComponent(formData.email));
-        }, 5000);
+        router.replace({
+          pathname: '/login',
+          params: {
+            needsVerification: 'true',
+            email: formData.email,
+          },
+        } as any);
 
         return;
       } else if (response.data) {
@@ -229,7 +363,7 @@ export default function RegisterScreen() {
           'Welcome to VIbe! Your account is now active and ready to use. You\'ll be redirected to your feed shortly.',
           'success'
         );
-        
+
         setTimeout(() => {
           router.replace('/feed' as any);
         }, 2000);
@@ -241,77 +375,21 @@ export default function RegisterScreen() {
       setLoading(false);
     }
   };
-
   const handleOrganizationRegister = async () => {
     const formData = organizationFormData;
+    const errors = getOrganizationValidationErrors();
 
-    // Validation
-    if (!formData.email || !formData.password || !formData.organizationName || 
-        !formData.registrationNumber || !formData.organizationDescription ||
-        !formData.contactPersonName || !formData.phone || !formData.location || !formData.country) {
-      showAlert('Error', 'Please fill in all required fields');
+    if (Object.keys(errors).length > 0) {
+      setOrganizationErrors(errors);
+      focusFirstInvalidField(errors, 'organization');
+      showAlert('Fix Required Fields', 'Please correct the highlighted fields.');
       return;
     }
 
-    if (formData.password !== formData.confirmPassword) {
-      showAlert('Error', 'Passwords do not match');
-      return;
-    }
-
-    if (formData.password.length < 6) {
-      showAlert('Error', 'Password must be at least 6 characters');
-      return;
-    }
-
-    if (!isValidEmail(formData.email)) {
-      showAlert('Error', 'Please enter a valid email address');
-      return;
-    }
-
-    if (!isValidPhone(formData.phone)) {
-      showAlert('Error', 'Please enter a valid phone number (7–15 digits)');
-      return;
-    }
-
-    if (selectedFocus.length === 0) {
-      showAlert('Error', 'Please select at least one industry focus area');
-      return;
-    }
-
-    if (!formData.organizationSize) {
-      showAlert('Error', 'Please select your organization size');
-      return;
-    }
-
+    setOrganizationErrors({});
     setLoading(true);
 
     try {
-      // Route signup through AuthContext so side effects run (profile creation, push token, HubSpot, welcome email)
-      const authResponse = await signUp({
-        email: formData.email.trim().toLowerCase(),
-        password: formData.password,
-        fullName: formData.organizationName.trim(),
-        phone: formData.phone.trim(),
-        location: formData.location.trim(),
-        ...(formData.country && { country: formData.country }),
-        ...(inviteCode && { inviteCode }),
-      } as any);
-
-      if (!authResponse.success) {
-        showAlert('Registration Failed', authResponse.error || 'An error occurred during registration. Please try again.');
-        return;
-      }
-
-      // If email confirmation is required, show existing verification UI and redirect to login
-      if ((authResponse as any).requiresEmailConfirmation || !authResponse.data) {
-        setVerificationEmail(formData.email);
-        setShowVerificationMessage(true);
-        setTimeout(() => {
-          router.replace('/login?needsVerification=true&email=' + encodeURIComponent(formData.email));
-        }, 5000);
-        return;
-      }
-
       const organizationData = {
         organization_name: formData.organizationName.trim(),
         registration_number: formData.registrationNumber.trim(),
@@ -322,6 +400,39 @@ export default function RegisterScreen() {
         organization_size: formData.organizationSize,
         industry_focus: selectedFocus,
       };
+
+      const authResponse = await signUp({
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password,
+        fullName: formData.organizationName.trim(),
+        phone: formData.phone.trim(),
+        location: formData.location.trim(),
+        ...(formData.country && { country: formData.country }),
+        ...(inviteCode && { inviteCode }),
+        accountType: 'organization',
+        approvalStatus: 'pending',
+        isPartnerOrganization: false,
+        organizationData,
+      });
+
+      if (!authResponse.success) {
+        showAlert('Registration Failed', authResponse.error || 'An error occurred during registration. Please try again.');
+        return;
+      }
+
+      if ((authResponse as any).requiresEmailConfirmation || !authResponse.data) {
+        setVerificationEmail(formData.email);
+        setShowVerificationMessage(true);
+        await persistVerificationNotice(formData.email);
+        router.replace({
+          pathname: '/login',
+          params: {
+            needsVerification: 'true',
+            email: formData.email,
+          },
+        } as any);
+        return;
+      }
 
       const { error: updateError } = await supabase
         .from('users')
@@ -343,9 +454,9 @@ export default function RegisterScreen() {
         'Your organization account has been created and submitted for review. Our team will review your application and contact you within 2-3 business days. You\'ll receive an email notification once your account is approved.',
         'success'
       );
-      
+
       await signOut();
-      
+
       setTimeout(() => {
         router.replace('/login');
       }, 4000);
@@ -357,7 +468,6 @@ export default function RegisterScreen() {
       setLoading(false);
     }
   };
-
   const handleRegister = () => {
     if (accountType === 'individual') {
       handleIndividualRegister();
@@ -368,10 +478,22 @@ export default function RegisterScreen() {
 
   const updateIndividualField = (field: string, value: string) => {
     setIndividualFormData(prev => ({ ...prev, [field]: value }));
+    setIndividualErrors(prev => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
   };
 
   const updateOrganizationField = (field: string, value: string) => {
     setOrganizationFormData(prev => ({ ...prev, [field]: value }));
+    setOrganizationErrors(prev => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
   };
 
   const toggleFocus = (focus: string) => {
@@ -380,9 +502,17 @@ export default function RegisterScreen() {
         ? prev.filter(f => f !== focus)
         : [...prev, focus]
     );
+    setOrganizationErrors(prev => {
+      if (!prev.industryFocus) return prev;
+      const next = { ...prev };
+      delete next.industryFocus;
+      return next;
+    });
   };
 
   const insets = useSafeAreaInsets();
+  const currentErrors = accountType === 'individual' ? individualErrors : organizationErrors;
+  const currentErrorCount = Object.keys(currentErrors).length;
 
   if (!authLoading && user) {
     return null;
@@ -394,6 +524,7 @@ export default function RegisterScreen() {
       style={styles.container}
     >
       <ScrollView 
+        ref={scrollRef}
         contentContainerStyle={[
           styles.scrollContent,
           { paddingBottom: styles.scrollContent.paddingBottom + insets.bottom + 80 }
@@ -478,8 +609,15 @@ export default function RegisterScreen() {
             </Text>
 
             <TouchableOpacity
-              onPress={() => {
-                router.replace('/login?needsVerification=true&email=' + encodeURIComponent(verificationEmail));
+              onPress={async () => {
+                await persistVerificationNotice(verificationEmail);
+                router.replace({
+                  pathname: '/login',
+                  params: {
+                    needsVerification: 'true',
+                    email: verificationEmail,
+                  },
+                } as any);
               }}
               style={{
                 backgroundColor: 'white',
@@ -530,9 +668,15 @@ export default function RegisterScreen() {
                   borderColor: accountType === 'individual' ? Colors.light.primary : Colors.light.border,
                 },
               ]}
-              onPress={() => setAccountType('individual')}
+              onPress={() => {
+                setAccountType('individual');
+                setOrganizationErrors({});
+              }}
               disabled={loading}
               activeOpacity={0.7}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: accountType === 'individual', disabled: loading }}
+              accessibilityLabel="Register as individual volunteer"
             >
               <Text
                 style={[
@@ -552,9 +696,15 @@ export default function RegisterScreen() {
                   borderColor: accountType === 'organization' ? '#FFC107' : Colors.light.border,
                 },
               ]}
-              onPress={() => setAccountType('organization')}
+              onPress={() => {
+                setAccountType('organization');
+                setIndividualErrors({});
+              }}
               disabled={loading}
               activeOpacity={0.7}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: accountType === 'organization', disabled: loading }}
+              accessibilityLabel="Register as partner organization"
             >
               <Text
                 style={[
@@ -575,10 +725,11 @@ export default function RegisterScreen() {
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Basic Information*</Text>
 
-              <View style={styles.inputContainer}>
+              <View style={styles.inputContainer} onLayout={setFieldLayout('fullName')}>
                 <Text style={styles.label}>Full Name*</Text>
                 <TextInput
-                  style={styles.input}
+                  ref={setInputRef('fullName')}
+                  style={[styles.input, individualErrors.fullName && styles.inputError]}
                   placeholder="John Doe"
                   placeholderTextColor={Colors.light.textSecondary}
                   value={individualFormData.fullName}
@@ -586,12 +737,14 @@ export default function RegisterScreen() {
                   editable={!loading}
                   autoCapitalize="words"
                 />
+                {individualErrors.fullName ? <Text style={styles.errorText}>{individualErrors.fullName}</Text> : null}
               </View>
 
-              <View style={styles.inputContainer}>
+              <View style={styles.inputContainer} onLayout={setFieldLayout('email')}>
                 <Text style={styles.label}>Email*</Text>
                 <TextInput
-                  style={styles.input}
+                  ref={setInputRef('email')}
+                  style={[styles.input, individualErrors.email && styles.inputError]}
                   placeholder="your.email@example.com"
                   placeholderTextColor={Colors.light.textSecondary}
                   value={individualFormData.email}
@@ -600,13 +753,16 @@ export default function RegisterScreen() {
                   keyboardType="email-address"
                   editable={!loading}
                   autoComplete="email"
+                  onBlur={() => validateEmailOnBlur('individual')}
                 />
+                {individualErrors.email ? <Text style={styles.errorText}>{individualErrors.email}</Text> : null}
               </View>
 
-              <View style={styles.inputContainer}>
+              <View style={styles.inputContainer} onLayout={setFieldLayout('phone')}>
                 <Text style={styles.label}>Phone Number*</Text>
                 <TextInput
-                  style={styles.input}
+                  ref={setInputRef('phone')}
+                  style={[styles.input, individualErrors.phone && styles.inputError]}
                   placeholder="+1 (876) 123-4567"
                   placeholderTextColor={Colors.light.textSecondary}
                   value={individualFormData.phone}
@@ -615,21 +771,24 @@ export default function RegisterScreen() {
                   editable={!loading}
                   autoComplete="tel"
                 />
+                {individualErrors.phone ? <Text style={styles.errorText}>{individualErrors.phone}</Text> : null}
               </View>
 
-              <View style={styles.inputContainer}>
+              <View style={styles.inputContainer} onLayout={setFieldLayout('location')}>
                 <Text style={styles.label}>Location*</Text>
                 <TextInput
-                  style={styles.input}
+                  ref={setInputRef('location')}
+                  style={[styles.input, individualErrors.location && styles.inputError]}
                   placeholder="Kingston, Jamaica"
                   placeholderTextColor={Colors.light.textSecondary}
                   value={individualFormData.location}
                   onChangeText={(value) => updateIndividualField('location', value)}
                   editable={!loading}
                 />
+                {individualErrors.location ? <Text style={styles.errorText}>{individualErrors.location}</Text> : null}
               </View>
 
-              <View style={styles.inputContainer}>
+              <View style={styles.inputContainer} onLayout={setFieldLayout('country')}>
                 <CountryPicker
                   label="Country*"
                   value={individualFormData.country}
@@ -644,37 +803,42 @@ export default function RegisterScreen() {
                     primary: Colors.light.primary,
                   }}
                 />
+                {individualErrors.country ? <Text style={styles.errorText}>{individualErrors.country}</Text> : null}
               </View>
 
-              <CrossPlatformDateTimePicker
-                mode="date"
-                value={dobDate}
-                onChange={(date) => {
-                  if (date) {
-                    setDobDate(date);
-                    const iso = date.toISOString().split('T')[0];
-                    updateIndividualField('dateOfBirth', iso);
-                  }
-                }}
-                maximumDate={new Date()}
-                label="Date of Birth *"
-                placeholder="Select your date of birth"
-                colors={{
-                  card: '#FFFFFF',
-                  border: Colors.light.border,
-                  text: Colors.light.text,
-                  textSecondary: Colors.light.textSecondary,
-                }}
-                disabled={loading}
-              />
-              <Text style={styles.helperText}>You must be 18 or older to register</Text>
+              <View onLayout={setFieldLayout('dateOfBirth')}>
+                <CrossPlatformDateTimePicker
+                  mode="date"
+                  value={dobDate}
+                  onChange={(date) => {
+                    if (date) {
+                      setDobDate(date);
+                      const iso = date.toISOString().split('T')[0];
+                      updateIndividualField('dateOfBirth', iso);
+                    }
+                  }}
+                  maximumDate={new Date()}
+                  label="Date of Birth *"
+                  placeholder="Select your date of birth"
+                  colors={{
+                    card: '#FFFFFF',
+                    border: Colors.light.border,
+                    text: Colors.light.text,
+                    textSecondary: Colors.light.textSecondary,
+                  }}
+                  disabled={loading}
+                />
+                <Text style={styles.helperText}>You must be 18 or older to register</Text>
+                {individualErrors.dateOfBirth ? <Text style={styles.errorText}>{individualErrors.dateOfBirth}</Text> : null}
+              </View>
 
-              <View style={styles.inputContainer}>
+              <View style={styles.inputContainer} onLayout={setFieldLayout('password')}>
                 <Text style={styles.label}>Password*</Text>
-                <View style={styles.passwordContainer}>
+                <View style={[styles.passwordContainer, individualErrors.password && styles.inputError]}>
                   <TextInput
+                    ref={setInputRef('password')}
                     style={styles.passwordInput}
-                    placeholder="At least 6 characters"
+                    placeholder="At least 8 characters"
                     placeholderTextColor={Colors.light.textSecondary}
                     value={individualFormData.password}
                     onChangeText={(value) => updateIndividualField('password', value)}
@@ -685,16 +849,20 @@ export default function RegisterScreen() {
                   <TouchableOpacity
                     onPress={() => setShowPassword(!showPassword)}
                     style={styles.eyeButton}
+                    accessibilityRole="button"
+                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
                   >
                     <Text style={styles.eyeText}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
                   </TouchableOpacity>
                 </View>
+                {individualErrors.password ? <Text style={styles.errorText}>{individualErrors.password}</Text> : null}
               </View>
 
-              <View style={styles.inputContainer}>
+              <View style={styles.inputContainer} onLayout={setFieldLayout('confirmPassword')}>
                 <Text style={styles.label}>Confirm Password*</Text>
                 <TextInput
-                  style={styles.input}
+                  ref={setInputRef('confirmPassword')}
+                  style={[styles.input, individualErrors.confirmPassword && styles.inputError]}
                   placeholder="Re-enter your password"
                   placeholderTextColor={Colors.light.textSecondary}
                   value={individualFormData.confirmPassword}
@@ -703,6 +871,7 @@ export default function RegisterScreen() {
                   editable={!loading}
                   autoComplete="password-new"
                 />
+                {individualErrors.confirmPassword ? <Text style={styles.errorText}>{individualErrors.confirmPassword}</Text> : null}
               </View>
             </View>
 
@@ -757,22 +926,25 @@ export default function RegisterScreen() {
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Organization Information*</Text>
 
-              <View style={styles.inputContainer}>
+              <View style={styles.inputContainer} onLayout={setFieldLayout('organizationName')}>
                 <Text style={styles.label}>Organization Name*</Text>
                 <TextInput
-                  style={styles.input}
+                  ref={setInputRef('organizationName')}
+                  style={[styles.input, organizationErrors.organizationName && styles.inputError]}
                   placeholder="Volunteers Incorporated"
                   placeholderTextColor={Colors.light.textSecondary}
                   value={organizationFormData.organizationName}
                   onChangeText={(value) => updateOrganizationField('organizationName', value)}
                   editable={!loading}
                 />
+                {organizationErrors.organizationName ? <Text style={styles.errorText}>{organizationErrors.organizationName}</Text> : null}
               </View>
 
-              <View style={styles.inputContainer}>
+              <View style={styles.inputContainer} onLayout={setFieldLayout('registrationNumber')}>
                 <Text style={styles.label}>Registration/Tax ID Number*</Text>
                 <TextInput
-                  style={styles.input}
+                  ref={setInputRef('registrationNumber')}
+                  style={[styles.input, organizationErrors.registrationNumber && styles.inputError]}
                   placeholder="Enter your official registration number"
                   placeholderTextColor={Colors.light.textSecondary}
                   value={organizationFormData.registrationNumber}
@@ -780,12 +952,14 @@ export default function RegisterScreen() {
                   editable={!loading}
                 />
                 <Text style={styles.helperText}>Required for verification purposes</Text>
+                {organizationErrors.registrationNumber ? <Text style={styles.errorText}>{organizationErrors.registrationNumber}</Text> : null}
               </View>
 
-              <View style={styles.inputContainer}>
+              <View style={styles.inputContainer} onLayout={setFieldLayout('organizationDescription')}>
                 <Text style={styles.label}>Organization Description*</Text>
                 <TextInput
-                  style={[styles.input, styles.textArea]}
+                  ref={setInputRef('organizationDescription')}
+                  style={[styles.input, styles.textArea, organizationErrors.organizationDescription && styles.inputError]}
                   placeholder="Describe your organization's mission and activities..."
                   placeholderTextColor={Colors.light.textSecondary}
                   value={organizationFormData.organizationDescription}
@@ -794,6 +968,7 @@ export default function RegisterScreen() {
                   numberOfLines={4}
                   editable={!loading}
                 />
+                {organizationErrors.organizationDescription ? <Text style={styles.errorText}>{organizationErrors.organizationDescription}</Text> : null}
               </View>
 
               <View style={styles.inputContainer}>
@@ -810,9 +985,9 @@ export default function RegisterScreen() {
                 />
               </View>
 
-              <View style={styles.inputContainer}>
+              <View style={styles.inputContainer} onLayout={setFieldLayout('organizationSize')}>
                 <Text style={styles.label}>Organization Size*</Text>
-                <View style={styles.chipsContainer}>
+                <View style={[styles.chipsContainer, organizationErrors.organizationSize && styles.chipsError]}>
                   {sizeOptions.map((size) => (
                     <TouchableOpacity
                       key={size}
@@ -823,6 +998,9 @@ export default function RegisterScreen() {
                       onPress={() => updateOrganizationField('organizationSize', size)}
                       disabled={loading}
                       activeOpacity={0.7}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: organizationFormData.organizationSize === size, disabled: loading }}
+                      accessibilityLabel={`Organization size ${size} employees`}
                     >
                       <Text
                         style={[
@@ -835,12 +1013,13 @@ export default function RegisterScreen() {
                     </TouchableOpacity>
                   ))}
                 </View>
+                {organizationErrors.organizationSize ? <Text style={styles.errorText}>{organizationErrors.organizationSize}</Text> : null}
               </View>
 
-              <View style={styles.inputContainer}>
+              <View style={styles.inputContainer} onLayout={setFieldLayout('industryFocus')}>
                 <Text style={styles.label}>Industry Focus*</Text>
                 <Text style={styles.helperText}>Select all that apply</Text>
-                <View style={styles.chipsContainer}>
+                <View style={[styles.chipsContainer, organizationErrors.industryFocus && styles.chipsError]}>
                   {industryOptions.map((focus) => (
                     <TouchableOpacity
                       key={focus}
@@ -851,6 +1030,9 @@ export default function RegisterScreen() {
                       onPress={() => toggleFocus(focus)}
                       disabled={loading}
                       activeOpacity={0.7}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: selectedFocus.includes(focus), disabled: loading }}
+                      accessibilityLabel={`Industry focus ${focus}`}
                     >
                       <Text
                         style={[
@@ -863,22 +1045,25 @@ export default function RegisterScreen() {
                     </TouchableOpacity>
                   ))}
                 </View>
+                {organizationErrors.industryFocus ? <Text style={styles.errorText}>{organizationErrors.industryFocus}</Text> : null}
               </View>
             </View>
 
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Contact Information*</Text>
 
-              <View style={styles.inputContainer}>
+              <View style={styles.inputContainer} onLayout={setFieldLayout('contactPersonName')}>
                 <Text style={styles.label}>Contact Person Name*</Text>
                 <TextInput
-                  style={styles.input}
+                  ref={setInputRef('contactPersonName')}
+                  style={[styles.input, organizationErrors.contactPersonName && styles.inputError]}
                   placeholder="John Doe"
                   placeholderTextColor={Colors.light.textSecondary}
                   value={organizationFormData.contactPersonName}
                   onChangeText={(value) => updateOrganizationField('contactPersonName', value)}
                   editable={!loading}
                 />
+                {organizationErrors.contactPersonName ? <Text style={styles.errorText}>{organizationErrors.contactPersonName}</Text> : null}
               </View>
 
               <View style={styles.inputContainer}>
@@ -893,10 +1078,11 @@ export default function RegisterScreen() {
                 />
               </View>
 
-              <View style={styles.inputContainer}>
+              <View style={styles.inputContainer} onLayout={setFieldLayout('email')}>
                 <Text style={styles.label}>Organization Email*</Text>
                 <TextInput
-                  style={styles.input}
+                  ref={setInputRef('email')}
+                  style={[styles.input, organizationErrors.email && styles.inputError]}
                   placeholder="contact@organization.org"
                   placeholderTextColor={Colors.light.textSecondary}
                   value={organizationFormData.email}
@@ -904,13 +1090,16 @@ export default function RegisterScreen() {
                   autoCapitalize="none"
                   keyboardType="email-address"
                   editable={!loading}
+                  onBlur={() => validateEmailOnBlur('organization')}
                 />
+                {organizationErrors.email ? <Text style={styles.errorText}>{organizationErrors.email}</Text> : null}
               </View>
 
-              <View style={styles.inputContainer}>
+              <View style={styles.inputContainer} onLayout={setFieldLayout('phone')}>
                 <Text style={styles.label}>Phone Number*</Text>
                 <TextInput
-                  style={styles.input}
+                  ref={setInputRef('phone')}
+                  style={[styles.input, organizationErrors.phone && styles.inputError]}
                   placeholder="+1 (876) 123-4567"
                   placeholderTextColor={Colors.light.textSecondary}
                   value={organizationFormData.phone}
@@ -918,21 +1107,24 @@ export default function RegisterScreen() {
                   keyboardType="phone-pad"
                   editable={!loading}
                 />
+                {organizationErrors.phone ? <Text style={styles.errorText}>{organizationErrors.phone}</Text> : null}
               </View>
 
-              <View style={styles.inputContainer}>
+              <View style={styles.inputContainer} onLayout={setFieldLayout('location')}>
                 <Text style={styles.label}>Location*</Text>
                 <TextInput
-                  style={styles.input}
+                  ref={setInputRef('location')}
+                  style={[styles.input, organizationErrors.location && styles.inputError]}
                   placeholder="Kingston, Jamaica"
                   placeholderTextColor={Colors.light.textSecondary}
                   value={organizationFormData.location}
                   onChangeText={(value) => updateOrganizationField('location', value)}
                   editable={!loading}
                 />
+                {organizationErrors.location ? <Text style={styles.errorText}>{organizationErrors.location}</Text> : null}
               </View>
 
-              <View style={styles.inputContainer}>
+              <View style={styles.inputContainer} onLayout={setFieldLayout('country')}>
                 <CountryPicker
                   label="Country*"
                   value={organizationFormData.country}
@@ -947,14 +1139,16 @@ export default function RegisterScreen() {
                     primary: Colors.light.primary,
                   }}
                 />
+                {organizationErrors.country ? <Text style={styles.errorText}>{organizationErrors.country}</Text> : null}
               </View>
 
-              <View style={styles.inputContainer}>
+              <View style={styles.inputContainer} onLayout={setFieldLayout('password')}>
                 <Text style={styles.label}>Password*</Text>
-                <View style={styles.passwordContainer}>
+                <View style={[styles.passwordContainer, organizationErrors.password && styles.inputError]}>
                   <TextInput
+                    ref={setInputRef('password')}
                     style={styles.passwordInput}
-                    placeholder="At least 6 characters"
+                    placeholder="At least 8 characters"
                     placeholderTextColor={Colors.light.textSecondary}
                     value={organizationFormData.password}
                     onChangeText={(value) => updateOrganizationField('password', value)}
@@ -964,16 +1158,20 @@ export default function RegisterScreen() {
                   <TouchableOpacity
                     onPress={() => setShowPassword(!showPassword)}
                     style={styles.eyeButton}
+                    accessibilityRole="button"
+                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
                   >
                     <Text style={styles.eyeText}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
                   </TouchableOpacity>
                 </View>
+                {organizationErrors.password ? <Text style={styles.errorText}>{organizationErrors.password}</Text> : null}
               </View>
 
-              <View style={styles.inputContainer}>
+              <View style={styles.inputContainer} onLayout={setFieldLayout('confirmPassword')}>
                 <Text style={styles.label}>Confirm Password*</Text>
                 <TextInput
-                  style={styles.input}
+                  ref={setInputRef('confirmPassword')}
+                  style={[styles.input, organizationErrors.confirmPassword && styles.inputError]}
                   placeholder="Re-enter your password"
                   placeholderTextColor={Colors.light.textSecondary}
                   value={organizationFormData.confirmPassword}
@@ -981,10 +1179,66 @@ export default function RegisterScreen() {
                   secureTextEntry={!showPassword}
                   editable={!loading}
                 />
+                {organizationErrors.confirmPassword ? <Text style={styles.errorText}>{organizationErrors.confirmPassword}</Text> : null}
               </View>
             </View>
           </>
         )}
+
+        <View style={styles.termsContainer} onLayout={setFieldLayout('terms')}>
+          <TouchableOpacity
+            style={styles.termsRow}
+            onPress={() => {
+              setAcceptedTerms(prev => !prev);
+              setIndividualErrors(prev => {
+                if (!prev.terms) return prev;
+                const next = { ...prev };
+                delete next.terms;
+                return next;
+              });
+              setOrganizationErrors(prev => {
+                if (!prev.terms) return prev;
+                const next = { ...prev };
+                delete next.terms;
+                return next;
+              });
+            }}
+            disabled={loading}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: acceptedTerms, disabled: loading }}
+            accessibilityLabel="Agree to Terms of Service and Privacy Policy"
+          >
+            <View
+              style={[
+                styles.checkbox,
+                acceptedTerms && styles.checkboxChecked,
+                (individualErrors.terms || organizationErrors.terms) && styles.checkboxError,
+              ]}
+            >
+              {acceptedTerms ? <Text style={styles.checkboxCheck}>X</Text> : null}
+            </View>
+            <Text style={styles.termsText}>
+              I agree to the{' '}
+              <Text style={styles.termsLink} onPress={() => Linking.openURL('https://volunteersinc.org/terms-and-conditions')}>
+                Terms of Service
+              </Text>{' '}
+              and{' '}
+              <Text style={styles.termsLink} onPress={() => Linking.openURL('https://volunteersinc.org/vibe-privacy-policy')}>
+                Privacy Policy
+              </Text>
+            </Text>
+          </TouchableOpacity>
+          {(individualErrors.terms || organizationErrors.terms) ? (
+            <Text style={styles.errorText}>{individualErrors.terms || organizationErrors.terms}</Text>
+          ) : null}
+        </View>
+
+        {currentErrorCount > 0 ? (
+          <View style={styles.errorSummaryBanner}>
+            <Text style={styles.errorSummaryTitle}>Please fix {currentErrorCount} field{currentErrorCount > 1 ? 's' : ''}</Text>
+            <Text style={styles.errorSummaryText}>Highlighted fields need attention before you can continue.</Text>
+          </View>
+        ) : null}
 
         {/* Register Button */}
         <Button
@@ -1109,6 +1363,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.light.border,
   },
+  inputError: {
+    borderColor: '#D32F2F',
+  },
+  errorText: {
+    fontSize: 12,
+    color: '#D32F2F',
+    marginTop: 4,
+  },
   textArea: {
     height: 100,
     textAlignVertical: 'top',
@@ -1144,6 +1406,12 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 8,
   },
+  chipsError: {
+    borderWidth: 1,
+    borderColor: '#D32F2F',
+    borderRadius: 10,
+    padding: 8,
+  },
   chip: {
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -1164,6 +1432,65 @@ const styles = StyleSheet.create({
   chipTextSelected: {
     color: '#000000',
     fontWeight: '600',
+  },
+  termsContainer: {
+    marginBottom: 16,
+  },
+  termsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: Colors.light.border,
+    marginTop: 2,
+    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.light.card,
+  },
+  checkboxChecked: {
+    backgroundColor: Colors.light.primary,
+    borderColor: Colors.light.primary,
+  },
+  checkboxError: {
+    borderColor: '#D32F2F',
+  },
+  checkboxCheck: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  termsText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.light.textSecondary,
+    lineHeight: 18,
+  },
+  termsLink: {
+    color: Colors.light.primary,
+    fontWeight: '600',
+  },
+  errorSummaryBanner: {
+    backgroundColor: '#FDECEC',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D32F2F',
+    padding: 12,
+    marginBottom: 12,
+  },
+  errorSummaryTitle: {
+    color: '#B71C1C',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  errorSummaryText: {
+    color: '#B71C1C',
+    fontSize: 12,
   },
   registerButton: {
     borderRadius: 12,
@@ -1187,3 +1514,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+
+
+

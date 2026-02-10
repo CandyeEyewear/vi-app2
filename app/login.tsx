@@ -20,25 +20,159 @@ import {
 } from 'react-native';
 import { useRouter, Redirect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
 import { useAlert } from '../hooks/useAlert';
 import { supabase } from '../services/supabase';
 import Button from '../components/Button';
+import { isWeb } from '../utils/platform';
+
+let GoogleSignin: any = null;
+const VERIFICATION_NOTICE_KEY = 'pending_email_verification_notice';
+if (!isWeb) {
+  try {
+    const gsi = require('@react-native-google-signin/google-signin');
+    GoogleSignin = gsi.GoogleSignin;
+  } catch (e) {
+    console.warn('[LOGIN] Google Sign-In not available:', e);
+  }
+}
 
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { signIn, loading, user } = useAuth();
   const params = useLocalSearchParams();
-  const needsVerification = params.needsVerification === 'true';
-  const userEmail = params.email as string;
+  const needsVerificationParam = params.needsVerification;
+  const userEmailParam = params.email;
+  const needsVerification = Array.isArray(needsVerificationParam)
+    ? needsVerificationParam.some((value) => {
+        const normalized = String(value).toLowerCase();
+        return normalized === 'true' || normalized === '1';
+      })
+    : (() => {
+        const normalized = String(needsVerificationParam ?? '').toLowerCase();
+        return normalized === 'true' || normalized === '1';
+      })();
+  const userEmail = Array.isArray(userEmailParam)
+    ? (userEmailParam[0] || '')
+    : String(userEmailParam || '');
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [fallbackNeedsVerification, setFallbackNeedsVerification] = useState(false);
+  const [fallbackVerificationEmail, setFallbackVerificationEmail] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const { showAlert } = useAlert();
   const [resendingEmail, setResendingEmail] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [exchangingCode, setExchangingCode] = useState(false);
+  const effectiveNeedsVerification = needsVerification || fallbackNeedsVerification;
+  const effectiveVerificationEmail = (userEmail || fallbackVerificationEmail || '').trim();
+
+  // Handle PKCE code exchange from email verification redirect.
+  // When users click the verification link in their email, Supabase redirects
+  // to this page with ?code=<pkce_code>. We must exchange it for a session.
+  const codeParam = params.code;
+  const authCode = Array.isArray(codeParam) ? codeParam[0] : codeParam;
+
+  useEffect(() => {
+    if (!authCode || exchangingCode) return;
+
+    const exchangeCode = async () => {
+      setExchangingCode(true);
+      console.log('[LOGIN] PKCE auth code detected, exchanging for session...');
+      try {
+        const { data, error } = await supabase.auth.exchangeCodeForSession(String(authCode));
+        if (error) {
+          console.error('[LOGIN] PKCE code exchange failed:', error);
+          showAlert({
+            type: 'error',
+            title: 'Verification Failed',
+            message: 'Unable to verify your email. The link may have expired — please try signing in and resending the verification email.',
+          });
+        } else {
+          console.log('[LOGIN] PKCE code exchange successful — session established');
+          showAlert({
+            type: 'success',
+            title: 'Email Verified',
+            message: 'Your email has been verified! Redirecting...',
+          });
+          router.replace('/feed' as any);
+        }
+      } catch (err) {
+        console.error('[LOGIN] PKCE exchange error:', err);
+      } finally {
+        setExchangingCode(false);
+      }
+    };
+
+    exchangeCode();
+  }, [authCode]);
+
+  useEffect(() => {
+    if (userEmail && !email) {
+      setEmail(userEmail);
+    }
+  }, [userEmail]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const hydrateVerificationNotice = async () => {
+      if (needsVerification) {
+        setFallbackNeedsVerification(true);
+        if (userEmail) {
+          setFallbackVerificationEmail(userEmail);
+        }
+        try {
+          await AsyncStorage.removeItem(VERIFICATION_NOTICE_KEY);
+        } catch {}
+        return;
+      }
+
+      try {
+        const raw = await AsyncStorage.getItem(VERIFICATION_NOTICE_KEY);
+        if (!raw || !mounted) return;
+
+        const parsed = JSON.parse(raw);
+        const ts = Number(parsed?.ts || 0);
+        const isFresh = !!ts && Date.now() - ts <= 30 * 60 * 1000;
+        if (!isFresh) {
+          await AsyncStorage.removeItem(VERIFICATION_NOTICE_KEY);
+          return;
+        }
+
+        setFallbackNeedsVerification(true);
+        if (typeof parsed?.email === 'string' && parsed.email.trim()) {
+          const normalizedEmail = parsed.email.trim();
+          setFallbackVerificationEmail(normalizedEmail);
+          setEmail((prev) => prev || normalizedEmail);
+        }
+
+        await AsyncStorage.removeItem(VERIFICATION_NOTICE_KEY);
+      } catch (error) {
+        console.warn('[LOGIN] Failed to hydrate verification notice', error);
+      }
+    };
+
+    hydrateVerificationNotice();
+    return () => {
+      mounted = false;
+    };
+  }, [needsVerification, userEmail]);
+
+  // Configure Google Sign-In on mount
+  useEffect(() => {
+    if (GoogleSignin) {
+      GoogleSignin.configure({
+        webClientId: '771771235452-4qd63i98hjp7r8fah0sdpus8fdifrf81.apps.googleusercontent.com',
+        iosClientId: '771771235452-ipe2kn383hf02f8ui5j7s4gr5ehebr2q.apps.googleusercontent.com',
+      });
+    }
+  }, []);
 
   // Redirect authenticated users away from login screen
   useEffect(() => {
@@ -48,9 +182,9 @@ export default function LoginScreen() {
   }, [user, loading, router]);
 
 
-  // Don't render login form if user is already authenticated
-  if (!loading && user) {
-    return null; // Will redirect via useEffect
+  // Don't render login form if user is already authenticated or code exchange is in progress
+  if ((!loading && user) || exchangingCode) {
+    return null; // Will redirect via useEffect or PKCE exchange
   }
 
   const handleTerms = () => {
@@ -62,13 +196,14 @@ export default function LoginScreen() {
   };
 
   const handleResendVerification = async () => {
-    if (!userEmail) return;
+    const targetEmail = effectiveVerificationEmail;
+    if (!targetEmail) return;
 
     setResendingEmail(true);
     try {
       const { error } = await supabase.auth.resend({
         type: 'signup',
-        email: userEmail,
+        email: targetEmail,
       });
 
       if (error) {
@@ -83,20 +218,105 @@ export default function LoginScreen() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    if (!GoogleSignin) {
+      showAlert({ title: 'Unavailable', message: 'Google Sign-In is not available on this platform.', type: 'error' });
+      return;
+    }
+
+    setGoogleLoading(true);
+    try {
+      await GoogleSignin.hasPlayServices();
+      const signInResult = await GoogleSignin.signIn();
+      const idToken = signInResult?.data?.idToken;
+
+      if (!idToken) {
+        throw new Error('Failed to get ID token from Google.');
+      }
+
+      const { data: authData, error: authError } = await supabase.auth.signInWithIdToken({
+        provider: 'google',
+        token: idToken,
+      });
+
+      if (authError) {
+        throw authError;
+      }
+
+      const user = authData?.user;
+      if (!user) {
+        throw new Error('No user returned from sign-in.');
+      }
+
+      // Check if profile exists, create one if first-time Google user
+      const { data: profile } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+      if (!profile) {
+        console.log('[LOGIN] First-time Google user, creating profile...');
+        await supabase.from('users').insert({
+          id: user.id,
+          email: user.email,
+          full_name: user.user_metadata?.full_name || user.user_metadata?.name || '',
+          avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || '',
+          account_type: 'volunteer',
+          role: 'volunteer',
+        });
+      }
+
+      console.log('[LOGIN] Google sign-in successful');
+      setTimeout(() => {
+        router.replace('/feed' as any);
+      }, 100);
+    } catch (error: any) {
+      console.error('[LOGIN] Google sign-in error:', error);
+      // Don't show error if user cancelled
+      if (error?.code !== 'SIGN_IN_CANCELLED' && error?.code !== 'ERR_CANCELED') {
+        showAlert({
+          title: 'Google Sign-In Failed',
+          message: error?.message || 'Something went wrong. Please try again.',
+          type: 'error',
+        });
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  const validateEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+
+  const validateEmailField = () => {
+    if (!email.trim()) {
+      setEmailError('Email is required');
+      return false;
+    }
+
+    if (!validateEmail(email)) {
+      setEmailError('Please enter a valid email address');
+      return false;
+    }
+
+    setEmailError('');
+    return true;
+  };
+
   const handleLogin = async () => {
-    // Debug: Log when handleLogin is called and by what
-    console.log('[LOGIN] handleLogin called', {
-      email: email ? `${email.substring(0, 3)}...` : '(empty)',
-      hasPassword: !!password,
-      loading,
-      timestamp: new Date().toISOString(),
-      // Capture call stack to trace what triggered this
-      stack: new Error().stack?.split('\n').slice(1, 4).join(' -> '),
-    });
+    console.log('[LOGIN] Login requested');
 
     if (!email || !password) {
       console.log('[LOGIN] Missing credentials, showing alert');
+      if (!email.trim()) {
+        setEmailError('Email is required');
+      }
       showAlert({ title: 'Missing Information', message: 'Please fill in all fields', type: 'error' });
+      return;
+    }
+
+    if (!validateEmailField()) {
+      showAlert({ title: 'Invalid Email', message: 'Please enter a valid email address.', type: 'error' });
       return;
     }
 
@@ -122,9 +342,10 @@ export default function LoginScreen() {
 
         if (response.error) {
           const errorLower = response.error.toLowerCase();
-          if (errorLower.includes('invalid login credentials') ||
+          if (errorLower.includes('email not confirmed')) {
+            errorMessage = 'Please verify your email address before signing in. Check your inbox for the verification link.';
+          } else if (errorLower.includes('invalid login credentials') ||
             errorLower.includes('invalid_credentials') ||
-            errorLower.includes('email not confirmed') ||
             errorLower.includes('invalid password') ||
             errorLower.includes('user not found')) {
             errorMessage = 'Invalid email or password. Please check your credentials and try again.';
@@ -173,7 +394,7 @@ export default function LoginScreen() {
           <View style={styles.formSection}>
             <Text style={styles.title}>Welcome Back!</Text>
             <Text style={styles.subtitle}>Sign in to continue volunteering</Text>
-            {needsVerification && (
+            {effectiveNeedsVerification && (
               <View
                 style={{
                   backgroundColor: '#e3f2fd',
@@ -207,7 +428,7 @@ export default function LoginScreen() {
                   }}
                 >
                   We sent a verification link to{' '}
-                  <Text style={{ fontWeight: '600' }}>{userEmail}</Text>. Please check your
+                  <Text style={{ fontWeight: '600' }}>{effectiveVerificationEmail || 'your email address'}</Text>. Please check your
                   inbox (and spam folder) to verify your account before logging in.
                 </Text>
                 <Button
@@ -226,15 +447,20 @@ export default function LoginScreen() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Email</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, emailError && styles.inputError]}
                 placeholder="your.email@example.com"
                 placeholderTextColor={Colors.light.textSecondary}
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(value) => {
+                  setEmail(value);
+                  if (emailError) setEmailError('');
+                }}
+                onBlur={validateEmailField}
                 autoCapitalize="none"
                 keyboardType="email-address"
                 editable={!loading}
               />
+              {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
             </View>
 
             {/* Password Input */}
@@ -282,6 +508,34 @@ export default function LoginScreen() {
             >
               Sign In
             </Button>
+
+            {/* Divider */}
+            {!isWeb && GoogleSignin && (
+              <>
+                <View style={styles.dividerContainer}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>or</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+
+                {/* Google Sign-In Button */}
+                <TouchableOpacity
+                  style={styles.googleButton}
+                  onPress={handleGoogleSignIn}
+                  disabled={googleLoading || loading}
+                  activeOpacity={0.7}
+                >
+                  {googleLoading ? (
+                    <ActivityIndicator size="small" color="#4285F4" style={{ marginRight: 12 }} />
+                  ) : (
+                    <View style={styles.googleIconContainer}>
+                      <Text style={styles.googleIcon}>G</Text>
+                    </View>
+                  )}
+                  <Text style={styles.googleButtonText}>Sign in with Google</Text>
+                </TouchableOpacity>
+              </>
+            )}
 
             {/* Register Link */}
             <View style={styles.registerContainer}>
@@ -371,6 +625,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.light.border,
   },
+  inputError: {
+    borderColor: '#D32F2F',
+  },
+  errorText: {
+    fontSize: 12,
+    color: '#D32F2F',
+    marginTop: 4,
+  },
   passwordContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -416,6 +678,56 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#2196F3',
     fontWeight: '600',
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.light.border,
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 14,
+    color: Colors.light.textSecondary,
+    fontWeight: '500',
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  googleIconContainer: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  googleIcon: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#4285F4',
+  },
+  googleButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
   },
   footer: {
     flexDirection: 'row',

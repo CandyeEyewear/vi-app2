@@ -26,6 +26,10 @@ DECLARE
   education_val TEXT;
   date_of_birth_val TEXT;
   invite_code_val TEXT;
+  account_type_val TEXT;
+  approval_status_val TEXT;
+  is_partner_organization_val BOOLEAN;
+  organization_data_val JSONB;
   slug_val TEXT;
   base_slug TEXT;
   random_suffix TEXT;
@@ -85,6 +89,25 @@ BEGIN
     NULL
   );
 
+  -- Account classification metadata
+  account_type_val := CASE
+    WHEN COALESCE(user_metadata->>'account_type', 'individual') = 'organization' THEN 'organization'
+    ELSE 'individual'
+  END;
+
+  approval_status_val := CASE
+    WHEN account_type_val = 'organization' THEN COALESCE(user_metadata->>'approval_status', 'pending')
+    ELSE 'approved'
+  END;
+
+  is_partner_organization_val := false;
+
+  IF jsonb_typeof(user_metadata->'organization_data') = 'object' THEN
+    organization_data_val := user_metadata->'organization_data';
+  ELSE
+    organization_data_val := NULL;
+  END IF;
+
   -- Generate a unique slug from the full name
   -- Convert to lowercase, replace spaces with hyphens, remove special chars
   base_slug := COALESCE(
@@ -118,6 +141,10 @@ BEGIN
     areas_of_expertise,
     education,
     date_of_birth,
+    account_type,
+    approval_status,
+    is_partner_organization,
+    organization_data,
     role,
     total_hours,
     activities_completed,
@@ -137,6 +164,10 @@ BEGIN
     areas_of_expertise_val,
     education_val,
     date_of_birth_val,
+    account_type_val,
+    approval_status_val,
+    is_partner_organization_val,
+    organization_data_val,
     'volunteer',  -- Default role
     0,            -- Default hours
     0,            -- Default activities

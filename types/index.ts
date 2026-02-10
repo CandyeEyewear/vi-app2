@@ -26,19 +26,19 @@ export interface User {
   membershipStatus?: 'inactive' | 'active' | 'expired' | 'cancelled'; // Subscription status
   isPrivate?: boolean; // Privacy setting for profile visibility
   // Organization fields
-  account_type?: 'volunteer' | 'organization';
+  account_type?: 'individual' | 'organization' | 'volunteer';
   approval_status?: 'pending' | 'approved' | 'rejected';
   is_partner_organization?: boolean;
   organization_data?: {
     organization_name: string;
     registration_number: string;
     organization_description: string;
-    website_url?: string;
+    website_url?: string | null;
     contact_person_name: string;
-    contact_person_role?: string;
+    contact_person_role?: string | null;
     organization_size: string;
     industry_focus: string[];
-  };
+  } | null;
   // Moderation fields
   isBanned?: boolean;
   bannedUntil?: string;
@@ -472,6 +472,22 @@ export interface RegisterFormData {
   fullName: string;
   phone: string;
   location: string;
+  country?: string;
+  dateOfBirth?: string;
+  inviteCode?: string;
+  accountType?: 'individual' | 'organization';
+  approvalStatus?: 'pending' | 'approved' | 'rejected';
+  isPartnerOrganization?: boolean;
+  organizationData?: {
+    organization_name: string;
+    registration_number: string;
+    organization_description: string;
+    website_url?: string | null;
+    contact_person_name: string;
+    contact_person_role?: string | null;
+    organization_size: string;
+    industry_focus: string[];
+  };
   bio?: string;
   areasOfExpertise?: string[];
   education?: string;

@@ -159,8 +159,8 @@ export default function ResetPasswordScreen() {
       return;
     }
 
-    if (newPassword.length < 6) {
-      showAlert('Error', 'Password must be at least 6 characters', 'error');
+    if (newPassword.length < 8) {
+      showAlert('Error', 'Password must be at least 8 characters', 'error');
       return;
     }
 
@@ -282,7 +282,7 @@ export default function ResetPasswordScreen() {
           </View>
           <Text style={styles.title}>Reset Password</Text>
           <Text style={styles.subtitle}>
-            Enter your new password below. Make sure it's at least 6 characters long.
+            Enter your new password below. Make sure it's at least 8 characters long.
           </Text>
         </View>
 

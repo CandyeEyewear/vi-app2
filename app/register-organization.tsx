@@ -20,10 +20,13 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '../constants/colors';
 import CustomAlert from '../components/CustomAlert';
 import { useAuth } from '../contexts/AuthContext';
 import CountryPicker from '../components/CountryPicker';
+
+const VERIFICATION_NOTICE_KEY = 'pending_email_verification_notice';
 
 export default function RegisterOrganizationScreen() {
   const router = useRouter();
@@ -64,6 +67,20 @@ export default function RegisterOrganizationScreen() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [selectedFocus, setSelectedFocus] = useState<string[]>([]);
+
+  const persistVerificationNotice = async (email: string) => {
+    try {
+      await AsyncStorage.setItem(
+        VERIFICATION_NOTICE_KEY,
+        JSON.stringify({
+          email: email.trim().toLowerCase(),
+          ts: Date.now(),
+        })
+      );
+    } catch (error) {
+      console.warn('[REGISTER_ORG] Failed to persist verification notice', error);
+    }
+  };
 
   const isValidPhone = (phone: string) => {
     const trimmed = phone.trim();
@@ -106,8 +123,8 @@ export default function RegisterOrganizationScreen() {
       return;
     }
 
-    if (formData.password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+    if (formData.password.length < 8) {
+      Alert.alert('Error', 'Password must be at least 8 characters');
       return;
     }
 
@@ -145,14 +162,41 @@ export default function RegisterOrganizationScreen() {
         location: formData.location.trim(),
         bio: formData.organizationDescription.trim() || undefined,
         ...(formData.country && { country: formData.country }),
-      } as any);
+        accountType: 'organization',
+        approvalStatus: 'pending',
+        isPartnerOrganization: false,
+        organizationData: {
+          organization_name: formData.organizationName.trim(),
+          registration_number: formData.registrationNumber.trim(),
+          organization_description: formData.organizationDescription.trim(),
+          website_url: formData.websiteUrl.trim() || null,
+          contact_person_name: formData.contactPersonName.trim(),
+          contact_person_role: formData.contactPersonRole.trim() || null,
+          organization_size: formData.organizationSize,
+          industry_focus: selectedFocus,
+        },
+      });
 
       if (!signUpResponse.success) {
         throw new Error(signUpResponse.error || 'Failed to create user account');
       }
 
       if ((signUpResponse as any).requiresEmailConfirmation || !signUpResponse.data) {
-        throw new Error('Please verify your email address to complete registration.');
+        await persistVerificationNotice(formData.email);
+        setAlertConfig({
+          title: 'Verify Your Email',
+          message: 'We sent a verification link to your email. Please verify your account, then sign in.',
+          type: 'warning',
+        });
+        setAlertVisible(true);
+        router.replace({
+          pathname: '/login',
+          params: {
+            needsVerification: 'true',
+            email: formData.email.trim().toLowerCase(),
+          },
+        } as any);
+        return;
       }
 
       // Step 2: Update the user profile with organization data (profile row already created by AuthContext)
@@ -501,7 +545,7 @@ export default function RegisterOrganizationScreen() {
             }]}>
               <TextInput
                 style={[styles.passwordInput, { color: colors.text }]}
-                placeholder="At least 6 characters"
+                placeholder="At least 8 characters"
                 placeholderTextColor={colors.textSecondary}
                 value={formData.password}
                 onChangeText={(value) => updateField('password', value)}
