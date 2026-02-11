@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmd.exe /c \"set PATH=C:\\\\Users\\\\dbailey\\\\node\\\\node-v22.16.0-win-x64;%PATH% && npx eas-cli credentials -p android\")",
+      "Bash(cmd.exe /c \"set PATH=C:\\\\Users\\\\dbailey\\\\node\\\\node-v22.16.0-win-x64;%PATH% && npx eas-cli credentials -p android --non-interactive 2>&1\")",
+      "Bash(cmd.exe /c \"set PATH=C:\\\\Users\\\\dbailey\\\\node\\\\node-v22.16.0-win-x64;%PATH% && npx expo install @react-native-google-signin/google-signin 2>&1\")",
+      "Bash(cmd.exe /c \"set PATH=C:\\\\Users\\\\dbailey\\\\node\\\\node-v22.16.0-win-x64;%PATH% && npm install @react-native-google-signin/google-signin --save\")",
+      "Bash(cmd.exe /c \"set PATH=C:\\\\Users\\\\dbailey\\\\node\\\\node-v22.16.0-win-x64;%PATH% && node -e \"\"const{execSync}=require\\(''child_process''\\);const r=execSync\\(''npm install @react-native-google-signin/google-signin --save'',{cwd:''c:\\\\Users\\\\dbailey\\\\Projects\\\\vi-app2'',encoding:''utf8'',stdio:''pipe''}\\);console.log\\(r\\);\"\"\")",
+      "Bash(cmd /c \"set PATH=C:\\\\Users\\\\dbailey\\\\node\\\\node-v22.16.0-win-x64;%PATH%&& npm install @react-native-google-signin/google-signin --save\")",
+      "Bash(C:Usersdbaileynodenode-v22.16.0-win-x64npm.cmd install @react-native-google-signin/google-signin --save)",
+      "Bash(export PATH=\"/mnt/c/Users/dbailey/node/node-v22.16.0-win-x64:$PATH\")",
+      "Bash(/mnt/c/Users/dbailey/node/node-v22.16.0-win-x64/node.exe -e \"console.log\\(''works''\\)\")",
+      "Read(//c/Users/dbailey/node/node-v22.16.0-win-x64//**)",
+      "Bash(export PATH=\"/c/Users/dbailey/node/node-v22.16.0-win-x64:$PATH\")",
+      "Bash(node -e:*)",
+      "Bash(npm:*)",
+      "Bash(curl:*)",
+      "Bash(python3:*)",
+      "Bash(cmd.exe /c \"set PATH=C:\\\\Users\\\\dbailey\\\\node\\\\node-v22.16.0-win-x64;%PATH% && npx supabase functions deploy auth-send-email --no-verify-jwt\")",
+      "Bash(cmd.exe /c \"set PATH=C:\\\\Users\\\\dbailey\\\\node\\\\node-v22.16.0-win-x64;%PATH% && npx supabase functions deploy auth-send-email --no-verify-jwt 2>&1\")",
+      "Bash(cmd.exe /c \"set PATH=C:\\\\Users\\\\dbailey\\\\node\\\\node-v22.16.0-win-x64;%PATH% && where npx && npx supabase --version 2>&1\")",
+      "Bash(C:Usersdbaileynodenode-v22.16.0-win-x64npx.cmd supabase --version)",
+      "Bash(cmd.exe /c \"C:\\\\Users\\\\dbailey\\\\node\\\\node-v22.16.0-win-x64\\\\npx.cmd supabase --version 2>&1\")",
+      "Bash(cmd.exe /c \"echo test123 > C:\\\\Users\\\\dbailey\\\\Projects\\\\vi-app2\\\\tmp_output.txt && type C:\\\\Users\\\\dbailey\\\\Projects\\\\vi-app2\\\\tmp_output.txt\")",
+      "Bash(npx supabase:*)",
+      "Bash(export:*)",
+      "Bash(git status:*)",
+      "Bash(git fetch:*)",
+      "Bash(git push:*)",
+      "Bash(git checkout:*)"
+    ]
+  }
+}

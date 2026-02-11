@@ -766,6 +766,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AUTH] 📦 Setting user state...');
       setUser(userData);
       console.log('[AUTH] ✅ User state updated');
+
+      // Backfill HubSpot sync after login when missing.
+      // This covers users created with email confirmation where signup returns before sync runs.
+      const existingHubspotContactId = (profileData as any)?.hubspot_contact_id;
+      if (!existingHubspotContactId) {
+        console.log('[AUTH] 🔄 HubSpot contact missing, attempting backfill sync...');
+        const hubspotResult = await syncContactToHubSpot({
+          email: userData.email,
+          fullName: userData.fullName || data.email,
+          phone: userData.phone || undefined,
+          location: userData.location || undefined,
+          bio: userData.bio,
+          areasOfExpertise: userData.areasOfExpertise,
+          education: userData.education,
+        });
+
+        if (hubspotResult.success && hubspotResult.contactId) {
+          const { error: hubspotUpdateError } = await supabase
+            .from('users')
+            .update({ hubspot_contact_id: hubspotResult.contactId })
+            .eq('id', authData.user.id);
+
+          if (hubspotUpdateError) {
+            console.error('[AUTH] ⚠️ Failed to save HubSpot Contact ID during sign-in backfill:', hubspotUpdateError);
+          } else {
+            console.log('[AUTH] ✅ HubSpot Contact ID backfilled on sign-in');
+          }
+        } else {
+          console.error('[AUTH] ⚠️ HubSpot backfill sync failed on sign-in:', hubspotResult.error);
+        }
+      } else {
+        console.log('[AUTH] ✅ HubSpot contact already linked');
+      }
       
       // Register for push notifications
       console.log('[AUTH] 🔔 Registering for push notifications...');

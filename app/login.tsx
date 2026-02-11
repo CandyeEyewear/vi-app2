@@ -528,9 +528,10 @@ export default function LoginScreen() {
                   {googleLoading ? (
                     <ActivityIndicator size="small" color="#4285F4" style={{ marginRight: 12 }} />
                   ) : (
-                    <View style={styles.googleIconContainer}>
-                      <Text style={styles.googleIcon}>G</Text>
-                    </View>
+                    <Image
+                      source={require('../assets/google.png')}
+                      style={styles.googleIcon}
+                    />
                   )}
                   <Text style={styles.googleButtonText}>Sign in with Google</Text>
                 </TouchableOpacity>
@@ -711,18 +712,10 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
-  googleIconContainer: {
+  googleIcon: {
     width: 24,
     height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginRight: 12,
-  },
-  googleIcon: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#4285F4',
   },
   googleButtonText: {
     fontSize: 16,
