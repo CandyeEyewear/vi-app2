@@ -481,7 +481,12 @@ export default function ProfileScreen() {
             <View style={[styles.actionButtonIcon, { backgroundColor: colors.primary + '15' }]}>
               <ExternalLink size={20} color={colors.primary} />
             </View>
-            <Text style={[styles.actionButtonText, { color: colors.text }]}>VIU</Text>
+            <View style={styles.actionButtonTextStack}>
+              <Text style={[styles.actionButtonText, { color: colors.text }]}>VIU</Text>
+              <Text style={[styles.actionButtonSubtitle, { color: colors.textSecondary }]}>
+                Access VI University resources and training.
+              </Text>
+            </View>
           </AnimatedPressable>
 
           <AnimatedPressable
@@ -771,10 +776,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  actionButtonTextStack: {
+    flex: 1,
+  },
   actionButtonText: {
     fontSize: 16,
     fontWeight: '600',
     flex: 1,
+  },
+  actionButtonSubtitle: {
+    fontSize: 13,
+    marginTop: 2,
   },
   premiumBadge: {
     flexDirection: 'row',
