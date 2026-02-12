@@ -14,12 +14,13 @@ import {
   Platform,
   useWindowDimensions,
   RefreshControl,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors } from '../../constants/colors';
-import { Shield, ShoppingBag, Plus, Edit, Settings, Calendar, Crown, Heart, ChevronRight } from 'lucide-react-native';
+import { Shield, ShoppingBag, Plus, Edit, Settings, Calendar, Crown, Heart, ChevronRight, ExternalLink } from 'lucide-react-native';
 import StreakBadge from '../../components/StreakBadge';
 import { UserAvatar, UserNameWithBadge } from '../../components/index';
 import Head from 'expo-router/head';
@@ -68,6 +69,21 @@ export default function ProfileScreen() {
         message: 'Failed to logout. Please try again.',
       });
     }
+  };
+
+  const handleOpenViu = async () => {
+    const viuUrl = 'https://volunteersinc.salesmasterjm.com/';
+    const canOpen = await Linking.canOpenURL(viuUrl);
+    if (!canOpen) {
+      showAlert({
+        type: 'error',
+        title: 'Unable to Open Link',
+        message: 'Could not open VIU at this time. Please try again.',
+      });
+      return;
+    }
+
+    await Linking.openURL(viuUrl);
   };
 
   if (!user) {
@@ -393,16 +409,6 @@ export default function ProfileScreen() {
             <Text style={[styles.actionButtonText, { color: colors.text }]}>VI Shopp</Text>
           </AnimatedPressable>
 
-          <AnimatedPressable
-            style={[styles.actionButton, surfaceShadow, { backgroundColor: colors.card, borderColor: colors.border }]}
-            onPress={() => router.push('/settings')}
-          >
-            <View style={[styles.actionButtonIcon, { backgroundColor: colors.primary + '15' }]}>
-              <Settings size={20} color={colors.primary} />
-            </View>
-            <Text style={[styles.actionButtonText, { color: colors.text }]}>Settings</Text>
-          </AnimatedPressable>
-
           {/* My Donations */}
           <AnimatedPressable
             style={[styles.menuItem, surfaceShadow, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -466,6 +472,26 @@ export default function ProfileScreen() {
               </Text>
             </View>
             <ChevronRight size={20} color={colors.textSecondary} />
+          </AnimatedPressable>
+
+          <AnimatedPressable
+            style={[styles.actionButton, surfaceShadow, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={handleOpenViu}
+          >
+            <View style={[styles.actionButtonIcon, { backgroundColor: colors.primary + '15' }]}>
+              <ExternalLink size={20} color={colors.primary} />
+            </View>
+            <Text style={[styles.actionButtonText, { color: colors.text }]}>VIU</Text>
+          </AnimatedPressable>
+
+          <AnimatedPressable
+            style={[styles.actionButton, surfaceShadow, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/settings')}
+          >
+            <View style={[styles.actionButtonIcon, { backgroundColor: colors.primary + '15' }]}>
+              <Settings size={20} color={colors.primary} />
+            </View>
+            <Text style={[styles.actionButtonText, { color: colors.text }]}>Settings</Text>
           </AnimatedPressable>
         </View>
       </View>
