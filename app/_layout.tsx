@@ -9,7 +9,8 @@ import { Stack, useRouter, usePathname, useRootNavigationState } from 'expo-rout
 import * as Notifications from 'expo-notifications';
 import * as Linking from 'expo-linking';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { View, StyleSheet, useWindowDimensions, Image, ActivityIndicator, Platform } from 'react-native';
+import { View, StyleSheet, useWindowDimensions, Image, ActivityIndicator, Platform, Alert, AppState } from 'react-native';
+import * as Updates from 'expo-updates';
 import * as Sentry from '@sentry/react-native';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { FeedProvider } from '../contexts/FeedContext';
@@ -59,6 +60,8 @@ function AppContent() {
   const { refreshUser, loading: authLoading, initialAuthComplete, user, needsPasswordSetup, isPasswordRecovery } = useAuth();
   const responseListener = useRef<any>(null);
   const webNotificationCleanup = useRef<(() => void) | null>(null);
+  const otaCheckInProgress = useRef(false);
+  const otaPromptShown = useRef(false);
   const { width } = useWindowDimensions();
   const { alertProps, showAlert } = useAlert();
   const [forceReady, setForceReady] = useState(false);
@@ -166,6 +169,71 @@ function AppContent() {
     isResetPasswordPage,
     router,
   ]);
+
+  useEffect(() => {
+    if (isWeb || __DEV__) return;
+
+    let mounted = true;
+
+    const checkAndApplyOtaUpdate = async (trigger: 'launch' | 'foreground') => {
+      if (!mounted || otaCheckInProgress.current || otaPromptShown.current || !Updates.isEnabled) {
+        return;
+      }
+
+      otaCheckInProgress.current = true;
+      try {
+        logger.info('[OTA] Checking for update', {
+          trigger,
+          runtimeVersion: Updates.runtimeVersion,
+          updateId: Updates.updateId,
+          channel: (Updates as any).channel ?? 'unknown',
+        });
+
+        const update = await Updates.checkForUpdateAsync();
+        if (!update.isAvailable) {
+          return;
+        }
+
+        await Updates.fetchUpdateAsync();
+        if (!mounted) return;
+
+        otaPromptShown.current = true;
+        Alert.alert(
+          'Update Ready',
+          'A new version has been downloaded. Restart now to apply it?',
+          [
+            { text: 'Later', style: 'cancel' },
+            {
+              text: 'Restart',
+              onPress: () => {
+                Updates.reloadAsync().catch((error) => {
+                  logger.warn('[OTA] Failed to reload app after update', { error });
+                });
+              },
+            },
+          ],
+          { cancelable: false }
+        );
+      } catch (error) {
+        logger.warn('[OTA] Update check failed', { trigger, error });
+      } finally {
+        otaCheckInProgress.current = false;
+      }
+    };
+
+    checkAndApplyOtaUpdate('launch');
+
+    const appStateSubscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        checkAndApplyOtaUpdate('foreground');
+      }
+    });
+
+    return () => {
+      mounted = false;
+      appStateSubscription.remove();
+    };
+  }, []);
 
   useEffect(() => {
     // Setup web notification handler if on web
