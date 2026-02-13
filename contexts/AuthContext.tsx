@@ -56,14 +56,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AUTH] 🔐 Starting auth initialization...');
       
       // Check for password recovery tokens in URL (web only)
+      // NOTE: Don't set isPasswordRecovery yet - defer until we know if this is
+      // a HubSpot password setup flow (needs_password_setup). Recovery links are
+      // used for both flows, but they need different handling.
+      let recoveryDetectedInUrl = false;
       if (isWeb && typeof window !== 'undefined' && window.location && window.location.hash) {
         const hash = window.location.hash;
         if (hash.includes('type=recovery')) {
-          console.log('[AUTH] 🔐 Password recovery flow detected');
-          setIsPasswordRecovery(true);
+          console.log('[AUTH] 🔐 Recovery token detected in URL (will determine flow after session load)');
+          recoveryDetectedInUrl = true;
         }
       }
-      
+
       try {
         // Get initial session with error handling for invalid tokens
         // Add a small delay to ensure SecureStore is ready (especially in Expo Dev Client)
@@ -111,6 +115,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (needsSetup) {
             console.log('[AUTH] Session found but needs password setup');
           }
+
+          // Now that we know the user's metadata, decide if this is a password
+          // recovery flow or a HubSpot password setup flow.
+          // HubSpot users arrive via a recovery link but should use /set-password, not /reset-password.
+          if (recoveryDetectedInUrl) {
+            if (needsSetup) {
+              console.log('[AUTH] 🔐 Recovery link is for password SETUP (HubSpot user) - not setting isPasswordRecovery');
+            } else {
+              console.log('[AUTH] 🔐 Password recovery flow confirmed (forgot-password)');
+              setIsPasswordRecovery(true);
+            }
+          }
+
           await loadUserProfile(session.user.id);
         } else {
           console.log('[AUTH] ℹ️ No active session found');
@@ -139,13 +156,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(async (event, session) => {
         console.log('[AUTH] 🔔 Auth state changed:', event);
         
-        // Check for recovery flow
+        // Check for recovery flow — but only treat it as a "forgot password" recovery
+        // if the user does NOT have needs_password_setup (HubSpot signup).
+        // HubSpot users arrive via recovery links but should use /set-password instead.
         if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
           if (isWeb && typeof window !== 'undefined' && window.location) {
             const hash = window.location.hash || '';
             if (hash.includes('type=recovery')) {
-              console.log('[AUTH] 🔐 Password recovery session detected');
-              setIsPasswordRecovery(true);
+              const needsSetup = session?.user?.user_metadata?.needs_password_setup === true;
+              if (needsSetup) {
+                console.log('[AUTH] 🔐 Recovery event for password SETUP user - skipping isPasswordRecovery');
+              } else {
+                console.log('[AUTH] 🔐 Password recovery session detected');
+                setIsPasswordRecovery(true);
+              }
             }
           }
         }

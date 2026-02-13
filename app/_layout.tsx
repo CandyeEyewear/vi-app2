@@ -129,17 +129,18 @@ function AppContent() {
       isPublicRoute,
     });
 
-    // Password recovery takes highest priority - redirect to reset-password
-    if (isPasswordRecovery && !isResetPasswordPage) {
-      console.log('[NAV] Password recovery flow - redirecting to reset-password');
-      router.replace('/reset-password');
+    // Password setup (HubSpot signups) takes highest priority.
+    // These users arrive via recovery links but should use /set-password, not /reset-password.
+    if (user && needsPasswordSetup && !isSetPasswordPage) {
+      console.log('[NAV] Redirecting to set-password (HubSpot signup)');
+      router.replace('/set-password');
       return;
     }
 
-    // Redirect to set-password if needed
-    if (user && needsPasswordSetup && !isSetPasswordPage) {
-      console.log('[NAV] Redirecting to set-password');
-      router.replace('/set-password');
+    // Password recovery (forgot-password flow) - redirect to reset-password
+    if (isPasswordRecovery && !isResetPasswordPage) {
+      console.log('[NAV] Password recovery flow - redirecting to reset-password');
+      router.replace('/reset-password');
       return;
     }
 
