@@ -482,7 +482,7 @@ export default function AdminManageOpportunitiesScreen() {
           closeAlert();
           alertProps.onConfirm?.();
         }}
-        onCancel={closeAlert}
+        onClose={closeAlert}
         showCancel={alertProps.showCancel}
       />
     </View>
