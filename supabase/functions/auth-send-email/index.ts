@@ -60,8 +60,13 @@ Deno.serve(async (req: Request) => {
     const email = user.email;
     const firstName = user.user_metadata?.full_name?.split(' ')[0] || 'there';
 
-    // Construct the verification/action URL
-    const actionUrl = `${supabaseUrl}/auth/v1/verify?token=${token_hash}&type=${email_action_type}&redirect_to=${encodeURIComponent(redirect_to || '')}`;
+    // Check if this is a notification-only email (no action link needed)
+    const isNotification = email_action_type?.endsWith('_notification');
+
+    // Construct the verification/action URL only for actionable emails
+    const actionUrl = (!isNotification && token_hash)
+      ? `${supabaseUrl}/auth/v1/verify?token=${token_hash}&type=${email_action_type}&redirect_to=${encodeURIComponent(redirect_to || '')}`
+      : '';
 
     let subject = '';
     let html = '';
@@ -87,10 +92,35 @@ Deno.serve(async (req: Request) => {
         html = generateMagicLinkEmail(firstName, actionUrl);
         break;
 
+      // Notification emails - informational only, no action link
+      case 'password_changed_notification':
+        subject = 'Your VIbe Password Was Changed';
+        html = generatePasswordChangedNotification(firstName);
+        break;
+
+      case 'email_changed_notification':
+        subject = 'Your VIbe Email Was Changed';
+        html = generateEmailChangedNotification(firstName);
+        break;
+
       default:
-        console.warn(`Unhandled email_action_type: ${email_action_type}`);
-        subject = 'VIbe Account Action Required';
-        html = generateGenericActionEmail(firstName, actionUrl, email_action_type);
+        // For unknown notification types, send a simple notification
+        if (isNotification) {
+          console.log(`Notification email type: ${email_action_type} - sending simple notification`);
+          subject = 'VIbe Account Update';
+          html = generateAccountUpdateNotification(firstName, email_action_type);
+        } else if (actionUrl) {
+          console.warn(`Unhandled email_action_type: ${email_action_type}`);
+          subject = 'VIbe Account Action Required';
+          html = generateGenericActionEmail(firstName, actionUrl, email_action_type);
+        } else {
+          // No token and not a known notification - skip sending
+          console.warn(`Skipping email for ${email_action_type}: no token_hash and not a recognized notification`);
+          return new Response(JSON.stringify({}), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
         break;
     }
 
@@ -496,6 +526,97 @@ function generateMagicLinkEmail(firstName: string, magicLinkUrl: string): string
     </p>
   `;
   return emailWrapper('Your Login Link', content);
+}
+
+function generatePasswordChangedNotification(firstName: string): string {
+  const content = `
+    <div class="greeting">Hi ${firstName},</div>
+
+    <p class="intro-text">
+      This is a confirmation that your VIbe account password was just changed successfully.
+    </p>
+
+    <div class="info-box">
+      <div class="info-box-text">
+        <strong>If you made this change</strong>, no further action is needed. You're all set!
+      </div>
+    </div>
+
+    <div class="info-box" style="background: #fff3e0; border-left-color: #ff9800;">
+      <div class="info-box-text">
+        <strong>If you didn't make this change</strong>, please contact us immediately at
+        <a href="mailto:info@volunteersinc.org" style="color: #4A90E2; text-decoration: none;">info@volunteersinc.org</a>
+        to secure your account.
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <p style="color: #666; font-size: 14px; text-align: center;">
+      This is an automated security notification from VIbe.
+    </p>
+  `;
+  return emailWrapper('Password Changed', content);
+}
+
+function generateEmailChangedNotification(firstName: string): string {
+  const content = `
+    <div class="greeting">Hi ${firstName},</div>
+
+    <p class="intro-text">
+      This is a confirmation that the email address on your VIbe account was just changed.
+    </p>
+
+    <div class="info-box">
+      <div class="info-box-text">
+        <strong>If you made this change</strong>, no further action is needed.
+      </div>
+    </div>
+
+    <div class="info-box" style="background: #fff3e0; border-left-color: #ff9800;">
+      <div class="info-box-text">
+        <strong>If you didn't make this change</strong>, please contact us immediately at
+        <a href="mailto:info@volunteersinc.org" style="color: #4A90E2; text-decoration: none;">info@volunteersinc.org</a>
+        to secure your account.
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <p style="color: #666; font-size: 14px; text-align: center;">
+      This is an automated security notification from VIbe.
+    </p>
+  `;
+  return emailWrapper('Email Address Changed', content);
+}
+
+function generateAccountUpdateNotification(firstName: string, actionType: string): string {
+  const readableType = actionType
+    .replace(/_notification$/, '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+  const content = `
+    <div class="greeting">Hi ${firstName},</div>
+
+    <p class="intro-text">
+      This is a confirmation that a change was made to your VIbe account: <strong>${readableType}</strong>.
+    </p>
+
+    <div class="info-box">
+      <div class="info-box-text">
+        If you made this change, no further action is needed. If you didn't, please contact us at
+        <a href="mailto:info@volunteersinc.org" style="color: #4A90E2; text-decoration: none;">info@volunteersinc.org</a>.
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <p style="color: #666; font-size: 14px; text-align: center;">
+      This is an automated security notification from VIbe.
+    </p>
+  `;
+  return emailWrapper('Account Update', content);
 }
 
 function generateGenericActionEmail(firstName: string, actionUrl: string, actionType: string): string {
