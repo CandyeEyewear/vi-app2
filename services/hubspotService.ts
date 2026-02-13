@@ -15,6 +15,13 @@ interface ContactData {
   education?: string;
 }
 
+interface SyncOptions {
+  attempts?: number;
+  initialDelayMs?: number;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
  * Sync contact to HubSpot - searches for existing contact by email, creates if not found
  * Returns the HubSpot Contact ID in both cases
@@ -24,39 +31,61 @@ export async function syncContactToHubSpot(contactData: ContactData): Promise<{
   contactId?: string; 
   error?: string 
 }> {
-  try {
-    console.log('[HUBSPOT] Calling Edge Function to sync contact...');
+  return syncContactToHubSpotWithRetry(contactData);
+}
 
-    const { data, error } = await supabase.functions.invoke('hubspot-sync', {
-      body: {
-        email: contactData.email,
-        fullName: contactData.fullName,
-        phone: contactData.phone,
-        location: contactData.location,
-        bio: contactData.bio,
-        areasOfExpertise: contactData.areasOfExpertise,
-        education: contactData.education,
-      },
-    });
+export async function syncContactToHubSpotWithRetry(
+  contactData: ContactData,
+  options: SyncOptions = {}
+): Promise<{
+  success: boolean;
+  contactId?: string;
+  error?: string;
+}> {
+  const attempts = Math.max(1, options.attempts ?? 3);
+  const initialDelayMs = Math.max(100, options.initialDelayMs ?? 600);
 
-    if (error) {
-      console.error('[HUBSPOT] Edge Function error:', error);
-      return { success: false, error: error.message };
+  let lastError = 'Failed to sync HubSpot contact';
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      console.log(`[HUBSPOT] Sync attempt ${attempt}/${attempts}...`);
+
+      const { data, error } = await supabase.functions.invoke('hubspot-sync', {
+        body: {
+          email: contactData.email,
+          fullName: contactData.fullName,
+          phone: contactData.phone,
+          location: contactData.location,
+          bio: contactData.bio,
+          areasOfExpertise: contactData.areasOfExpertise,
+          education: contactData.education,
+        },
+      });
+
+      if (error) {
+        lastError = error.message || 'HubSpot Edge Function error';
+        console.error('[HUBSPOT] Edge Function error:', error);
+      } else if (!data?.success) {
+        lastError = data?.error || 'HubSpot sync returned unsuccessful response';
+        console.error('[HUBSPOT] Sync failed:', data?.error);
+      } else {
+        console.log('[HUBSPOT] Contact synced successfully:', data.contactId);
+        return { success: true, contactId: data.contactId };
+      }
+    } catch (error: any) {
+      lastError = error?.message || 'Failed to sync HubSpot contact';
+      console.error('[HUBSPOT] Error calling Edge Function:', error);
     }
 
-    if (!data.success) {
-      console.error('[HUBSPOT] Sync failed:', data.error);
-      return { success: false, error: data.error };
+    if (attempt < attempts) {
+      const backoffMs = initialDelayMs * Math.pow(2, attempt - 1);
+      await sleep(backoffMs);
     }
-
-    console.log('[HUBSPOT] Contact synced successfully:', data.contactId);
-    return { success: true, contactId: data.contactId };
-
-  } catch (error: any) {
-    console.error('[HUBSPOT] Error calling Edge Function:', error);
-    return { 
-      success: false, 
-      error: error.message || 'Failed to sync HubSpot contact' 
-    };
   }
+
+  return {
+    success: false,
+    error: lastError,
+  };
 }

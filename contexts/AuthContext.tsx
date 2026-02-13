@@ -661,6 +661,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const persistHubspotContactId = async (userId: string, contactId: string): Promise<boolean> => {
+    const maxAttempts = 3;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const { error } = await supabase
+        .from('users')
+        .update({ hubspot_contact_id: contactId })
+        .eq('id', userId);
+
+      if (!error) return true;
+
+      console.error(`[AUTH] ⚠️ Failed to save HubSpot Contact ID (attempt ${attempt}/${maxAttempts}):`, error);
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
+      }
+    }
+
+    return false;
+  };
+
   const signIn = async (data: LoginFormData): Promise<ApiResponse<User>> => {
     console.log('[AUTH] 🔑 Starting sign in process...');
     console.log('[AUTH] Sign in requested');
@@ -807,15 +827,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
 
         if (hubspotResult.success && hubspotResult.contactId) {
-          const { error: hubspotUpdateError } = await supabase
-            .from('users')
-            .update({ hubspot_contact_id: hubspotResult.contactId })
-            .eq('id', authData.user.id);
-
-          if (hubspotUpdateError) {
-            console.error('[AUTH] ⚠️ Failed to save HubSpot Contact ID during sign-in backfill:', hubspotUpdateError);
-          } else {
+          const saved = await persistHubspotContactId(authData.user.id, hubspotResult.contactId);
+          if (saved) {
             console.log('[AUTH] ✅ HubSpot Contact ID backfilled on sign-in');
+          } else {
+            console.error('[AUTH] ⚠️ HubSpot sync succeeded, but failed to persist contact ID during sign-in backfill');
           }
         } else {
           console.error('[AUTH] ⚠️ HubSpot backfill sync failed on sign-in:', hubspotResult.error);
@@ -1013,6 +1029,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Check if email confirmation is required (no session means email confirmation needed)
       if (!authData.session) {
         console.log('[AUTH] ⚠️ Email confirmation required - no session created');
+
+        // Attempt HubSpot sync even before first login so contact creation is not blocked
+        // by email-confirmation flow. Contact ID linking in `users` table is backfilled on sign-in.
+        const hubspotPreSyncResult = await syncContactToHubSpot({
+          email: data.email,
+          fullName: data.fullName,
+          phone: data.phone,
+          location: data.location,
+          bio: data.bio,
+          areasOfExpertise: data.areasOfExpertise,
+          education: data.education,
+        });
+        if (hubspotPreSyncResult.success) {
+          console.log('[AUTH] ✅ HubSpot pre-sync succeeded during email-confirmation signup flow');
+        } else {
+          console.error('[AUTH] ⚠️ HubSpot pre-sync failed during email-confirmation signup flow:', hubspotPreSyncResult.error);
+        }
+
         return { 
           success: true, 
           data: null, // No user data yet - email confirmation required
@@ -1088,17 +1122,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (hubspotResult.success && hubspotResult.contactId) {
         console.log('[AUTH] ✅ HubSpot contact synced:', hubspotResult.contactId);
-        
+
         // Save HubSpot Contact ID to database
-        const { error: updateError } = await supabase
-          .from('users')
-          .update({ hubspot_contact_id: hubspotResult.contactId })
-          .eq('id', authData.user.id);
-        
-        if (updateError) {
-          console.error('[AUTH] ⚠️ Failed to save HubSpot Contact ID:', updateError);
-        } else {
+        const saved = await persistHubspotContactId(authData.user.id, hubspotResult.contactId);
+        if (saved) {
           console.log('[AUTH] ✅ HubSpot Contact ID saved to database');
+        } else {
+          console.error('[AUTH] ⚠️ HubSpot sync succeeded, but failed to persist contact ID');
         }
       } else {
         console.error('[AUTH] ⚠️ HubSpot sync failed:', hubspotResult.error);
