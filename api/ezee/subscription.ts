@@ -6,8 +6,8 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const EZEE_API_URL = process.env.EZEE_API_URL || 'https://api-test.ezeepayments.com';
-const EZEE_LICENCE_KEY = process.env.EZEE_LICENCE_KEY!;
+const EZEE_API_URL = process.env.EZEE_API_URL;
+const EZEE_LICENCE_KEY = process.env.EZEE_LICENCE_KEY;
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -85,7 +85,7 @@ async function getSubscriptionStatus(req: any, res: any) {
     if (subscription.ezee_subscription_id) {
       try {
         const ezeeResponse = await fetch(
-          `${EZEE_API_URL}/v1/subscription/status/${subscription.ezee_subscription_id}/`,
+          `${EZEE_API_URL}/v1.1/subscription/status/${subscription.ezee_subscription_id}/`,
           {
             method: 'GET',
             headers: { 'Licence': EZEE_LICENCE_KEY },
@@ -171,7 +171,7 @@ async function cancelSubscription(req: any, res: any) {
 
     if (subscription.ezee_subscription_id) {
       try {
-      const ezeeResponse = await fetch(`${EZEE_API_URL}/v1/subscription/cancel/`, {
+      const ezeeResponse = await fetch(`${EZEE_API_URL}/v1.1/subscription/cancel/`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

@@ -203,7 +203,7 @@ export async function createPaymentToken(
 ): Promise<PaymentTokenResponse> {
   try {
     // ⚠️ This is the expected API structure - adjust based on actual eZeePayments docs
-    const response = await makeApiRequest<any>('/v1/custom_token/', 'POST', {
+    const response = await makeApiRequest<any>('/v1.1/custom_token/', 'POST', {
       merchant_id: EZEE_CONFIG.merchantId,
       amount: request.amount,
       currency: request.currency || EZEE_CONFIG.currency,
@@ -274,7 +274,7 @@ export async function createSubscription(
 ): Promise<SubscriptionResponse> {
   try {
     // ⚠️ This is the expected API structure - adjust based on actual eZeePayments docs
-    const response = await makeApiRequest<any>('/v1/subscription/create/', 'POST', {
+    const response = await makeApiRequest<any>('/v1.1/subscription/create/', 'POST', {
       merchant_id: EZEE_CONFIG.merchantId,
       amount: request.amount,
       currency: request.currency || EZEE_CONFIG.currency,
@@ -370,7 +370,7 @@ export async function getSubscriptionStatus(
 ): Promise<SubscriptionResponse> {
   try {
     const response = await makeApiRequest<any>(
-      `/v1/subscription/status/?subscription_id=${subscriptionId}`,
+      `/v1.1/subscription/status/?subscription_id=${subscriptionId}`,
       'GET'
     );
 
@@ -397,7 +397,7 @@ export async function cancelSubscription(
   reason?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await makeApiRequest<any>('/v1/subscription/cancel/', 'POST', {
+    await makeApiRequest<any>('/v1.1/subscription/cancel/', 'POST', {
       subscription_id: subscriptionId,
       reason: reason,
     });
@@ -419,7 +419,7 @@ export async function pauseSubscription(
   subscriptionId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await makeApiRequest<any>('/v1/subscription/pause/', 'POST', {
+    await makeApiRequest<any>('/v1.1/subscription/pause/', 'POST', {
       subscription_id: subscriptionId,
     });
 
@@ -440,7 +440,7 @@ export async function resumeSubscription(
   subscriptionId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await makeApiRequest<any>('/v1/subscription/resume/', 'POST', {
+    await makeApiRequest<any>('/v1.1/subscription/resume/', 'POST', {
       subscription_id: subscriptionId,
     });
 

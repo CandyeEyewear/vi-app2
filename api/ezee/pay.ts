@@ -6,7 +6,7 @@
  * FIXED: Correct payment URL (no /pay path per API docs)
  */
 
-const EZEE_API_URL = process.env.EZEE_API_URL || 'https://api-test.ezeepayments.com';
+const EZEE_API_URL = process.env.EZEE_API_URL;
 
 export default async function handler(req: any, res: any) {
   // Handle CORS preflight
@@ -53,8 +53,23 @@ export default async function handler(req: any, res: any) {
     `);
   }
 
-  // FIXED: Correct payment URL per eZeePayments documentation
-  // Documentation says: POST to https://secure-test.ezeepayments.com (NO /pay path!)
+  if (!EZEE_API_URL) {
+    console.error('CRITICAL: EZEE_API_URL environment variable is not set');
+    return res.status(500).send(`
+      <!DOCTYPE html>
+      <html>
+      <head><title>Payment Error</title></head>
+      <body>
+        <h1>Payment Configuration Error</h1>
+        <p>Payment service is not configured. Please contact support.</p>
+      </body>
+      </html>
+    `);
+  }
+
+  // Derive secure payment page URL from API URL
+  // api.ezeepayments.com → secure.ezeepayments.com
+  // api-test.ezeepayments.com → secure-test.ezeepayments.com
   const paymentUrl = EZEE_API_URL.includes('test')
     ? 'https://secure-test.ezeepayments.com'
     : 'https://secure.ezeepayments.com';

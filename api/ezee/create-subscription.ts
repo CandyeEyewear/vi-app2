@@ -7,7 +7,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const EZEE_API_URL = process.env.EZEE_API_URL || 'https://api-test.ezeepayments.com';
+const EZEE_API_URL = process.env.EZEE_API_URL;
 const EZEE_LICENCE_KEY = process.env.EZEE_LICENCE_KEY;
 const EZEE_SITE = process.env.EZEE_SITE;
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://vibe.volunteersinc.org';
@@ -331,7 +331,7 @@ export default async function handler(req: any, res: any) {
     tokenFormData.append('cancel_url', cancelUrl);
     // subscription_id is passed in paymentData for the final POST, not here
 
-    const tokenResponse = await fetch(`${EZEE_API_URL}/v1/custom_token/`, {
+    const tokenResponse = await fetch(`${EZEE_API_URL}/v1.1/custom_token/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',

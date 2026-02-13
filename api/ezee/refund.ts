@@ -6,9 +6,9 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const EZEE_API_URL = process.env.EZEE_API_URL || 'https://api-test.ezeepayments.com';
-const EZEE_LICENCE_KEY = process.env.EZEE_LICENCE_KEY!;
-const EZEE_SITE = process.env.EZEE_SITE || 'https://test.com';
+const EZEE_API_URL = process.env.EZEE_API_URL;
+const EZEE_LICENCE_KEY = process.env.EZEE_LICENCE_KEY;
+const EZEE_SITE = process.env.EZEE_SITE;
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -59,7 +59,7 @@ export default async function handler(req: any, res: any) {
     }
 
     // Call eZeePayments refund API
-    const refundResponse = await fetch(`${EZEE_API_URL}/v1/refund/`, {
+    const refundResponse = await fetch(`${EZEE_API_URL}/v1.1/refund/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',

@@ -6,9 +6,9 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const EZEE_API_URL = process.env.EZEE_API_URL || 'https://api-test.ezeepayments.com';
-const EZEE_LICENCE_KEY = process.env.EZEE_LICENCE_KEY!;
-const EZEE_SITE = process.env.EZEE_SITE || 'https://test.com';
+const EZEE_API_URL = process.env.EZEE_API_URL;
+const EZEE_LICENCE_KEY = process.env.EZEE_LICENCE_KEY;
+const EZEE_SITE = process.env.EZEE_SITE;
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -41,6 +41,15 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
+    if (!EZEE_API_URL || !EZEE_LICENCE_KEY || !EZEE_SITE) {
+      console.error('[CHECK-STATUS] CRITICAL: Missing eZeePayments environment variables:', {
+        EZEE_API_URL: !!EZEE_API_URL,
+        EZEE_LICENCE_KEY: !!EZEE_LICENCE_KEY,
+        EZEE_SITE: !!EZEE_SITE,
+      });
+      return res.status(500).json({ error: 'Payment service not configured' });
+    }
+
     const { order_id } = req.method === 'GET' ? req.query : req.body;
 
     if (!order_id) {
@@ -109,7 +118,7 @@ async function checkStatusByTransactionNumber(transactionNumber: string): Promis
     // eZeePayments API endpoint for transaction status
     // Note: This endpoint may vary - adjust based on actual eZeePayments API docs
     const response = await fetch(
-      `${EZEE_API_URL}/v1/transaction/status/${transactionNumber}/`,
+      `${EZEE_API_URL}/v1.1/transaction/status/${transactionNumber}/`,
       {
         method: 'GET',
         headers: {
@@ -159,7 +168,7 @@ async function checkStatusByOrderId(orderId: string): Promise<{
     // Try to query transaction history by order_id
     // This endpoint may need to be adjusted based on eZeePayments API
     const response = await fetch(
-      `${EZEE_API_URL}/v1/transaction/history/`,
+      `${EZEE_API_URL}/v1.1/transaction/history/`,
       {
         method: 'POST',
         headers: {
