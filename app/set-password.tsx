@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ScrollView, Image, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Image, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,6 +12,7 @@ export default function SetPasswordScreen() {
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
   // Simple session check on mount
@@ -52,18 +53,21 @@ export default function SetPasswordScreen() {
   const handleSetPassword = async () => {
     if (loading) return;
 
+    // Clear any previous errors
+    setFormError(null);
+
     if (!password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+      setFormError('Please fill in all fields.');
       return;
     }
 
     if (password.length < 8) {
-      Alert.alert('Error', 'Password must be at least 8 characters long');
+      setFormError('Password must be at least 8 characters long.');
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      setFormError('Passwords do not match.');
       return;
     }
 
@@ -71,22 +75,48 @@ export default function SetPasswordScreen() {
     console.log('[SET-PASSWORD] Starting password update...');
 
     try {
+      // Verify session is still active before attempting update
+      const { data: { session }, error: sessionCheckError } = await supabase.auth.getSession();
+      if (sessionCheckError || !session) {
+        console.error('[SET-PASSWORD] No active session:', sessionCheckError?.message);
+        setLoading(false);
+        setSessionError('Your session has expired. Please use the link from your email again, or request a new one.');
+        return;
+      }
+      console.log('[SET-PASSWORD] Session active for:', session.user.email);
+
       // Update password
+      console.log('[SET-PASSWORD] Calling updateUser with new password...');
       const { error: passwordError } = await supabase.auth.updateUser({
         password: password
       });
 
       if (passwordError) {
+        console.error('[SET-PASSWORD] Password update error:', passwordError.message, 'code:', passwordError.code);
         if (passwordError.message.includes('different from the old password')) {
           console.log('[SET-PASSWORD] Password already set, proceeding...');
         } else {
-          throw passwordError;
+          // Show user-friendly error for common cases
+          let errorMsg = passwordError.message;
+          if (errorMsg.includes('pwned') || errorMsg.includes('easy to guess') || errorMsg.includes('data breach')) {
+            errorMsg = 'This password has appeared in a known data breach. Please choose a different, more unique password.';
+          } else if (errorMsg.includes('weak') || errorMsg.includes('short')) {
+            errorMsg = 'Password is too weak. Please use at least 8 characters with a mix of letters, numbers, and symbols.';
+          } else if (errorMsg.includes('expired') || errorMsg.includes('invalid')) {
+            setLoading(false);
+            setSessionError('Your session has expired. Please request a new password setup link.');
+            return;
+          }
+          setLoading(false);
+          setFormError(errorMsg);
+          return;
         }
       }
 
       console.log('[SET-PASSWORD] ✅ Password updated');
 
       // Clear the needs_password_setup flag
+      console.log('[SET-PASSWORD] Clearing needs_password_setup flag...');
       const { error: metadataError } = await supabase.auth.updateUser({
         data: { needs_password_setup: false }
       });
@@ -99,6 +129,7 @@ export default function SetPasswordScreen() {
 
       // Refresh user to update auth context
       if (refreshUser) {
+        console.log('[SET-PASSWORD] Refreshing user profile...');
         await refreshUser();
       }
 
@@ -117,18 +148,18 @@ export default function SetPasswordScreen() {
       }, 2000);
 
     } catch (error: any) {
-      console.error('[SET-PASSWORD] Error:', error);
+      console.error('[SET-PASSWORD] Exception:', error);
       setLoading(false);
-      
+
       let errorMessage = 'Failed to set password. Please try again.';
-      if (error.message?.includes('expired')) {
-        errorMessage = 'Your session has expired. Please request a new link.';
-        setSessionError(errorMessage);
+      if (error.message?.includes('expired') || error.message?.includes('invalid')) {
+        setSessionError('Your session has expired. Please request a new password setup link.');
+        return;
       } else if (error.message) {
         errorMessage = error.message;
       }
-      
-      Alert.alert('Error', errorMessage);
+
+      setFormError(errorMessage);
     }
   };
 
@@ -201,7 +232,7 @@ export default function SetPasswordScreen() {
             placeholder="Enter your password"
             secureTextEntry
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(text) => { setFormError(null); setPassword(text); }}
             autoCapitalize="none"
           />
         </View>
@@ -213,7 +244,7 @@ export default function SetPasswordScreen() {
             placeholder="Re-enter your password"
             secureTextEntry
             value={confirmPassword}
-            onChangeText={setConfirmPassword}
+            onChangeText={(text) => { setFormError(null); setConfirmPassword(text); }}
             autoCapitalize="none"
           />
         </View>
@@ -225,6 +256,12 @@ export default function SetPasswordScreen() {
           <Text style={styles.requirement}>• Include numbers (0-9)</Text>
           <Text style={styles.requirement}>• Include special characters (!@#$%)</Text>
         </View>
+
+        {formError && (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorBannerText}>{formError}</Text>
+          </View>
+        )}
 
         <TouchableOpacity
           style={[styles.button, (loading || !password || !confirmPassword) && styles.buttonDisabled]}
@@ -271,4 +308,6 @@ const styles = StyleSheet.create({
   errorMessage: { fontSize: 16, color: '#666', textAlign: 'center', marginBottom: 24, lineHeight: 24 },
   primaryButton: { backgroundColor: '#4A90E2', paddingVertical: 14, paddingHorizontal: 32, borderRadius: 8, width: '100%', alignItems: 'center', marginBottom: 12 },
   primaryButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
+  errorBanner: { backgroundColor: '#fdecea', borderRadius: 8, padding: 12, marginBottom: 16, borderLeftWidth: 4, borderLeftColor: '#e74c3c' },
+  errorBannerText: { color: '#c0392b', fontSize: 14, lineHeight: 20 },
 });
