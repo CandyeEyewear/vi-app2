@@ -26,6 +26,7 @@ import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import CrossPlatformDateTimePicker from '../../../../components/CrossPlatformDateTimePicker';
 import CustomAlert from '../../../../components/CustomAlert';
+import ImageCropperModal from '../../../../components/ImageCropperModal';
 import { geocodeLocation, GeocodeResult } from '../../../../services/geocoding';
 import {
   ArrowLeft,
@@ -52,7 +53,7 @@ import {
   Lock,
 } from 'lucide-react-native';
 import { Colors } from '../../../../constants/colors';
-import { Event, EventCategory, EventStatus, VisibilityType } from '../../../../types';
+import { Event, EventCategory, EventStatus, PaymentMethodPreference, VisibilityType } from '../../../../types';
 import { getEventById, updateEvent, deleteEvent } from '../../../../services/eventsService';
 import { useAuth } from '../../../../contexts/AuthContext';
 import WebContainer from '../../../../components/WebContainer';
@@ -71,6 +72,12 @@ const CATEGORY_OPTIONS: { value: EventCategory; label: string }[] = [
   { value: 'celebration', label: 'Celebration' },
   { value: 'networking', label: 'Networking' },
   { value: 'other', label: 'Other' },
+];
+
+const PAYMENT_METHOD_OPTIONS: { value: PaymentMethodPreference; label: string; description: string }[] = [
+  { value: 'auto', label: 'Auto', description: 'Try integrated checkout first, then fallback to manual link.' },
+  { value: 'integrated', label: 'Integrated Only', description: 'Use integrated checkout only.' },
+  { value: 'manual_link', label: 'Manual Link Only', description: 'Open your eZee dashboard button/payment link.' },
 ];
 
 // Status options - colors will be retrieved from theme
@@ -107,7 +114,8 @@ export default function EditEventScreen() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [autoCropImage, setAutoCropImage] = useState(false);
+  const [rawImageUri, setRawImageUri] = useState<string | null>(null);
+  const [cropperVisible, setCropperVisible] = useState(false);
 
   // Notification state
   const [notifyUsers, setNotifyUsers] = useState(false);
@@ -160,6 +168,8 @@ export default function EditEventScreen() {
   // Pricing
   const [isFree, setIsFree] = useState(true);
   const [ticketPrice, setTicketPrice] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodPreference>('auto');
+  const [manualPaymentLink, setManualPaymentLink] = useState('');
 
   // Contact
   const [contactName, setContactName] = useState('');
@@ -184,6 +194,8 @@ export default function EditEventScreen() {
     setAlertConfig({ type, title, message, onConfirm });
     setAlertVisible(true);
   };
+
+  const isValidUrl = (value: string): boolean => /^https?:\/\/\S+$/i.test(value.trim());
 
   // Load event data
   useEffect(() => {
@@ -229,6 +241,8 @@ export default function EditEventScreen() {
           }
           setIsFree(event.isFree);
           setTicketPrice(event.ticketPrice?.toString() || '');
+          setPaymentMethod(event.paymentMethod || 'auto');
+          setManualPaymentLink(event.manualPaymentLink || event.paymentLink || '');
           setContactName(event.contactName || '');
           setContactEmail(event.contactEmail || '');
           setContactPhone(event.contactPhone || '');
@@ -258,19 +272,19 @@ export default function EditEventScreen() {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: autoCropImage,
-        ...(autoCropImage ? { aspect: [16, 9] as [number, number] } : {}),
+        allowsEditing: false,
         quality: 0.8,
       });
 
       if (!result.canceled && result.assets[0]) {
-        setImageUri(result.assets[0].uri);
+        setRawImageUri(result.assets[0].uri);
+        setCropperVisible(true);
       }
     } catch (error) {
       console.error('Error picking image:', error);
       showAlert('error', 'Error', 'Failed to pick image. Please try again.');
     }
-  }, [autoCropImage, showAlert]);
+  }, [showAlert]);
 
   // Upload image to Supabase Storage
   const uploadImageToStorage = useCallback(async (uri: string): Promise<string | null> => {
@@ -391,8 +405,12 @@ export default function EditEventScreen() {
       showAlert('warning', 'Invalid', 'Please enter a valid ticket price');
       return false;
     }
+    if (!isFree && paymentMethod === 'manual_link' && !isValidUrl(manualPaymentLink)) {
+      showAlert('warning', 'Invalid', 'Please enter a valid manual payment link (https://...)');
+      return false;
+    }
     return true;
-  }, [title, description, isVirtual, location, virtualLink, eventDate, startTime, hasCapacity, capacity, isFree, ticketPrice]);
+  }, [title, description, isVirtual, location, virtualLink, eventDate, startTime, hasCapacity, capacity, isFree, ticketPrice, paymentMethod, manualPaymentLink]);
 
   // Handle save
   const handleSave = useCallback(async () => {
@@ -420,7 +438,7 @@ export default function EditEventScreen() {
         status,
         isFeatured,
         visibility,
-        imageUrl: imageUri ? finalImageUrl : (imageUrl ? imageUrl.trim() : null),
+        imageUrl: imageUri ? finalImageUrl : (imageUrl ? imageUrl.trim() : undefined),
         location: isVirtual ? 'Virtual Event' : location.trim(),
         locationAddress: locationAddress.trim() || undefined,
         mapLink: mapLink.trim() || undefined,
@@ -436,12 +454,15 @@ export default function EditEventScreen() {
         registrationDeadline: registrationDeadline ? dateToString(registrationDeadline) : undefined,
         isFree,
         ticketPrice: !isFree ? parseFloat(ticketPrice) : undefined,
+        paymentMethod: !isFree ? paymentMethod : 'auto',
+        manualPaymentLink: !isFree ? (manualPaymentLink.trim() || null) : null,
         contactName: contactName.trim() || undefined,
         contactEmail: contactEmail.trim() || undefined,
         contactPhone: contactPhone.trim() || undefined,
       });
 
       if (response.success) {
+        const eventPathId = response.data?.slug || id;
         // Handle Notifications
         if (notifyUsers) {
           try {
@@ -453,7 +474,12 @@ export default function EditEventScreen() {
 
             if (notifyError) {
               console.error('Error sending notifications:', notifyError);
-              showAlert('warning', 'Saved with Warning', 'Event updated but failed to notify attendees.', () => router.back());
+              showAlert(
+                'warning',
+                'Saved with Warning',
+                'Event updated but failed to notify attendees.',
+                () => router.replace(`/events/${eventPathId}`)
+              );
               return;
             }
           } catch (err) {
@@ -461,7 +487,12 @@ export default function EditEventScreen() {
           }
         }
 
-        showAlert('success', 'Saved!', 'Event has been updated successfully' + (notifyUsers ? ' and attendees notified.' : '.'), () => router.back());
+        showAlert(
+          'success',
+          'Saved!',
+          'Event has been updated successfully' + (notifyUsers ? ' and attendees notified.' : '.'),
+          () => router.replace(`/events/${eventPathId}`)
+        );
       } else {
         showAlert('error', 'Error', response.error || 'Failed to update event');
       }
@@ -471,7 +502,7 @@ export default function EditEventScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [validateForm, id, title, description, category, status, isFeatured, imageUri, imageUrl, isVirtual, location, locationAddress, mapLink, latitude, longitude, virtualLink, eventDate, startTime, endTime, hasCapacity, capacity, registrationRequired, registrationDeadline, isFree, ticketPrice, contactName, contactEmail, contactPhone, router, uploadImageToStorage, dateToString, dateToTimeString]);
+  }, [validateForm, id, title, description, category, status, isFeatured, imageUri, imageUrl, isVirtual, location, locationAddress, mapLink, latitude, longitude, virtualLink, eventDate, startTime, endTime, hasCapacity, capacity, registrationRequired, registrationDeadline, isFree, ticketPrice, paymentMethod, manualPaymentLink, contactName, contactEmail, contactPhone, router, uploadImageToStorage, dateToString, dateToTimeString]);
 
   // Handle delete
   const handleDelete = useCallback(() => {
@@ -708,23 +739,6 @@ export default function EditEventScreen() {
               {/* Image Upload */}
               <View style={styles.inputGroup}>
                 <Text style={[styles.inputLabel, { color: colors.text }]}>Cover Image</Text>
-                <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <View style={styles.toggleInfo}>
-                    <ImageIcon size={20} color={autoCropImage ? colors.primary : colors.textSecondary} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.toggleLabel, { color: colors.text }]}>Auto-crop image</Text>
-                      <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
-                        Off = upload full image • On = crop to 16:9
-                      </Text>
-                    </View>
-                  </View>
-                  <Switch
-                    value={autoCropImage}
-                    onValueChange={setAutoCropImage}
-                    trackColor={{ false: colors.border, true: colors.primary }}
-                    thumbColor={colors.textOnPrimary}
-                  />
-                </View>
                 {!imageUri && !imageUrl ? (
                   <TouchableOpacity
                     style={[styles.uploadButton, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -745,7 +759,7 @@ export default function EditEventScreen() {
                     <Image
                       source={{ uri: imageUri || imageUrl }}
                       style={styles.imagePreview}
-                      resizeMode={autoCropImage ? 'cover' : 'contain'}
+                      resizeMode="cover"
                     />
                     <TouchableOpacity
                       style={styles.removeImageButton}
@@ -1020,23 +1034,68 @@ export default function EditEventScreen() {
               </View>
 
               {!isFree && (
-                <View style={styles.inputGroup}>
-                  <Text style={[styles.inputLabel, { color: colors.text }]}>Ticket Price (JMD) *</Text>
-                  <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                    <Text style={[styles.currencyPrefix, { color: colors.textSecondary }]}>J$</Text>
-                    <TextInput
-                      style={[styles.input, { color: colors.text }]}
-                      placeholder="0"
-                      placeholderTextColor={colors.textSecondary}
-                      value={ticketPrice}
-                      onChangeText={setTicketPrice}
-                      keyboardType="number-pad"
-                    />
+                <>
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.inputLabel, { color: colors.text }]}>Ticket Price (JMD) *</Text>
+                    <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                      <Text style={[styles.currencyPrefix, { color: colors.textSecondary }]}>J$</Text>
+                      <TextInput
+                        style={[styles.input, { color: colors.text }]}
+                        placeholder="0"
+                        placeholderTextColor={colors.textSecondary}
+                        value={ticketPrice}
+                        onChangeText={setTicketPrice}
+                        keyboardType="number-pad"
+                      />
+                    </View>
                   </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.inputLabel, { color: colors.text }]}>Payment Method</Text>
+                    <View style={[styles.pickerOptions, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                      {PAYMENT_METHOD_OPTIONS.map((option) => (
+                        <TouchableOpacity
+                          key={option.value}
+                          style={styles.pickerOption}
+                          onPress={() => setPaymentMethod(option.value)}
+                        >
+                          <View>
+                            <Text style={[styles.pickerOptionText, { color: colors.text }]}>{option.label}</Text>
+                            <Text style={[styles.inputHint, { color: colors.textSecondary }]}>{option.description}</Text>
+                          </View>
+                          {paymentMethod === option.value && <Check size={18} color={colors.primary} />}
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+
+                  {paymentMethod !== 'integrated' && (
+                    <View style={styles.inputGroup}>
+                      <Text style={[styles.inputLabel, { color: colors.text }]}>
+                        Manual Payment Link {paymentMethod === 'manual_link' ? '*' : '(Optional)'}
+                      </Text>
+                      <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <Link size={20} color={colors.textSecondary} />
+                        <TextInput
+                          style={[styles.input, { color: colors.text }]}
+                          placeholder="https://my.ezeepayments.com/..."
+                          placeholderTextColor={colors.textSecondary}
+                          value={manualPaymentLink}
+                          onChangeText={setManualPaymentLink}
+                          autoCapitalize="none"
+                          keyboardType="url"
+                        />
+                      </View>
+                      <Text style={[styles.inputHint, { color: colors.textSecondary }]}>
+                        Used when manual mode is selected or as fallback in auto mode.
+                      </Text>
+                    </View>
+                  )}
+
                   <Text style={[styles.inputHint, { color: colors.textSecondary }]}>
                     Payments are processed securely via eZeePayments
                   </Text>
-                </View>
+                </>
               )}
             </View>
 
@@ -1154,6 +1213,27 @@ export default function EditEventScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Image Cropper */}
+      <ImageCropperModal
+        visible={cropperVisible}
+        imageUri={rawImageUri}
+        aspectRatio={16 / 9}
+        onCrop={(croppedUri) => {
+          setImageUri(croppedUri);
+          setCropperVisible(false);
+          setRawImageUri(null);
+        }}
+        onSkip={(originalUri) => {
+          setImageUri(originalUri);
+          setCropperVisible(false);
+          setRawImageUri(null);
+        }}
+        onCancel={() => {
+          setCropperVisible(false);
+          setRawImageUri(null);
+        }}
+      />
 
       {/* Custom Alert */}
       <CustomAlert

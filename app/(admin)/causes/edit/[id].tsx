@@ -26,6 +26,7 @@ import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import CrossPlatformDateTimePicker from '../../../../components/CrossPlatformDateTimePicker';
 import CustomAlert from '../../../../components/CustomAlert';
+import ImageCropperModal from '../../../../components/ImageCropperModal';
 import {
   ArrowLeft,
   Heart,
@@ -47,7 +48,7 @@ import {
   Lock,
 } from 'lucide-react-native';
 import { Colors } from '../../../../constants/colors';
-import { CauseCategory, CauseStatus, Cause, VisibilityType } from '../../../../types';
+import { CauseCategory, CauseStatus, Cause, PaymentMethodPreference, VisibilityType } from '../../../../types';
 import { supabase } from '../../../../services/supabase';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { decode } from 'base64-arraybuffer';
@@ -75,6 +76,12 @@ const STATUS_OPTIONS: { value: CauseStatus; label: string; color: string }[] = [
   { value: 'cancelled', label: 'Cancelled', color: '#F44336' },
 ];
 
+const PAYMENT_METHOD_OPTIONS: { value: PaymentMethodPreference; label: string; description: string }[] = [
+  { value: 'auto', label: 'Auto', description: 'Try integrated checkout first, then fallback to manual link.' },
+  { value: 'integrated', label: 'Integrated Only', description: 'Use integrated checkout only.' },
+  { value: 'manual_link', label: 'Manual Link Only', description: 'Open your eZee dashboard button/payment link.' },
+];
+
 export default function EditCauseScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -99,9 +106,13 @@ export default function EditCauseScreen() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [rawImageUri, setRawImageUri] = useState<string | null>(null);
+  const [cropperVisible, setCropperVisible] = useState(false);
   const [isDonationsPublic, setIsDonationsPublic] = useState(true);
   const [allowRecurring, setAllowRecurring] = useState(true);
   const [minimumDonation, setMinimumDonation] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodPreference>('auto');
+  const [manualPaymentLink, setManualPaymentLink] = useState('');
   const [isFeatured, setIsFeatured] = useState(false);
   const [visibility, setVisibility] = useState<VisibilityType>('public');
   const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
@@ -130,6 +141,8 @@ export default function EditCauseScreen() {
     setAlertConfig({ type, title, message, onConfirm });
     setAlertVisible(true);
   };
+
+  const isValidUrl = (value: string): boolean => /^https?:\/\/\S+$/i.test(value.trim());
 
   // Helper function for date conversion
   const dateToString = (date: Date): string => {
@@ -164,6 +177,8 @@ export default function EditCauseScreen() {
           setIsDonationsPublic(data.is_donations_public ?? true);
           setAllowRecurring(data.allow_recurring ?? true);
           setMinimumDonation(data.minimum_donation?.toString() || '');
+          setPaymentMethod(data.payment_method || 'auto');
+          setManualPaymentLink(data.manual_payment_link || '');
           setIsFeatured(data.is_featured ?? false);
           setVisibility(data.visibility || 'public');
         }
@@ -194,13 +209,13 @@ export default function EditCauseScreen() {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [16, 9],
+        allowsEditing: false,
         quality: 0.8,
       });
 
       if (!result.canceled && result.assets[0]) {
-        setImageUri(result.assets[0].uri);
+        setRawImageUri(result.assets[0].uri);
+        setCropperVisible(true);
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -304,9 +319,13 @@ export default function EditCauseScreen() {
       }
     }
 
+    if (paymentMethod === 'manual_link' && !isValidUrl(manualPaymentLink)) {
+      newErrors.manualPaymentLink = 'Manual payment link is required and must be a valid URL';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [title, description, goalAmount, endDate, minimumDonation]);
+  }, [title, description, goalAmount, endDate, minimumDonation, paymentMethod, manualPaymentLink]);
 
   // Handle form submission
   const handleSubmit = useCallback(async () => {
@@ -344,6 +363,8 @@ export default function EditCauseScreen() {
           is_donations_public: isDonationsPublic,
           allow_recurring: allowRecurring,
           minimum_donation: minimumDonation ? parseFloat(minimumDonation) : 0,
+          payment_method: paymentMethod,
+          manual_payment_link: manualPaymentLink.trim() || null,
           is_featured: isFeatured,
           visibility,
           updated_at: new Date().toISOString(),
@@ -351,8 +372,7 @@ export default function EditCauseScreen() {
         .eq('id', id);
 
       if (error) throw error;
-
-      if (error) throw error;
+      const causePathId = id;
 
       // Handle Notifications
       if (notifyUsers) {
@@ -365,7 +385,12 @@ export default function EditCauseScreen() {
 
           if (notifyError) {
             console.error('Error sending notifications:', notifyError);
-            showAlert('warning', 'Saved with Warning', 'Cause updated but failed to notify donors.', () => router.back());
+            showAlert(
+              'warning',
+              'Saved with Warning',
+              'Cause updated but failed to notify donors.',
+              () => router.replace(`/causes/${causePathId}`)
+            );
             return;
           }
         } catch (err) {
@@ -377,7 +402,7 @@ export default function EditCauseScreen() {
         'success',
         'Success! ✅',
         'Cause has been updated successfully' + (notifyUsers ? ' and donors notified.' : '.'),
-        () => router.back()
+        () => router.replace(`/causes/${causePathId}`)
       );
     } catch (error) {
       console.error('Error updating cause:', error);
@@ -385,7 +410,7 @@ export default function EditCauseScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [validateForm, id, title, description, category, status, goalAmount, endDate, imageUri, imageUrl, isDonationsPublic, allowRecurring, minimumDonation, isFeatured, router, uploadImageToStorage]);
+  }, [validateForm, id, title, description, category, status, goalAmount, endDate, imageUri, imageUrl, isDonationsPublic, allowRecurring, minimumDonation, paymentMethod, manualPaymentLink, isFeatured, visibility, router, uploadImageToStorage]);
 
   // Access check
   if (!isAdmin) {
@@ -692,6 +717,51 @@ export default function EditCauseScreen() {
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Settings</Text>
 
+              <View style={styles.section}>
+                <Text style={[styles.label, { color: colors.text }]}>Payment Method</Text>
+                <View style={[styles.pickerOptions, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  {PAYMENT_METHOD_OPTIONS.map((option) => (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={styles.pickerOption}
+                      onPress={() => setPaymentMethod(option.value)}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.pickerOptionText, { color: colors.text }]}>{option.label}</Text>
+                        <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>{option.description}</Text>
+                      </View>
+                      {paymentMethod === option.value && <Check size={20} color="#38B6FF" />}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {paymentMethod !== 'integrated' && (
+                <View style={styles.section}>
+                  <Text style={[styles.label, { color: colors.text }]}>
+                    Manual Payment Link {paymentMethod === 'manual_link' ? <Text style={styles.required}>*</Text> : '(Optional)'}
+                  </Text>
+                  <View style={[
+                    styles.inputContainer,
+                    { backgroundColor: colors.card, borderColor: errors.manualPaymentLink ? colors.error : colors.border }
+                  ]}>
+                    <Globe size={20} color={colors.textSecondary} />
+                    <TextInput
+                      style={[styles.input, { color: colors.text }]}
+                      placeholder="https://my.ezeepayments.com/..."
+                      placeholderTextColor={colors.textSecondary}
+                      value={manualPaymentLink}
+                      onChangeText={setManualPaymentLink}
+                      autoCapitalize="none"
+                      keyboardType="url"
+                    />
+                  </View>
+                  {errors.manualPaymentLink && (
+                    <Text style={[styles.errorMessage, { color: colors.error }]}>{errors.manualPaymentLink}</Text>
+                  )}
+                </View>
+              )}
+
               {/* Public Donations */}
               <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={styles.toggleInfo}>
@@ -834,6 +904,27 @@ export default function EditCauseScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Image Cropper */}
+      <ImageCropperModal
+        visible={cropperVisible}
+        imageUri={rawImageUri}
+        aspectRatio={16 / 9}
+        onCrop={(croppedUri) => {
+          setImageUri(croppedUri);
+          setCropperVisible(false);
+          setRawImageUri(null);
+        }}
+        onSkip={(originalUri) => {
+          setImageUri(originalUri);
+          setCropperVisible(false);
+          setRawImageUri(null);
+        }}
+        onCancel={() => {
+          setCropperVisible(false);
+          setRawImageUri(null);
+        }}
+      />
+
       {/* Custom Alert */}
       <CustomAlert
         visible={alertVisible}
@@ -936,6 +1027,10 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   errorMessage: {
+    fontSize: 13,
+    marginTop: 6,
+  },
+  helperText: {
     fontSize: 13,
     marginTop: 6,
   },
@@ -1061,6 +1156,10 @@ const styles = StyleSheet.create({
   toggleLabel: {
     fontSize: 15,
     fontWeight: '600',
+  },
+  toggleDescription: {
+    fontSize: 13,
+    marginTop: 2,
   },
   bottomBar: {
     position: 'absolute',

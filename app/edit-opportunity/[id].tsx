@@ -44,6 +44,7 @@ import { File } from 'expo-file-system';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import CrossPlatformDateTimePicker from '../../components/CrossPlatformDateTimePicker';
 import CustomAlert from '../../components/CustomAlert';
+import ImageCropperModal from '../../components/ImageCropperModal';
 import { VisibilityType } from '../../types';
 
 const CATEGORIES = [
@@ -93,7 +94,8 @@ export default function EditOpportunityScreen() {
   const [spotsTotal, setSpotsTotal] = useState('');
   const [impactStatement, setImpactStatement] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
-  const [autoCropImage, setAutoCropImage] = useState(false);
+  const [rawImageUri, setRawImageUri] = useState<string | null>(null);
+  const [cropperVisible, setCropperVisible] = useState(false);
 
   // Array fields
   const [requirements, setRequirements] = useState<string[]>([]);
@@ -296,13 +298,13 @@ export default function EditOpportunityScreen() {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: autoCropImage,
-        ...(autoCropImage ? { aspect: [16, 9] as [number, number] } : {}),
+        allowsEditing: false,
         quality: 0.8,
       });
 
-      if (!result.canceled) {
-        setImageUri(result.assets[0].uri);
+      if (!result.canceled && result.assets[0]) {
+        setRawImageUri(result.assets[0].uri);
+        setCropperVisible(true);
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -528,7 +530,7 @@ export default function EditOpportunityScreen() {
 
       // Navigate back to opportunity details page
       setTimeout(() => {
-        router.push(`/opportunity/${opportunitySlug || opportunityId}`);
+        router.replace(`/opportunity/${opportunitySlug || opportunityId}`);
       }, 1500);
     } catch (error: any) {
       console.error('Error updating opportunity:', error);
@@ -1006,29 +1008,12 @@ export default function EditOpportunityScreen() {
             <Text style={[styles.label, { color: colors.text }]}>
               Image (Optional)
             </Text>
-            <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.toggleInfo}>
-                <ImageIcon size={20} color={autoCropImage ? colors.primary : colors.textSecondary} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.toggleLabel, { color: colors.text }]}>Auto-crop image</Text>
-                  <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
-                    Off = upload full image • On = crop to 16:9
-                  </Text>
-                </View>
-              </View>
-              <Switch
-                value={autoCropImage}
-                onValueChange={setAutoCropImage}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
             {imageUri ? (
               <View style={styles.imagePreviewContainer}>
                 <Image
                   source={{ uri: imageUri }}
                   style={styles.imagePreview}
-                  resizeMode={autoCropImage ? 'cover' : 'contain'}
+                  resizeMode="cover"
                 />
                 <TouchableOpacity
                   style={styles.removeImageButton}
@@ -1131,6 +1116,27 @@ export default function EditOpportunityScreen() {
         </ScrollView >
       )
       }
+
+      {/* Image Cropper */}
+      <ImageCropperModal
+        visible={cropperVisible}
+        imageUri={rawImageUri}
+        aspectRatio={16 / 9}
+        onCrop={(croppedUri) => {
+          setImageUri(croppedUri);
+          setCropperVisible(false);
+          setRawImageUri(null);
+        }}
+        onSkip={(originalUri) => {
+          setImageUri(originalUri);
+          setCropperVisible(false);
+          setRawImageUri(null);
+        }}
+        onCancel={() => {
+          setCropperVisible(false);
+          setRawImageUri(null);
+        }}
+      />
 
       {/* Custom Alert */}
       <CustomAlert

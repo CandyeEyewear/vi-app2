@@ -26,6 +26,7 @@ import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import CrossPlatformDateTimePicker from '../../../components/CrossPlatformDateTimePicker';
 import CustomAlert from '../../../components/CustomAlert';
+import ImageCropperModal from '../../../components/ImageCropperModal';
 import {
   ArrowLeft,
   Heart,
@@ -47,7 +48,7 @@ import {
   Lock,
 } from 'lucide-react-native';
 import { Colors } from '../../../constants/colors';
-import { CauseCategory, VisibilityType } from '../../../types';
+import { CauseCategory, PaymentMethodPreference, VisibilityType } from '../../../types';
 import { createCause } from '../../../services/causesService';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../services/supabase';
@@ -60,13 +61,19 @@ const isSmallScreen = screenWidth < 380;
 
 // Category options
 const CATEGORY_OPTIONS: { value: CauseCategory; label: string; emoji: string }[] = [
-  { value: 'disaster_relief', label: 'Disaster Relief', emoji: '🆘' },
-  { value: 'education', label: 'Education', emoji: '📚' },
-  { value: 'healthcare', label: 'Healthcare', emoji: '🏥' },
-  { value: 'environment', label: 'Environment', emoji: '🌱' },
-  { value: 'community', label: 'Community', emoji: '🏘️' },
-  { value: 'poverty', label: 'Poverty Relief', emoji: '💝' },
-  { value: 'other', label: 'Other', emoji: '📋' },
+  { value: 'disaster_relief', label: 'Disaster Relief', emoji: '\u{1F198}' },
+  { value: 'education', label: 'Education', emoji: '\u{1F4DA}' },
+  { value: 'healthcare', label: 'Healthcare', emoji: '\u{1F3E5}' },
+  { value: 'environment', label: 'Environment', emoji: '\u{1F331}' },
+  { value: 'community', label: 'Community', emoji: '\u{1F3D8}\u{FE0F}' },
+  { value: 'poverty', label: 'Poverty Relief', emoji: '\u{1F49D}' },
+  { value: 'other', label: 'Other', emoji: '\u{1F4CB}' },
+];
+
+const PAYMENT_METHOD_OPTIONS: { value: PaymentMethodPreference; label: string; description: string }[] = [
+  { value: 'auto', label: 'Auto', description: 'Try integrated checkout first, then fallback to manual link.' },
+  { value: 'integrated', label: 'Integrated Only', description: 'Use integrated checkout only.' },
+  { value: 'manual_link', label: 'Manual Link Only', description: 'Open your eZee dashboard button/payment link.' },
 ];
 
 export default function CreateCauseScreen() {
@@ -86,9 +93,13 @@ export default function CreateCauseScreen() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [rawImageUri, setRawImageUri] = useState<string | null>(null);
+  const [cropperVisible, setCropperVisible] = useState(false);
   const [isDonationsPublic, setIsDonationsPublic] = useState(true);
   const [allowRecurring, setAllowRecurring] = useState(true);
   const [minimumDonation, setMinimumDonation] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodPreference>('auto');
+  const [manualPaymentLink, setManualPaymentLink] = useState('');
   const [isFeatured, setIsFeatured] = useState(false);
   const [visibility, setVisibility] = useState<VisibilityType>('public');
   const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
@@ -115,6 +126,8 @@ export default function CreateCauseScreen() {
     setAlertVisible(true);
   };
 
+  const isValidUrl = (value: string): boolean => /^https?:\/\/\S+$/i.test(value.trim());
+
   // Helper function for date conversion
   const dateToString = (date: Date): string => {
     const year = date.getFullYear();
@@ -137,13 +150,13 @@ export default function CreateCauseScreen() {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [16, 9],
+        allowsEditing: false,
         quality: 0.8,
       });
 
       if (!result.canceled && result.assets[0]) {
-        setImageUri(result.assets[0].uri);
+        setRawImageUri(result.assets[0].uri);
+        setCropperVisible(true);
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -245,9 +258,13 @@ export default function CreateCauseScreen() {
       }
     }
 
+    if (paymentMethod === 'manual_link' && !isValidUrl(manualPaymentLink)) {
+      newErrors.manualPaymentLink = 'Manual payment link is required and must be a valid URL';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [title, description, goalAmount, endDate, minimumDonation]);
+  }, [title, description, goalAmount, endDate, minimumDonation, paymentMethod, manualPaymentLink]);
 
   // Handle form submission
   const handleSubmit = useCallback(async () => {
@@ -287,6 +304,8 @@ export default function CreateCauseScreen() {
         isDonationsPublic,
         allowRecurring,
         minimumDonation: minimumDonation ? parseFloat(minimumDonation) : 0,
+        paymentMethod,
+        manualPaymentLink: manualPaymentLink.trim() || undefined,
         createdBy: user.id,
         visibility,
       });
@@ -294,14 +313,15 @@ export default function CreateCauseScreen() {
       if (response.success && response.data) {
         const causeId = response.data.id;
         const causeTitle = response.data.title;
+        const causeSlug = response.data.slug || causeId;
 
-        console.log('✅ Cause created successfully!');
-        console.log('📊 Cause ID:', causeId);
+        console.log('Ã¢Å“â€¦ Cause created successfully!');
+        console.log('Ã°Å¸â€œÅ  Cause ID:', causeId);
 
         // Create notifications using database function
-        console.log('🔔 Starting notification process...');
-        console.log('🔧 Calling RPC function: create_cause_notifications');
-        console.log('📦 Function parameters:', {
+        console.log('Ã°Å¸â€â€ Starting notification process...');
+        console.log('Ã°Å¸â€Â§ Calling RPC function: create_cause_notifications');
+        console.log('Ã°Å¸â€œÂ¦ Function parameters:', {
           p_cause_id: causeId,
           p_title: causeTitle,
           p_creator_id: user.id,
@@ -317,27 +337,27 @@ export default function CreateCauseScreen() {
             }
           );
 
-          console.log('🔍 RPC function response:', {
+          console.log('Ã°Å¸â€Â RPC function response:', {
             notifiedUsers,
             error: notifError,
           });
 
           if (notifError) {
-            console.error('❌ Notification creation error:', notifError);
-            console.error('❌ Error details:', {
+            console.error('Ã¢ÂÅ’ Notification creation error:', notifError);
+            console.error('Ã¢ÂÅ’ Error details:', {
               message: notifError.message,
               code: notifError.code,
               details: notifError.details,
               hint: notifError.hint,
             });
-            console.warn('⚠️ Cause created but notifications failed');
+            console.warn('Ã¢Å¡Â Ã¯Â¸Â Cause created but notifications failed');
             // Don't throw - cause was created successfully
           } else {
-            console.log('✅ Notifications created successfully');
-            console.log('📊 Total notifications sent:', notifiedUsers?.length || 0);
+            console.log('Ã¢Å“â€¦ Notifications created successfully');
+            console.log('Ã°Å¸â€œÅ  Total notifications sent:', notifiedUsers?.length || 0);
 
             // Send push notifications to users with push tokens and causes notifications enabled
-            console.log('🔔 Starting push notification process...');
+            console.log('Ã°Å¸â€â€ Starting push notification process...');
             
             // Get all users with push tokens
             const { data: users, error: usersError } = await supabase
@@ -345,13 +365,13 @@ export default function CreateCauseScreen() {
               .select('id, push_token')
               .not('push_token', 'is', null);
 
-            console.log('📊 Users query result:', { 
+            console.log('Ã°Å¸â€œÅ  Users query result:', { 
               error: usersError, 
               userCount: users?.length || 0 
             });
 
             if (!usersError && users) {
-              console.log('✅ Found', users.length, 'users with push tokens');
+              console.log('Ã¢Å“â€¦ Found', users.length, 'users with push tokens');
               
               // Get notification settings for these users
               const { data: settingsData, error: settingsError } = await supabase
@@ -359,7 +379,7 @@ export default function CreateCauseScreen() {
                 .select('user_id, causes_enabled')
                 .in('user_id', users.map(u => u.id));
 
-              console.log('📊 Settings query result:', { 
+              console.log('Ã°Å¸â€œÅ  Settings query result:', { 
                 error: settingsError, 
                 settingsCount: settingsData?.length || 0 
               });
@@ -373,10 +393,10 @@ export default function CreateCauseScreen() {
                   return setting === true || setting === undefined;
                 });
 
-                console.log('✅ Found', enabledUsers.length, 'users with causes notifications enabled');
+                console.log('Ã¢Å“â€¦ Found', enabledUsers.length, 'users with causes notifications enabled');
 
                 for (const userObj of enabledUsers) {
-                  console.log('📤 Sending push to user:', userObj.id.substring(0, 8) + '...');
+                  console.log('Ã°Å¸â€œÂ¤ Sending push to user:', userObj.id.substring(0, 8) + '...');
                   try {
                     await sendNotificationToUser(userObj.id, {
                       type: 'cause',
@@ -384,43 +404,44 @@ export default function CreateCauseScreen() {
                       title: 'New Fundraising Cause',
                       body: `${causeTitle} - Help make a difference!`,
                     });
-                    console.log('✅ Push sent to user:', userObj.id.substring(0, 8) + '...');
+                    console.log('Ã¢Å“â€¦ Push sent to user:', userObj.id.substring(0, 8) + '...');
                   } catch (pushError) {
-                    console.error('❌ Failed to send push to user:', userObj.id, pushError);
+                    console.error('Ã¢ÂÅ’ Failed to send push to user:', userObj.id, pushError);
                   }
 
                   // Send email notification (non-blocking)
                   sendEmailNotification(userObj.id, 'cause', {
                     title: causeTitle,
-                    description: causeDescription?.substring(0, 200),
+                    description: description.trim().substring(0, 200),
                     id: causeId,
                   }).catch((err) => {
-                    console.error('❌ Email notification error for user:', userObj.id, err);
+                    console.warn('Email notification skipped for user:', userObj.id, err);
                   });
                 }
                 
-                console.log('🎉 Push notification process complete!');
+                console.log('Ã°Å¸Å½â€° Push notification process complete!');
               }
             }
           }
         } catch (notifErr) {
-          console.error('❌ Error in notification process:', notifErr);
+          console.error('Ã¢ÂÅ’ Error in notification process:', notifErr);
           // Don't fail the whole operation if notifications fail
         }
 
-        setAlertConfig({
-          type: 'success',
-          title: 'Success! 🎉',
-          message: `"${causeTitle}" has been created successfully. Volunteers will be notified.`,
-          onConfirm: undefined,
-        });
-        setAlertVisible(true);
+        showAlert(
+          'success',
+          'Success!',
+          `"${causeTitle}" has been created successfully. Volunteers will be notified.`
+        );
+        setTimeout(() => {
+          router.replace(`/causes/${causeSlug}` as any);
+        }, 800);
       } else {
         throw new Error(response.error || 'Failed to create cause');
       }
     } catch (error: any) {
       // Improved error logging for debugging
-      console.error('❌ Error creating cause:', error);
+      console.error('Ã¢ÂÅ’ Error creating cause:', error);
       console.error('Error details:', {
         message: error?.message,
         code: error?.code,
@@ -437,7 +458,7 @@ export default function CreateCauseScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [validateForm, user, title, description, category, goalAmount, endDate, imageUri, imageUrl, isDonationsPublic, allowRecurring, minimumDonation, isFeatured, visibility, router, uploadImageToStorage]);
+  }, [validateForm, user, title, description, category, goalAmount, endDate, imageUri, imageUrl, isDonationsPublic, allowRecurring, minimumDonation, paymentMethod, manualPaymentLink, isFeatured, visibility, router, uploadImageToStorage]);
 
   // Access check
   if (!isAdmin) {
@@ -693,6 +714,54 @@ export default function CreateCauseScreen() {
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Settings</Text>
 
+            <View style={styles.section}>
+              <Text style={[styles.label, { color: colors.text }]}>Payment Method</Text>
+              <View style={[styles.pickerOptions, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                {PAYMENT_METHOD_OPTIONS.map((option) => (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={styles.pickerOption}
+                    onPress={() => setPaymentMethod(option.value)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.pickerOptionText, { color: colors.text }]}>{option.label}</Text>
+                      <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>{option.description}</Text>
+                    </View>
+                    {paymentMethod === option.value && <Check size={20} color="#38B6FF" />}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {paymentMethod !== 'integrated' && (
+              <View style={styles.section}>
+                <Text style={[styles.label, { color: colors.text }]}>
+                  Manual Payment Link {paymentMethod === 'manual_link' ? <Text style={styles.required}>*</Text> : '(Optional)'}
+                </Text>
+                <View style={[
+                  styles.inputContainer,
+                  { backgroundColor: colors.card, borderColor: errors.manualPaymentLink ? colors.error : colors.border }
+                ]}>
+                  <Globe size={20} color={colors.textSecondary} />
+                  <TextInput
+                    style={[styles.input, { color: colors.text }]}
+                    placeholder="https://my.ezeepayments.com/..."
+                    placeholderTextColor={colors.textSecondary}
+                    value={manualPaymentLink}
+                    onChangeText={setManualPaymentLink}
+                    autoCapitalize="none"
+                    keyboardType="url"
+                  />
+                </View>
+                {errors.manualPaymentLink && (
+                  <Text style={[styles.errorMessage, { color: colors.error }]}>{errors.manualPaymentLink}</Text>
+                )}
+                <Text style={[styles.helperText, { color: colors.textSecondary }]}>
+                  Used for manual mode and as fallback in auto mode.
+                </Text>
+              </View>
+            )}
+
             {/* Public Donations */}
             <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.toggleInfo}>
@@ -804,6 +873,27 @@ export default function CreateCauseScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Image Cropper */}
+      <ImageCropperModal
+        visible={cropperVisible}
+        imageUri={rawImageUri}
+        aspectRatio={16 / 9}
+        onCrop={(croppedUri) => {
+          setImageUri(croppedUri);
+          setCropperVisible(false);
+          setRawImageUri(null);
+        }}
+        onSkip={(originalUri) => {
+          setImageUri(originalUri);
+          setCropperVisible(false);
+          setRawImageUri(null);
+        }}
+        onCancel={() => {
+          setCropperVisible(false);
+          setRawImageUri(null);
+        }}
+      />
 
       {/* Custom Alert */}
       <CustomAlert

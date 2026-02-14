@@ -26,6 +26,7 @@ import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import CrossPlatformDateTimePicker from '../../../components/CrossPlatformDateTimePicker';
 import CustomAlert from '../../../components/CustomAlert';
+import ImageCropperModal from '../../../components/ImageCropperModal';
 import { geocodeLocation, GeocodeResult } from '../../../services/geocoding';
 import {
   ArrowLeft,
@@ -49,7 +50,7 @@ import {
   Lock,
 } from 'lucide-react-native';
 import { Colors } from '../../../constants/colors';
-import { EventCategory, VisibilityType } from '../../../types';
+import { EventCategory, PaymentMethodPreference, VisibilityType } from '../../../types';
 import { createEvent } from '../../../services/eventsService';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../services/supabase';
@@ -71,6 +72,12 @@ const CATEGORY_OPTIONS: { value: EventCategory; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
+const PAYMENT_METHOD_OPTIONS: { value: PaymentMethodPreference; label: string; description: string }[] = [
+  { value: 'auto', label: 'Auto', description: 'Try integrated checkout first, then fallback to manual link.' },
+  { value: 'integrated', label: 'Integrated Only', description: 'Use integrated checkout only.' },
+  { value: 'manual_link', label: 'Manual Link Only', description: 'Open your eZee dashboard button/payment link.' },
+];
+
 export default function CreateEventScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -86,7 +93,8 @@ export default function CreateEventScreen() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [autoCropImage, setAutoCropImage] = useState(false);
+  const [rawImageUri, setRawImageUri] = useState<string | null>(null);
+  const [cropperVisible, setCropperVisible] = useState(false);
   
   // Location
   const [isVirtual, setIsVirtual] = useState(false);
@@ -135,6 +143,8 @@ export default function CreateEventScreen() {
   // Pricing
   const [isFree, setIsFree] = useState(true);
   const [ticketPrice, setTicketPrice] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodPreference>('auto');
+  const [manualPaymentLink, setManualPaymentLink] = useState('');
   
   // Contact
   const [contactName, setContactName] = useState('');
@@ -176,19 +186,19 @@ export default function CreateEventScreen() {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: autoCropImage,
-        ...(autoCropImage ? { aspect: [16, 9] as [number, number] } : {}),
+        allowsEditing: false,
         quality: 0.8,
       });
 
       if (!result.canceled && result.assets[0]) {
-        setImageUri(result.assets[0].uri);
+        setRawImageUri(result.assets[0].uri);
+        setCropperVisible(true);
       }
     } catch (error) {
       console.error('Error picking image:', error);
       showAlert('error', 'Error', 'Failed to pick image. Please try again.');
     }
-  }, [autoCropImage, showAlert]);
+  }, [showAlert]);
 
   // Upload image to Supabase Storage
   const uploadImageToStorage = useCallback(async (uri: string): Promise<string | null> => {
@@ -309,8 +319,12 @@ export default function CreateEventScreen() {
       showAlert('warning', 'Invalid', 'Please enter a valid ticket price');
       return false;
     }
+    if (!isFree && paymentMethod === 'manual_link' && !isValidUrl(manualPaymentLink)) {
+      showAlert('warning', 'Invalid', 'Please enter a valid manual payment link (https://...)');
+      return false;
+    }
     return true;
-  }, [title, description, isVirtual, location, virtualLink, eventDate, startTime, hasCapacity, capacity, isFree, ticketPrice]);
+  }, [title, description, isVirtual, location, virtualLink, eventDate, startTime, hasCapacity, capacity, isFree, ticketPrice, paymentMethod, manualPaymentLink]);
 
   // Handle submit
   const handleSubmit = useCallback(async () => {
@@ -351,6 +365,8 @@ export default function CreateEventScreen() {
         registrationDeadline: registrationDeadline ? dateToString(registrationDeadline) : undefined,
         isFree,
         ticketPrice: !isFree ? parseFloat(ticketPrice) : undefined,
+        paymentMethod: !isFree ? paymentMethod : 'auto',
+        manualPaymentLink: !isFree && manualPaymentLink.trim() ? manualPaymentLink.trim() : undefined,
         contactName: contactName.trim() || undefined,
         contactEmail: contactEmail.trim() || undefined,
         contactPhone: contactPhone.trim() || undefined,
@@ -361,14 +377,15 @@ export default function CreateEventScreen() {
       if (response.success && response.data) {
         const eventId = response.data.id;
         const eventTitle = response.data.title;
+        const eventSlug = response.data.slug || eventId;
 
-        console.log('✅ Event created successfully!');
-        console.log('📊 Event ID:', eventId);
+        console.log('ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Event created successfully!');
+        console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â  Event ID:', eventId);
 
         // Create notifications using database function
-        console.log('🔔 Starting notification process...');
-        console.log('🔧 Calling RPC function: create_event_notifications');
-        console.log('📦 Function parameters:', {
+        console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ¢â‚¬Â Starting notification process...');
+        console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â§ Calling RPC function: create_event_notifications');
+        console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â¦ Function parameters:', {
           p_event_id: eventId,
           p_title: eventTitle,
           p_creator_id: user.id,
@@ -384,27 +401,27 @@ export default function CreateEventScreen() {
             }
           );
 
-          console.log('🔍 RPC function response:', {
+          console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â RPC function response:', {
             notifiedUsers,
             error: notifError,
           });
 
           if (notifError) {
-            console.error('❌ Notification creation error:', notifError);
-            console.error('❌ Error details:', {
+            console.error('ÃƒÂ¢Ã‚ÂÃ…â€™ Notification creation error:', notifError);
+            console.error('ÃƒÂ¢Ã‚ÂÃ…â€™ Error details:', {
               message: notifError.message,
               code: notifError.code,
               details: notifError.details,
               hint: notifError.hint,
             });
-            console.warn('⚠️ Event created but notifications failed');
+            console.warn('ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Event created but notifications failed');
             // Don't throw - event was created successfully
           } else {
-            console.log('✅ Notifications created successfully');
-            console.log('📊 Total notifications sent:', notifiedUsers?.length || 0);
+            console.log('ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Notifications created successfully');
+            console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â  Total notifications sent:', notifiedUsers?.length || 0);
 
             // Send push notifications to users with push tokens and events notifications enabled
-            console.log('🔔 Starting push notification process...');
+            console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ¢â‚¬Â Starting push notification process...');
             
             // Get all users with push tokens
             const { data: users, error: usersError } = await supabase
@@ -412,13 +429,13 @@ export default function CreateEventScreen() {
               .select('id, push_token')
               .not('push_token', 'is', null);
 
-            console.log('📊 Users query result:', { 
+            console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â  Users query result:', { 
               error: usersError, 
               userCount: users?.length || 0 
             });
 
             if (!usersError && users) {
-              console.log('✅ Found', users.length, 'users with push tokens');
+              console.log('ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Found', users.length, 'users with push tokens');
               
               // Get notification settings for these users
               const { data: settingsData, error: settingsError } = await supabase
@@ -426,7 +443,7 @@ export default function CreateEventScreen() {
                 .select('user_id, events_enabled')
                 .in('user_id', users.map(u => u.id));
 
-              console.log('📊 Settings query result:', { 
+              console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â  Settings query result:', { 
                 error: settingsError, 
                 settingsCount: settingsData?.length || 0 
               });
@@ -440,10 +457,10 @@ export default function CreateEventScreen() {
                   return setting === true || setting === undefined;
                 });
 
-                console.log('✅ Found', enabledUsers.length, 'users with events notifications enabled');
+                console.log('ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Found', enabledUsers.length, 'users with events notifications enabled');
 
                 for (const userObj of enabledUsers) {
-                  console.log('📤 Sending push to user:', userObj.id.substring(0, 8) + '...');
+                  console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â¤ Sending push to user:', userObj.id.substring(0, 8) + '...');
                   try {
                     await sendNotificationToUser(userObj.id, {
                       type: 'event',
@@ -451,42 +468,45 @@ export default function CreateEventScreen() {
                       title: 'New Event',
                       body: `${eventTitle} - Join us!`,
                     });
-                    console.log('✅ Push sent to user:', userObj.id.substring(0, 8) + '...');
+                    console.log('ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Push sent to user:', userObj.id.substring(0, 8) + '...');
                   } catch (pushError) {
-                    console.error('❌ Failed to send push to user:', userObj.id, pushError);
+                    console.error('ÃƒÂ¢Ã‚ÂÃ…â€™ Failed to send push to user:', userObj.id, pushError);
                   }
 
                   // Send email notification (non-blocking)
                   sendEmailNotification(userObj.id, 'event', {
                     title: eventTitle,
-                    description: eventDescription?.substring(0, 200),
+                    description: description.trim().substring(0, 200),
                     id: eventId,
                   }).catch((err) => {
-                    console.error('❌ Email notification error for user:', userObj.id, err);
+                    console.warn('Email notification skipped for user:', userObj.id, err);
                   });
                 }
                 
-                console.log('🎉 Push notification process complete!');
+                console.log('ÃƒÂ°Ã…Â¸Ã…Â½Ã¢â‚¬Â° Push notification process complete!');
               }
             }
           }
         } catch (notifErr) {
-          console.error('❌ Error in notification process:', notifErr);
+          console.error('ÃƒÂ¢Ã‚ÂÃ…â€™ Error in notification process:', notifErr);
           // Don't fail the whole operation if notifications fail
         }
 
         showAlert(
           'success',
-          'Event Created! 🎉',
+          'Event Created!',
           `"${eventTitle}" has been created successfully. Volunteers will be notified.`,
-          () => router.back()
+          () => router.replace(`/events/${eventSlug}` as any)
         );
+        setTimeout(() => {
+          router.replace(`/events/${eventSlug}` as any);
+        }, 800);
       } else {
         showAlert('error', 'Error', response.error || 'Failed to create event');
       }
     } catch (error: any) {
       // Improved error logging for debugging
-      console.error('❌ Error creating event:', error);
+      console.error('ÃƒÂ¢Ã‚ÂÃ…â€™ Error creating event:', error);
       console.error('Error details:', {
         message: error?.message,
         code: error?.code,
@@ -503,7 +523,7 @@ export default function CreateEventScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [validateForm, user, title, description, category, imageUri, imageUrl, isVirtual, location, locationAddress, mapLink, latitude, longitude, virtualLink, eventDate, startTime, endTime, hasCapacity, capacity, registrationRequired, registrationDeadline, isFree, ticketPrice, contactName, contactEmail, contactPhone, router, uploadImageToStorage, dateToString, dateToTimeString]);
+  }, [validateForm, user, title, description, category, imageUri, imageUrl, isVirtual, location, locationAddress, mapLink, latitude, longitude, virtualLink, eventDate, startTime, endTime, hasCapacity, capacity, registrationRequired, registrationDeadline, isFree, ticketPrice, paymentMethod, manualPaymentLink, contactName, contactEmail, contactPhone, router, uploadImageToStorage, dateToString, dateToTimeString]);
 
   const selectedCategory = CATEGORY_OPTIONS.find(c => c.value === category);
 
@@ -609,23 +629,6 @@ export default function CreateEventScreen() {
             {/* Image Upload */}
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.text }]}>Cover Image</Text>
-              <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <View style={styles.toggleInfo}>
-                  <ImageIcon size={20} color={autoCropImage ? colors.primary : colors.textSecondary} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.toggleLabel, { color: colors.text }]}>Auto-crop image</Text>
-                    <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
-                      Off = upload full image • On = crop to 16:9
-                    </Text>
-                  </View>
-                </View>
-                <Switch
-                  value={autoCropImage}
-                  onValueChange={setAutoCropImage}
-                  trackColor={{ false: colors.border, true: colors.primary }}
-                  thumbColor={colors.textOnPrimary}
-                />
-              </View>
               {!imageUri && !imageUrl ? (
                 <TouchableOpacity
                   style={[styles.uploadButton, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -646,7 +649,7 @@ export default function CreateEventScreen() {
                   <Image
                     source={{ uri: imageUri || imageUrl }}
                     style={styles.imagePreview}
-                    resizeMode={autoCropImage ? 'cover' : 'contain'}
+                    resizeMode="cover"
                   />
                   <TouchableOpacity
                     style={styles.removeImageButton}
@@ -753,7 +756,7 @@ export default function CreateEventScreen() {
                   )}
                   {geocodingLocation?.success && geocodingLocation.formattedAddress && (
                     <Text style={[styles.successText, { color: colors.success }]}>
-                      ✓ {geocodingLocation.formattedAddress}
+                      ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ {geocodingLocation.formattedAddress}
                     </Text>
                   )}
                 </View>
@@ -930,23 +933,68 @@ export default function CreateEventScreen() {
             </View>
 
             {!isFree && (
-              <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: colors.text }]}>Ticket Price (JMD) *</Text>
-                <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <Text style={[styles.currencyPrefix, { color: colors.textSecondary }]}>J$</Text>
-                  <TextInput
-                    style={[styles.input, { color: colors.text }]}
-                    placeholder="0"
-                    placeholderTextColor={colors.textSecondary}
-                    value={ticketPrice}
-                    onChangeText={setTicketPrice}
-                    keyboardType="number-pad"
-                  />
+              <>
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.inputLabel, { color: colors.text }]}>Ticket Price (JMD) *</Text>
+                  <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <Text style={[styles.currencyPrefix, { color: colors.textSecondary }]}>J$</Text>
+                    <TextInput
+                      style={[styles.input, { color: colors.text }]}
+                      placeholder="0"
+                      placeholderTextColor={colors.textSecondary}
+                      value={ticketPrice}
+                      onChangeText={setTicketPrice}
+                      keyboardType="number-pad"
+                    />
+                  </View>
                 </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.inputLabel, { color: colors.text }]}>Payment Method</Text>
+                  <View style={[styles.pickerOptions, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    {PAYMENT_METHOD_OPTIONS.map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={styles.pickerOption}
+                        onPress={() => setPaymentMethod(option.value)}
+                      >
+                        <View>
+                          <Text style={[styles.pickerOptionText, { color: colors.text }]}>{option.label}</Text>
+                          <Text style={[styles.inputHint, { color: colors.textSecondary }]}>{option.description}</Text>
+                        </View>
+                        {paymentMethod === option.value && <Check size={18} color={colors.primary} />}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                {paymentMethod !== 'integrated' && (
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.inputLabel, { color: colors.text }]}>
+                      Manual Payment Link {paymentMethod === 'manual_link' ? '*' : '(Optional)'}
+                    </Text>
+                    <View style={[styles.inputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                      <Link size={20} color={colors.textSecondary} />
+                      <TextInput
+                        style={[styles.input, { color: colors.text }]}
+                        placeholder="https://my.ezeepayments.com/..."
+                        placeholderTextColor={colors.textSecondary}
+                        value={manualPaymentLink}
+                        onChangeText={setManualPaymentLink}
+                        autoCapitalize="none"
+                        keyboardType="url"
+                      />
+                    </View>
+                    <Text style={[styles.inputHint, { color: colors.textSecondary }]}>
+                      Used when manual mode is selected or as fallback in auto mode.
+                    </Text>
+                  </View>
+                )}
+
                 <Text style={[styles.inputHint, { color: colors.textSecondary }]}>
                   Payments are processed securely via eZeePayments
                 </Text>
-              </View>
+              </>
             )}
           </View>
 
@@ -1055,6 +1103,27 @@ export default function CreateEventScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Image Cropper */}
+      <ImageCropperModal
+        visible={cropperVisible}
+        imageUri={rawImageUri}
+        aspectRatio={16 / 9}
+        onCrop={(croppedUri) => {
+          setImageUri(croppedUri);
+          setCropperVisible(false);
+          setRawImageUri(null);
+        }}
+        onSkip={(originalUri) => {
+          setImageUri(originalUri);
+          setCropperVisible(false);
+          setRawImageUri(null);
+        }}
+        onCancel={() => {
+          setCropperVisible(false);
+          setRawImageUri(null);
+        }}
+      />
 
       {/* Custom Alert */}
       <CustomAlert
@@ -1302,3 +1371,4 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
 });
+  const isValidUrl = (value: string): boolean => /^https?:\/\/\S+$/i.test(value.trim());

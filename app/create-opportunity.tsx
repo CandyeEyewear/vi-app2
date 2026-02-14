@@ -45,6 +45,7 @@ import { File } from 'expo-file-system';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import CrossPlatformDateTimePicker from '../components/CrossPlatformDateTimePicker';
 import CustomAlert from '../components/CustomAlert';
+import ImageCropperModal from '../components/ImageCropperModal';
 import { sendNotificationToUser, sendEmailNotification } from '../services/pushNotifications';
 import WebContainer from '../components/WebContainer';
 import { VisibilityType } from '../types';
@@ -93,7 +94,8 @@ export default function CreateOpportunityScreen() {
   const [spotsTotal, setSpotsTotal] = useState('');
   const [impactStatement, setImpactStatement] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
-  const [autoCropImage, setAutoCropImage] = useState(false);
+  const [rawImageUri, setRawImageUri] = useState<string | null>(null);
+  const [cropperVisible, setCropperVisible] = useState(false);
   const [contactPersonName, setContactPersonName] = useState('');
   const [contactPersonPhone, setContactPersonPhone] = useState('');
 
@@ -134,13 +136,16 @@ export default function CreateOpportunityScreen() {
   };
 
   // Check network connectivity
-  const checkNetworkStatus = async () => {
+  const checkNetworkStatus = async (): Promise<boolean> => {
     try {
       // Simple connectivity check by attempting a lightweight Supabase query
       const { error } = await supabase.from('opportunities').select('id').limit(1);
-      setIsOnline(!error || error.code !== 'PGRST301');
+      const online = !error || error.code !== 'PGRST301';
+      setIsOnline(online);
+      return online;
     } catch (error) {
       setIsOnline(false);
+      return false;
     }
   };
 
@@ -298,14 +303,13 @@ export default function CreateOpportunityScreen() {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: autoCropImage,
-        ...(autoCropImage ? { aspect: [16, 9] as [number, number] } : {}),
+        allowsEditing: false,
         quality: 0.8,
       });
 
       if (!result.canceled && result.assets[0]) {
-        setImageUri(result.assets[0].uri);
-        showAlert('Success', 'Image selected successfully', 'success');
+        setRawImageUri(result.assets[0].uri);
+        setCropperVisible(true);
       }
     } catch (error: any) {
       console.error('Error picking image:', error);
@@ -321,8 +325,8 @@ export default function CreateOpportunityScreen() {
       setUploadingImage(true);
       
       // Check network before upload
-      await checkNetworkStatus();
-      if (!isOnline) {
+      const online = await checkNetworkStatus();
+      if (!online) {
         throw new Error('No internet connection');
       }
 
@@ -497,14 +501,13 @@ export default function CreateOpportunityScreen() {
     }
 
     // Check network connectivity
-    await checkNetworkStatus();
-    if (!isOnline) {
+    const online = await checkNetworkStatus();
+    if (!online) {
       showAlert(
-        'No Internet Connection',
-        'Please check your internet connection and try again.',
-        'error'
+        'Connection Check',
+        'Network looks unstable. We will still try to submit.',
+        'warning'
       );
-      return;
     }
 
     try {
@@ -659,7 +662,7 @@ export default function CreateOpportunityScreen() {
                   description: description?.trim().substring(0, 200),
                   id: data.id,
                 }).catch((err) => {
-                  console.error('❌ Email notification error for user:', userObj.id, err);
+                  console.warn('Email notification skipped for user:', userObj.id, err);
                 });
               }
               
@@ -676,10 +679,11 @@ export default function CreateOpportunityScreen() {
         'success'
       );
 
-      // Wait a bit then navigate back
+      const opportunitySlug = data.slug || data.id;
+      // Briefly show success alert, then route to details
       setTimeout(() => {
-        router.back();
-      }, 2000);
+        router.replace(`/opportunity/${opportunitySlug}` as any);
+      }, 800);
     } catch (error: any) {
       console.error('Error creating opportunity:', error);
       const errorMessage = getErrorMessage(error);
@@ -1200,29 +1204,12 @@ export default function CreateOpportunityScreen() {
           <Text style={[styles.label, { color: colors.text }]}>
             Image (Optional)
           </Text>
-          <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={styles.toggleInfo}>
-              <ImageIcon size={responsive.iconSize.md} color={autoCropImage ? colors.primary : colors.textSecondary} />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.toggleLabel, { color: colors.text }]}>Auto-crop image</Text>
-                <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
-                  Off = upload full image • On = crop to 16:9
-                </Text>
-              </View>
-            </View>
-            <Switch
-              value={autoCropImage}
-              onValueChange={setAutoCropImage}
-              trackColor={{ false: colors.border, true: colors.primary }}
-              thumbColor={colors.textOnPrimary}
-            />
-          </View>
           {imageUri ? (
             <View style={styles.imagePreviewContainer}>
               <Image
                 source={{ uri: imageUri }}
                 style={styles.imagePreview}
-                resizeMode={autoCropImage ? 'cover' : 'contain'}
+                resizeMode="cover"
               />
               <AnimatedPressable
                 style={styles.removeImageButton}
@@ -1290,15 +1277,36 @@ export default function CreateOpportunityScreen() {
           variant="primary"
           size="lg"
           onPress={handleCreate}
-          disabled={loading || !isOnline}
+          disabled={loading}
           loading={loading}
           loadingText="Creating Opportunity..."
           style={styles.createButton}
         >
-          {!isOnline ? 'No Internet Connection' : 'Create Opportunity'}
+          Create Opportunity
         </Button>
       </ScrollView>
       </WebContainer>
+
+      {/* Image Cropper */}
+      <ImageCropperModal
+        visible={cropperVisible}
+        imageUri={rawImageUri}
+        aspectRatio={16 / 9}
+        onCrop={(croppedUri) => {
+          setImageUri(croppedUri);
+          setCropperVisible(false);
+          setRawImageUri(null);
+        }}
+        onSkip={(originalUri) => {
+          setImageUri(originalUri);
+          setCropperVisible(false);
+          setRawImageUri(null);
+        }}
+        onCancel={() => {
+          setCropperVisible(false);
+          setRawImageUri(null);
+        }}
+      />
 
       {/* Custom Alert */}
       <CustomAlert

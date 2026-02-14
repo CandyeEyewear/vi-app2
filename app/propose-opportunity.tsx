@@ -41,6 +41,7 @@ import { File } from 'expo-file-system';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import CrossPlatformDateTimePicker from '../components/CrossPlatformDateTimePicker';
 import CustomAlert from '../components/CustomAlert';
+import ImageCropperModal from '../components/ImageCropperModal';
 import Button from '../components/Button';
 import { sendNotificationToUser, sendEmailNotification } from '../services/pushNotifications';
 import { MembershipFeatureScreen } from '../components/MembershipFeatureScreen';
@@ -94,6 +95,8 @@ export default function ProposeOpportunityScreen() {
   const [spotsTotal, setSpotsTotal] = useState('');
   const [impactStatement, setImpactStatement] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [rawImageUri, setRawImageUri] = useState<string | null>(null);
+  const [cropperVisible, setCropperVisible] = useState(false);
   const [contactPersonName, setContactPersonName] = useState('');
   const [contactPersonPhone, setContactPersonPhone] = useState('');
 
@@ -132,13 +135,16 @@ export default function ProposeOpportunityScreen() {
   };
 
   // Check network connectivity
-  const checkNetworkStatus = async () => {
+  const checkNetworkStatus = async (): Promise<boolean> => {
     try {
       // Simple connectivity check by attempting a lightweight Supabase query
       const { error } = await supabase.from('opportunities').select('id').limit(1);
-      setIsOnline(!error || error.code !== 'PGRST301');
+      const online = !error || error.code !== 'PGRST301';
+      setIsOnline(online);
+      return online;
     } catch (error) {
       setIsOnline(false);
+      return false;
     }
   };
 
@@ -301,8 +307,8 @@ export default function ProposeOpportunityScreen() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        setImageUri(result.assets[0].uri);
-        showAlert('Success', 'Image selected successfully', 'success');
+        setRawImageUri(result.assets[0].uri);
+        setCropperVisible(true);
       }
     } catch (error: any) {
       console.error('Error picking image:', error);
@@ -318,8 +324,8 @@ export default function ProposeOpportunityScreen() {
       setUploadingImage(true);
       
       // Check network before upload
-      await checkNetworkStatus();
-      if (!isOnline) {
+      const online = await checkNetworkStatus();
+      if (!online) {
         throw new Error('No internet connection');
       }
 
@@ -493,14 +499,13 @@ export default function ProposeOpportunityScreen() {
     }
 
     // Check network connectivity
-    await checkNetworkStatus();
-    if (!isOnline) {
+    const online = await checkNetworkStatus();
+    if (!online) {
       showAlert(
-        'No Internet Connection',
-        'Please check your internet connection and try again.',
-        'error'
+        'Connection Check',
+        'Network looks unstable. We will still try to submit.',
+        'warning'
       );
-      return;
     }
 
     try {
@@ -677,9 +682,9 @@ export default function ProposeOpportunityScreen() {
         'success'
       );
 
-      // Wait a bit then navigate to profile
+      // Wait a bit then navigate to the newly proposed opportunity
       setTimeout(() => {
-        router.push('/(tabs)/profile');
+        router.replace(`/opportunity/${data.slug || data.id}`);
       }, 2000);
     } catch (error: any) {
       console.error('Error creating opportunity:', error);
@@ -1233,14 +1238,35 @@ export default function ProposeOpportunityScreen() {
           variant="primary"
           size="lg"
           onPress={handlePropose}
-          disabled={loading || !isOnline}
+          disabled={loading}
           loading={loading}
           loadingText="Submitting Proposal..."
           style={styles.createButton}
         >
-          {!isOnline ? 'No Internet Connection' : 'Submit Proposal'}
+          Submit Proposal
         </Button>
       </ScrollView>
+
+      {/* Image Cropper */}
+      <ImageCropperModal
+        visible={cropperVisible}
+        imageUri={rawImageUri}
+        aspectRatio={16 / 9}
+        onCrop={(croppedUri) => {
+          setImageUri(croppedUri);
+          setCropperVisible(false);
+          setRawImageUri(null);
+        }}
+        onSkip={(originalUri) => {
+          setImageUri(originalUri);
+          setCropperVisible(false);
+          setRawImageUri(null);
+        }}
+        onCancel={() => {
+          setCropperVisible(false);
+          setRawImageUri(null);
+        }}
+      />
 
       {/* Custom Alert */}
       <CustomAlert
