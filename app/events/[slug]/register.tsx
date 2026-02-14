@@ -830,6 +830,9 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: Spacing.lg,
     paddingBottom: 100, // Space for bottom button
+    maxWidth: 600,
+    width: '100%' as any,
+    alignSelf: 'center' as any,
   },
   eventCard: {
     marginBottom: Spacing.xl,

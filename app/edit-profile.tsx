@@ -422,6 +422,9 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingBottom: 32,
+    maxWidth: 800,
+    width: '100%' as any,
+    alignSelf: 'center' as any,
   },
   header: {
     flexDirection: 'row',

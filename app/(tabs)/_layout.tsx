@@ -8,7 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResponsive } from '../../hooks/useResponsive';
 import { isWeb as isWebPlatform } from '../../utils/platform';
-import WebNavigation from '../../components/WebNavigation';
+// WebNavigation is rendered once in app/_layout.tsx (not here, to avoid double-mount)
 
 export default function TabsLayout() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -105,10 +105,11 @@ export default function TabsLayout() {
             marginTop: 4,
           }),
         },
-        // Add header for desktop with WebNavigation
-        header: () => (isDesktop ? <WebNavigation /> : null),
+        // No header here — WebNavigation is rendered in app/_layout.tsx
+        header: () => null,
       }}
-      sceneContainerStyle={isDesktop ? { paddingTop: 64 } : undefined} as any
+      // Desktop padding handled by root layout's paddingTop: 64 wrapper
+
     >
       <Tabs.Screen
         name="feed"

@@ -1246,6 +1246,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 120,
+    maxWidth: 800,
+    width: '100%' as any,
+    alignSelf: 'center' as any,
   },
   imageContainer: {
     position: 'relative',

@@ -22,6 +22,7 @@ import {
   useWindowDimensions,
   Keyboard,
   Animated,
+  Pressable,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -738,11 +739,17 @@ const renderTabs = () => (
       {/* Create Post Modal */}
       <Modal
         visible={showCreateModal}
-        animationType="slide"
+        animationType={isDesktop ? 'fade' : 'slide'}
         transparent={true}
         onRequestClose={() => setShowCreateModal(false)}
       >
-        <View style={styles.modalContainer}>
+        <Pressable
+          style={[
+            styles.modalContainer,
+            isDesktop && styles.modalContainerDesktop,
+          ]}
+          onPress={isDesktop ? () => setShowCreateModal(false) : undefined}
+        >
           <Animated.View
             style={[
               styles.modalContent,
@@ -750,7 +757,10 @@ const renderTabs = () => (
               Platform.OS !== 'web' && {
                 marginBottom: keyboardHeight,
               },
+              isDesktop && styles.modalContentDesktop,
             ]}
+            // On web, stop click from reaching the overlay (which would close the modal)
+            {...(Platform.OS === 'web' ? { onClick: (e: any) => e.stopPropagation() } : {})}
           >
             {/* HEADER - Fixed at top, NOT inside ScrollView */}
             <View
@@ -944,7 +954,7 @@ const renderTabs = () => (
               />
             </ScrollView>
           </Animated.View>
-        </View>
+        </Pressable>
       </Modal>
 
       {/* Custom Alert */}
@@ -1052,6 +1062,10 @@ headerRight: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
+  modalContainerDesktop: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   modalContent: {
     flex: 1,
     backgroundColor: Colors.light.background,
@@ -1060,6 +1074,25 @@ headerRight: {
     borderTopRightRadius: 20,
     maxHeight: Platform.OS === 'web' ? ('95vh' as any) : undefined,
     flexDirection: 'column',
+  },
+  modalContentDesktop: {
+    // Explicit height so flex children (header + scrollview) work properly.
+    // flex:0 + flex:1 children = zero height, so we use a fixed height instead.
+    height: '70vh' as any,
+    maxHeight: 640,
+    width: 600,
+    maxWidth: '90%' as any,
+    marginTop: 0,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 10,
+    overflow: 'hidden',
   },
   modalHeader: {
     flexDirection: 'row',

@@ -48,7 +48,8 @@ import { extractMediaLinks } from '../../utils/extractMediaLinks';
 import LinkPreviewCard from '../LinkPreviewCard';
 import { extractSocialLinks } from '../../utils/socialLinkPreview';
 
-const { width } = Dimensions.get('window');
+const { width: screenWidth } = Dimensions.get('window');
+const isDesktopWeb = Platform.OS === 'web' && screenWidth >= 992;
 
 interface FeedPostCardProps {
   post: Post;
@@ -526,7 +527,7 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
       {/* Comment Modal - Facebook-style with proper keyboard handling */}
       <Modal
         visible={showCommentModal}
-        animationType="slide"
+        animationType={isDesktopWeb ? 'fade' : 'slide'}
         transparent
         onRequestClose={() => {
           Keyboard.dismiss();
@@ -535,12 +536,18 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
       >
         <SafeAreaView style={styles.modalSafeArea} edges={['top']}>
           <KeyboardAvoidingView
-            style={styles.modalKeyboardAvoid}
+            style={[styles.modalKeyboardAvoid, isDesktopWeb && styles.modalKeyboardAvoidDesktop]}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
           >
-            <View style={styles.modalContainer}>
-              <View style={styles.modalContent}>
+            <Pressable
+              style={[styles.modalContainer, isDesktopWeb && styles.modalContainerDesktop]}
+              onPress={isDesktopWeb ? () => { Keyboard.dismiss(); setShowCommentModal(false); } : undefined}
+            >
+              <View
+                style={[styles.modalContent, isDesktopWeb && styles.modalContentDesktop]}
+                {...(Platform.OS === 'web' ? { onClick: (e: any) => e.stopPropagation() } as any : {})}
+              >
                 {/* Header - Fixed at top */}
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>Comments</Text>
@@ -662,7 +669,7 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
                   </ScrollView>
                 </SafeAreaView>
               </View>
-            </View>
+            </Pressable>
           </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
@@ -1060,7 +1067,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   media: {
-    width: width - 2,
+    width: screenWidth - 2,
     height: 300,
     backgroundColor: Colors.light.card,
   },
@@ -1149,9 +1156,16 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'flex-end',
   },
+  modalKeyboardAvoidDesktop: {
+    justifyContent: 'center',
+  },
   modalContainer: {
     flex: 1,
     justifyContent: 'flex-end',
+  },
+  modalContainerDesktop: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalContent: {
     backgroundColor: Colors.light.background,
@@ -1160,6 +1174,25 @@ const styles = StyleSheet.create({
     maxHeight: '90%',
     flex: 1,
     justifyContent: 'space-between',
+  },
+  modalContentDesktop: {
+    // Explicit height so flex children (ScrollView) work properly.
+    // flex:0 + flex:1 children = zero height, so we use a fixed height instead.
+    height: '70vh' as any,
+    maxHeight: 640,
+    width: 600,
+    maxWidth: '90%' as any,
+    marginTop: 0,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 10,
+    overflow: 'hidden' as any,
   },
   modalHeader: {
     flexDirection: 'row',

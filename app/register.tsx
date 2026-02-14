@@ -1288,6 +1288,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 60,
     paddingBottom: 40,
+    maxWidth: 480,
+    width: '100%' as any,
+    alignSelf: 'center' as any,
   },
   header: {
     marginBottom: 32,

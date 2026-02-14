@@ -4,8 +4,9 @@
  */
 
 import React from 'react';
-import { View, StyleSheet, ViewStyle } from 'react-native';
+import { View, StyleSheet, ViewStyle, useColorScheme } from 'react-native';
 import { useResponsive } from '../hooks/useResponsive';
+import { Colors } from '../constants/colors';
 import ResponsiveContainer from './ResponsiveContainer';
 
 interface WebLayoutProps {
@@ -22,6 +23,8 @@ export default function WebLayout({
   contentStyle,
 }: WebLayoutProps) {
   const { isWeb, showSidebar, width } = useResponsive();
+  const colorScheme = useColorScheme() ?? 'light';
+  const colors = Colors[colorScheme];
 
   if (!isWeb) {
     return <View style={style}>{children}</View>;
@@ -35,7 +38,7 @@ export default function WebLayout({
         </ResponsiveContainer>
       </View>
       {showSidebar && sidebar && (
-        <View style={styles.sidebar}>
+        <View style={[styles.sidebar, { borderLeftColor: colors.border, backgroundColor: colors.card }]}>
           {sidebar}
         </View>
       )}
@@ -56,8 +59,6 @@ const styles = StyleSheet.create({
   sidebar: {
     width: 280,
     borderLeftWidth: 1,
-    borderLeftColor: '#E5E7EB',
-    backgroundColor: '#F9FAFB',
   },
 });
 

@@ -579,6 +579,9 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 12,
+    maxWidth: 700,
+    width: '100%' as any,
+    alignSelf: 'center' as any,
   },
   notificationCard: {
     flexDirection: 'row',

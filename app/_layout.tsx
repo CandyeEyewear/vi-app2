@@ -470,30 +470,32 @@ function AppContent() {
       <NetworkStatusBanner />
       <AppDownloadBanner />
       {showWebNav && <WebNavigation />}
-      <View style={showWebNav ? { paddingTop: 64, flex: 1 } : { flex: 1 }}>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="login" />
-          <Stack.Screen name="register" />
-          <Stack.Screen name="forgot-password" />
-          <Stack.Screen name="reset-password" />
-          <Stack.Screen name="set-password" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="edit-profile" />
-          <Stack.Screen name="settings" />
-          <Stack.Screen name="conversation/[id]" />
-          <Stack.Screen name="opportunity/[slug]" />
-          <Stack.Screen name="profile/[slug]" />
-          <Stack.Screen name="post/[id]" />
-          <Stack.Screen name="propose-opportunity" />
-          <Stack.Screen name="membership-features" />
-          <Stack.Screen name="membership" />
-          <Stack.Screen name="membership/subscribe" />
-          <Stack.Screen name="causes/[slug]" />
-          <Stack.Screen name="causes/[slug]/donate" />
-          <Stack.Screen name="events/[slug]" />
-          <Stack.Screen name="events/[slug]/register" />
-          <Stack.Screen name="(admin)" />
-        </Stack>
+      <View style={showWebNav ? { paddingTop: 64, flex: 1, alignItems: 'center' } : isDesktop ? { flex: 1, alignItems: 'center' } : { flex: 1 }}>
+        <View style={(showWebNav || isDesktop) ? { width: '100%', maxWidth: 1200, flex: 1 } : { flex: 1 }}>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="login" />
+            <Stack.Screen name="register" />
+            <Stack.Screen name="forgot-password" />
+            <Stack.Screen name="reset-password" />
+            <Stack.Screen name="set-password" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="edit-profile" />
+            <Stack.Screen name="settings" />
+            <Stack.Screen name="conversation/[id]" />
+            <Stack.Screen name="opportunity/[slug]" />
+            <Stack.Screen name="profile/[slug]" />
+            <Stack.Screen name="post/[id]" />
+            <Stack.Screen name="propose-opportunity" />
+            <Stack.Screen name="membership-features" />
+            <Stack.Screen name="membership" />
+            <Stack.Screen name="membership/subscribe" />
+            <Stack.Screen name="causes/[slug]" />
+            <Stack.Screen name="causes/[slug]/donate" />
+            <Stack.Screen name="events/[slug]" />
+            <Stack.Screen name="events/[slug]/register" />
+            <Stack.Screen name="(admin)" />
+          </Stack>
+        </View>
       </View>
       <CustomAlert {...alertProps} />
     </>

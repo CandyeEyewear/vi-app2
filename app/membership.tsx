@@ -619,6 +619,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+    maxWidth: 800,
+    width: '100%' as any,
+    alignSelf: 'center' as any,
   },
   loadingContainer: {
     flex: 1,

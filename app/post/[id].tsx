@@ -351,6 +351,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 24,
+    maxWidth: 800,
+    width: '100%' as any,
+    alignSelf: 'center' as any,
   },
 });
 

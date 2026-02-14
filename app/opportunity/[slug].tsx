@@ -780,7 +780,7 @@ export default function OpportunityDetailsScreen() {
 
       {/* CONTENT BY TAB */}
       {activeTab === 'details' ? (
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}>
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 80 }]}>
           {/* HERO IMAGE WITH GRADIENT - Memoized to prevent reload loop */}
           <MemoizedHeroImage
             imageUrl={opportunity.imageUrl}
@@ -1148,6 +1148,7 @@ const styles = StyleSheet.create({
   // Loading/Error
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   scrollView: { flex: 1 },
+  scrollContent: { maxWidth: 800, width: '100%' as any, alignSelf: 'center' as any },
   content: { padding: 16 },
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
   categoryBadgeInline: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 16 },

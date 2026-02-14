@@ -1629,6 +1629,9 @@ const styles = StyleSheet.create({
   messagesList: {
     padding: 16,
     flexGrow: 1,
+    maxWidth: 800,
+    width: '100%' as any,
+    alignSelf: 'center' as any,
   },
   messageContainer: {
     marginBottom: 8,
@@ -2001,6 +2004,9 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '50%',
+    maxWidth: 600,
+    width: '100%' as any,
+    alignSelf: 'center' as any,
     paddingBottom: 20,
   },
   emojiPickerHeader: {
