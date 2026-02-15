@@ -767,7 +767,6 @@ export default function DiscoverScreen() {
   const [savedOpportunityIds, setSavedOpportunityIds] = useState<string[]>([]);
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<'opportunities' | 'causes' | 'events'>('opportunities');
-  const [tabCache, setTabCache] = useState({ opportunities: true, causes: false, events: false });
   const [showFilters, setShowFilters] = useState(false);
   const [dateRange, setDateRange] = useState<string>('all');
   const [maxDistance, setMaxDistance] = useState<number | undefined>(undefined);
@@ -958,9 +957,14 @@ export default function DiscoverScreen() {
     saved: savedOpportunityIds.length,
   }), [opportunities, savedOpportunityIds]);
 
+  const sanitizeViewChildren = (node: React.ReactNode) =>
+    React.Children.toArray(node).filter(
+      (child) => !(typeof child === 'string' && child.trim() === '.')
+    );
+
   const renderHeaderContent = useCallback(() => (
     <View style={styles.headerContainer}>
-      {isSearchExpanded && (
+      {sanitizeViewChildren(isSearchExpanded && (
         <View style={styles.searchBarContainer}>
           <View style={{ flex: 1, marginRight: 8 }}>
             <EnhancedSearchBar searchQuery={searchInputValue} onSearchChange={handleSearchChange} onClearSearch={() => { handleClearSearch(); if (!searchInputValue.trim()) { setIsSearchExpanded(false); Keyboard.dismiss(); } }} searchInputRef={searchInputRef} colors={colors} onFocus={() => setShowSuggestions(true)} onBlur={() => { if (!searchInputValue.trim() && !showSuggestions) setIsSearchExpanded(false); }} onHideSuggestions={() => setShowSuggestions(false)} searchBarRef={searchBarRef} onLayout={(event) => { const { y, height } = event.nativeEvent.layout; setSearchBarLayout({ y, height }); }} />
@@ -969,9 +973,9 @@ export default function DiscoverScreen() {
             <X size={18} color={colors.text} />
           </Pressable>
         </View>
-      )}
+      ))}
 
-      {searchQuery.trim() && (
+      {sanitizeViewChildren(searchQuery.trim() && (
         <View style={[styles.searchInfoBar, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
           <Text style={[styles.searchInfoText, { color: colors.textSecondary }]}>{filteredOpportunities.length} {filteredOpportunities.length === 1 ? 'result' : 'results'}{searchQuery && ` for "${searchQuery}"`}</Text>
           <Pressable onPress={() => setShowFilters(!showFilters)} style={({ pressed }) => [styles.filterToggleButton, { backgroundColor: showFilters ? colors.primarySoft : colors.card, borderColor: showFilters ? colors.primary : colors.border }, pressed && { opacity: 0.7 }]}>
@@ -979,7 +983,7 @@ export default function DiscoverScreen() {
             <Text style={[styles.filterToggleText, { color: showFilters ? colors.primary : colors.textSecondary }]}>Filters</Text>
           </Pressable>
         </View>
-      )}
+      ))}
 
       <FilterPanel visible={showFilters} onClose={() => { handleApplyFilters(); setShowFilters(false); }} colors={colors} dateRange={dateRange} onDateRangeChange={setDateRange} maxDistance={maxDistance} onMaxDistanceChange={setMaxDistance} minSpotsAvailable={minSpotsAvailable} onMinSpotsAvailableChange={setMinSpotsAvailable} organizationVerified={organizationVerified} onOrganizationVerifiedChange={setOrganizationVerified} sortBy={sortBy} onSortByChange={setSortBy} />
 
@@ -1012,67 +1016,72 @@ export default function DiscoverScreen() {
         )}
         <Head><title>Discover | VIbe</title></Head>
         {!isDesktop && <ScreenHeader colors={colors} insets={insets} onSearchPress={() => setIsSearchExpanded(true)} />}
-        <AnimatedTabBar activeTab={activeTab} onTabChange={(tab) => { setActiveTab(tab); setTabCache(prev => ({ ...prev, [tab]: true })); }} colors={colors} />
+        <AnimatedTabBar activeTab={activeTab} onTabChange={setActiveTab} colors={colors} />
 
-        <View style={[styles.tabContent, activeTab !== 'opportunities' && styles.tabContentHidden]}>
-          {selectedCategory === 'nearMe' && !locationPermission && !requestingLocation && <LocationBanner type="permission" colors={colors} onEnable={getUserLocation} />}
-          {selectedCategory === 'nearMe' && requestingLocation && <LocationBanner type="loading" colors={colors} />}
-          <View style={styles.searchHeaderContainer}>{renderHeaderContent()}</View>
-          <SuggestionsDropdown visible={showSuggestions} suggestions={suggestions} colors={colors} onSelectSuggestion={handleSelectSuggestion} topPosition={searchBarLayout.y + searchBarLayout.height + 4} />
-          <FlatList
-            ref={listRef}
-            data={filteredOpportunities}
-            keyExtractor={(item) => item.id}
-            numColumns={width >= 600 ? 2 : 1}
-            key={width >= 600 ? '2-col' : '1-col'}
-            renderItem={({ item }) => (
-              <Swipeable ref={(ref) => { if (ref) swipeableRefs.current.set(item.id, ref); else swipeableRefs.current.delete(item.id); }} renderLeftActions={() => renderLeftActions(item)} overshootLeft={false} friction={2}>
-                <OpportunityCard opportunity={item} onPress={handleOpportunityPress} />
-              </Swipeable>
-            )}
-            contentContainerStyle={[
-              styles.listContent,
-              width >= 600 && styles.listContentGrid,
-              { paddingBottom: 12 + insets.bottom },
-            ]}
-            columnWrapperStyle={width >= 600 ? styles.columnWrapper : undefined}
-            refreshControl={<RefreshControl refreshing={loading && !loadingMore} onRefresh={() => loadOpportunities()} tintColor={colors.primary} colors={[colors.primary]} />}
-            ListEmptyComponent={renderEmptyComponent}
-            ListFooterComponent={loadingMore ? <LoadingFooter colors={colors} /> : null}
-            onEndReached={handleLoadMore}
-            onEndReachedThreshold={0.5}
-            removeClippedSubviews={true}
-            maxToRenderPerBatch={10}
-            windowSize={5}
-            keyboardShouldPersistTaps="handled"
-            scrollEnabled={activeTab === 'opportunities'}
-          />
-        </View>
+        {activeTab === 'opportunities' && (
+          <View style={styles.tabContent}>
+            {selectedCategory === 'nearMe' && !locationPermission && !requestingLocation && <LocationBanner type="permission" colors={colors} onEnable={getUserLocation} />}
+            {selectedCategory === 'nearMe' && requestingLocation && <LocationBanner type="loading" colors={colors} />}
+            <View style={styles.searchHeaderContainer}>{renderHeaderContent()}</View>
+            <SuggestionsDropdown visible={showSuggestions} suggestions={suggestions} colors={colors} onSelectSuggestion={handleSelectSuggestion} topPosition={searchBarLayout.y + searchBarLayout.height + 4} />
+            <FlatList
+              ref={listRef}
+              data={filteredOpportunities}
+              keyExtractor={(item) => item.id}
+              numColumns={width >= 600 ? 2 : 1}
+              key={width >= 600 ? '2-col' : '1-col'}
+              renderItem={({ item }) => (
+                <Swipeable ref={(ref) => { if (ref) swipeableRefs.current.set(item.id, ref); else swipeableRefs.current.delete(item.id); }} renderLeftActions={() => renderLeftActions(item)} overshootLeft={false} friction={2}>
+                  <OpportunityCard opportunity={item} onPress={handleOpportunityPress} />
+                </Swipeable>
+              )}
+              contentContainerStyle={[
+                styles.listContent,
+                width >= 600 && styles.listContentGrid,
+                { paddingBottom: 12 + insets.bottom },
+              ]}
+              columnWrapperStyle={width >= 600 ? styles.columnWrapper : undefined}
+              refreshControl={<RefreshControl refreshing={loading && !loadingMore} onRefresh={() => loadOpportunities()} tintColor={colors.primary} colors={[colors.primary]} />}
+              ListEmptyComponent={renderEmptyComponent}
+              ListFooterComponent={loadingMore ? <LoadingFooter colors={colors} /> : null}
+              onEndReached={handleLoadMore}
+              onEndReachedThreshold={0.5}
+              removeClippedSubviews={true}
+              maxToRenderPerBatch={10}
+              windowSize={5}
+              keyboardShouldPersistTaps="handled"
+            />
+          </View>
+        )}
 
-        <View style={[styles.tabContent, activeTab !== 'causes' && styles.tabContentHidden]}>
-          <CausesList 
-            showSearch={false} 
-            showFilters={true} 
-            onCausePress={(cause) => {
-              // Validate slug exists and is not empty
-              if (!cause.slug || cause.slug.trim() === '') {
-                console.error('Cause slug is missing or empty:', cause);
-                // Fallback to using ID if slug is missing
-                if (cause.id) {
-                  router.push(`/causes/${cause.id}`);
-                } else {
-                  console.error('Cause ID is also missing, cannot navigate');
+        {activeTab === 'causes' && (
+          <View style={styles.tabContent}>
+            <CausesList 
+              showSearch={false} 
+              showFilters={true} 
+              onCausePress={(cause) => {
+                // Validate slug exists and is not empty
+                if (!cause.slug || cause.slug.trim() === '') {
+                  console.error('Cause slug is missing or empty:', cause);
+                  // Fallback to using ID if slug is missing
+                  if (cause.id) {
+                    router.push(`/causes/${cause.id}`);
+                  } else {
+                    console.error('Cause ID is also missing, cannot navigate');
+                  }
+                  return;
                 }
-                return;
-              }
-              router.push(`/causes/${cause.slug}`);
-            }} 
-          />
-        </View>
+                router.push(`/causes/${cause.slug}`);
+              }} 
+            />
+          </View>
+        )}
 
-        <View style={[styles.tabContent, activeTab !== 'events' && styles.tabContentHidden]}>
-          <EventsList showSearch={false} showFilters={true} />
-        </View>
+        {activeTab === 'events' && (
+          <View style={styles.tabContent}>
+            <EventsList showSearch={false} showFilters={true} />
+          </View>
+        )}
       </View>
     </>
   );
@@ -1130,7 +1139,6 @@ const styles = StyleSheet.create({
   tabText: { fontWeight: '500' },
   tabTextActive: { fontWeight: '600' },
   tabContent: { flex: 1 },
-  tabContentHidden: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0, pointerEvents: 'none', zIndex: -1 },
   locationBanner: { flexDirection: 'row', alignItems: 'center', padding: 14, marginHorizontal: 16, marginTop: 12, borderRadius: 14, borderWidth: 1, gap: 12 },
   locationBannerText: { fontSize: 14, flex: 1, fontWeight: '500' },
   enableLocationButton: { borderRadius: 10, overflow: 'hidden' },
