@@ -45,8 +45,10 @@ type TabType = 'one-time' | 'recurring';
 // Payment status config
 const PAYMENT_STATUS_CONFIG: Record<PaymentStatus, { label: string; color: string; icon: any }> = {
   pending: { label: 'Pending', color: '#FF9800', icon: Clock },
+  processing: { label: 'Processing', color: '#2196F3', icon: Clock },
   completed: { label: 'Completed', color: '#4CAF50', icon: CheckCircle },
   failed: { label: 'Failed', color: '#F44336', icon: XCircle },
+  cancelled: { label: 'Cancelled', color: '#9E9E9E', icon: AlertCircle },
   refunded: { label: 'Refunded', color: '#9E9E9E', icon: AlertCircle },
 };
 

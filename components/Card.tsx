@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, StyleProp, ViewStyle } from 'react-native';
 import { useThemeStyles } from '../hooks/useThemeStyles';
+import { normalizeViewChildren } from '../utils/normalizeViewChildren';
 
 interface CardProps {
   children: React.ReactNode;
@@ -26,7 +27,7 @@ export default function Card({ children, style, padding, elevated = true, ...pro
       ]}
       {...props}
     >
-      {children}
+      {normalizeViewChildren(children)}
     </View>
   );
 }

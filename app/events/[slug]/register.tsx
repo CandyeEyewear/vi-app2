@@ -647,6 +647,8 @@ export default function EventRegisterScreen() {
         description: `${event.title} - ${ticketCount} ticket${ticketCount !== 1 ? 's' : ''}`,
         platform: Platform.OS === 'web' ? 'web' : 'app',
         returnPath, // Return to event page after payment
+        paymentMethodPreference: event.paymentMethod || 'auto',
+        manualPaymentLink: event.manualPaymentLink || event.paymentLink,
       });
 
       if (!paymentResult.success) {

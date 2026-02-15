@@ -26,43 +26,35 @@ import {
   AlertCircle,
 } from 'lucide-react-native';
 import { processSubscription, formatPaymentAmount } from '../../services/paymentService';
+import {
+  getSubscriptionPlanConfigs,
+  type SubscriptionPlanConfig,
+} from '../../services/subscriptionPlanConfigService';
 
-const PLANS = [
-  {
-    id: 'monthly',
-    name: 'Monthly Plan',
-    price: 10000,
-    frequency: 'monthly' as const,
-    period: '/month',
-    description: 'Pay as you go',
-    features: [
-      'Golden Badge',
-      'Full Platform Access',
-      'Post Opportunities',
-      'Connect with Volunteers',
-      'Priority Support',
-    ],
-  },
-  {
-    id: 'yearly',
-    name: 'Yearly Plan',
-    price: 100000,
-    frequency: 'annually' as const,
-    period: '/year',
-    description: 'Save 2 months',
-    features: [
-      'All Monthly Features',
-      'Golden Badge',
-      'Full Platform Access',
-      'Post Opportunities',
-      'Connect with Volunteers',
-      'Priority Support',
-      'Best Value!',
-    ],
-    savings: 'Save JMD 20,000',
-    popular: true,
-  },
+const DEFAULT_ORG_FEATURES = [
+  'Golden Badge',
+  'Full Platform Access',
+  'Post Opportunities',
+  'Connect with Volunteers',
+  'Priority Support',
 ];
+
+function frequencyToPeriodLabel(frequency: SubscriptionPlanConfig['frequency']): string {
+  switch (frequency) {
+    case 'daily':
+      return '/day';
+    case 'weekly':
+      return '/week';
+    case 'monthly':
+      return '/month';
+    case 'quarterly':
+      return '/quarter';
+    case 'annually':
+      return '/year';
+    default:
+      return '/period';
+  }
+}
 
 export default function OrganizationSubscribeScreen() {
   const router = useRouter();
@@ -71,52 +63,77 @@ export default function OrganizationSubscribeScreen() {
   const colors = Colors[colorScheme];
   const { user } = useAuth();
 
-  const [selectedPlan, setSelectedPlan] = useState<string>('yearly');
+  const [selectedPlanId, setSelectedPlanId] = useState<string>('');
+  const [plans, setPlans] = useState<SubscriptionPlanConfig[]>([]);
   const [loading, setLoading] = useState(false);
+  const [plansLoading, setPlansLoading] = useState(true);
 
   // Check if user is an organization
   useEffect(() => {
-    if (!user) {
-      router.replace('/login');
-      return;
-    }
+    const load = async () => {
+      if (!user) {
+        router.replace('/login');
+        return;
+      }
 
-    // Only organizations with approved status can access this
-    if (user.account_type !== 'organization') {
-      Alert.alert('Access Denied', 'This page is only for partner organizations.');
-      router.back();
-      return;
-    }
+      // Only organizations with approved status can access this
+      if (user.account_type !== 'organization') {
+        Alert.alert('Access Denied', 'This page is only for partner organizations.');
+        router.back();
+        return;
+      }
 
-    if (user.approval_status !== 'approved') {
-      Alert.alert(
-        'Application Pending',
-        'Your organization application is still under review. You will be able to complete payment once approved.',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
-      return;
-    }
+      if (user.approval_status !== 'approved') {
+        Alert.alert(
+          'Application Pending',
+          'Your organization application is still under review. You will be able to complete payment once approved.',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+        return;
+      }
 
-    // Check if already paid
-    if (user.is_partner_organization) {
-      Alert.alert(
-        'Already Active',
-        'Your organization membership is already active!',
-        [{ text: 'OK', onPress: () => router.replace('/feed') }]
-      );
-      return;
-    }
+      // Check if already paid
+      if (user.is_partner_organization) {
+        Alert.alert(
+          'Already Active',
+          'Your organization membership is already active!',
+          [{ text: 'OK', onPress: () => router.replace('/feed') }]
+        );
+        return;
+      }
+
+      setPlansLoading(true);
+      const result = await getSubscriptionPlanConfigs({
+        activeOnly: true,
+        subscriptionType: 'organization_membership',
+      });
+      setPlansLoading(false);
+
+      if (!result.success || !result.data?.length) {
+        Alert.alert(
+          'Plans Unavailable',
+          result.error || 'No active organization subscription plans are configured.'
+        );
+        return;
+      }
+
+      setPlans(result.data);
+      const yearlyPlan = result.data.find((p) => p.frequency === 'annually');
+      setSelectedPlanId((yearlyPlan || result.data[0]).id);
+    };
+
+    load();
   }, [user, router]);
 
   const handleSubscribe = async () => {
     if (!user) return;
 
-    const plan = PLANS.find(p => p.id === selectedPlan);
+    const plan = plans.find((p) => p.id === selectedPlanId);
     if (!plan) return;
 
     Alert.alert(
       'Confirm Subscription',
-      `You are about to subscribe to the ${plan.name} for ${formatPaymentAmount(plan.price)}.\n\nYou will be redirected to our secure payment gateway to complete the transaction.`,
+      `You are about to subscribe to the ${plan.name} for ${formatPaymentAmount(plan.amount, plan.currency)}.\n\nYou will be redirected to our secure payment gateway to complete the transaction.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -125,14 +142,17 @@ export default function OrganizationSubscribeScreen() {
             setLoading(true);
             try {
               const result = await processSubscription({
-                amount: plan.price,
+                amount: plan.amount,
                 frequency: plan.frequency,
                 subscriptionType: 'organization_membership',  // NEW subscription type
                 userId: user.id,
                 customerEmail: user.email,
                 customerName: user.organization_data?.organization_name || user.fullName,
-                description: `VIbe Partner Organization - ${plan.name}`,
+                description: plan.description || `VIbe Partner Organization - ${plan.name}`,
                 platform: 'app',
+                returnPath: '/(organization)/profile',
+                paymentMethodPreference: plan.paymentMethod,
+                manualPaymentLink: plan.manualPaymentLink,
               });
 
               if (result.success) {
@@ -182,77 +202,82 @@ export default function OrganizationSubscribeScreen() {
         </View>
 
         {/* Plans */}
-        {PLANS.map((plan) => (
-          <TouchableOpacity
-            key={plan.id}
-            style={[
-              styles.planCard,
-              {
-                backgroundColor: colors.card,
-                borderColor: selectedPlan === plan.id ? '#FFC107' : colors.border,
-                borderWidth: selectedPlan === plan.id ? 2 : 1,
-              },
-            ]}
-            onPress={() => setSelectedPlan(plan.id)}
-            activeOpacity={0.7}
-          >
-            {plan.popular && (
-              <View style={styles.popularBadge}>
-                <Text style={styles.popularText}>MOST POPULAR</Text>
-              </View>
-            )}
+        {plansLoading ? (
+          <View style={styles.plansLoading}>
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        ) : (
+          plans.map((plan) => {
+            const isSelected = selectedPlanId === plan.id;
+            const isPopular = plan.frequency === 'annually';
+            return (
+              <TouchableOpacity
+                key={plan.id}
+                style={[
+                  styles.planCard,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: isSelected ? '#FFC107' : colors.border,
+                    borderWidth: isSelected ? 2 : 1,
+                  },
+                ]}
+                onPress={() => setSelectedPlanId(plan.id)}
+                activeOpacity={0.7}
+              >
+                {isPopular && (
+                  <View style={styles.popularBadge}>
+                    <Text style={styles.popularText}>MOST POPULAR</Text>
+                  </View>
+                )}
 
-            <View style={styles.planHeader}>
-              <View style={styles.planNameRow}>
-                <View
-                  style={[
-                    styles.radioCircle,
-                    { borderColor: selectedPlan === plan.id ? '#FFC107' : colors.border },
-                  ]}
-                >
-                  {selectedPlan === plan.id && (
-                    <View style={[styles.radioCircleSelected, { backgroundColor: '#FFC107' }]} />
-                  )}
+                <View style={styles.planHeader}>
+                  <View style={styles.planNameRow}>
+                    <View
+                      style={[
+                        styles.radioCircle,
+                        { borderColor: isSelected ? '#FFC107' : colors.border },
+                      ]}
+                    >
+                      {isSelected && (
+                        <View style={[styles.radioCircleSelected, { backgroundColor: '#FFC107' }]} />
+                      )}
+                    </View>
+                    <View>
+                      <Text style={[styles.planName, { color: colors.text }]}>{plan.name}</Text>
+                      <Text style={[styles.planDescription, { color: colors.textSecondary }]}>
+                        {plan.description || 'Partner organization membership plan'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.priceContainer}>
+                    <Text style={[styles.price, { color: colors.text }]}>
+                      {formatPaymentAmount(plan.amount, plan.currency)}
+                    </Text>
+                    <Text style={[styles.period, { color: colors.textSecondary }]}>
+                      {frequencyToPeriodLabel(plan.frequency)}
+                    </Text>
+                  </View>
                 </View>
-                <View>
-                  <Text style={[styles.planName, { color: colors.text }]}>{plan.name}</Text>
-                  <Text style={[styles.planDescription, { color: colors.textSecondary }]}>
-                    {plan.description}
-                  </Text>
+
+                <View style={styles.featuresContainer}>
+                  {DEFAULT_ORG_FEATURES.map((feature, index) => (
+                    <View key={index} style={styles.featureRow}>
+                      <Check size={16} color="#10B981" />
+                      <Text style={[styles.featureText, { color: colors.text }]}>{feature}</Text>
+                    </View>
+                  ))}
                 </View>
-              </View>
-
-              <View style={styles.priceContainer}>
-                <Text style={[styles.price, { color: colors.text }]}>
-                  {formatPaymentAmount(plan.price)}
-                </Text>
-                <Text style={[styles.period, { color: colors.textSecondary }]}>{plan.period}</Text>
-              </View>
-            </View>
-
-            {plan.savings && (
-              <View style={[styles.savingsBadge, { backgroundColor: '#10B981' }]}>
-                <Text style={styles.savingsText}>{plan.savings}</Text>
-              </View>
-            )}
-
-            {/* Features */}
-            <View style={styles.featuresContainer}>
-              {plan.features.map((feature, index) => (
-                <View key={index} style={styles.featureRow}>
-                  <Check size={16} color="#10B981" />
-                  <Text style={[styles.featureText, { color: colors.text }]}>{feature}</Text>
-                </View>
-              ))}
-            </View>
-          </TouchableOpacity>
-        ))}
+              </TouchableOpacity>
+            );
+          })
+        )}
 
         {/* Subscribe Button */}
         <TouchableOpacity
           style={[styles.subscribeButton, { backgroundColor: '#FFC107' }]}
           onPress={handleSubscribe}
-          disabled={loading}
+          disabled={loading || plansLoading || !selectedPlanId}
           activeOpacity={0.7}
         >
           {loading ? (
@@ -307,6 +332,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+  },
+  plansLoading: {
+    paddingVertical: 20,
   },
   infoBanner: {
     backgroundColor: '#FFF9E6',

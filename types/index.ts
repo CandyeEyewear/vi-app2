@@ -3,6 +3,7 @@
  */
 
 export * from './reactions';
+import type { PostReaction, ReactionSummary } from './reactions';
 
 // ==================== USER TYPES ====================
 
@@ -10,20 +11,24 @@ export type UserRole = 'volunteer' | 'admin' | 'sup';
 
 export interface User {
   id: string;
-  slug: string;
+  slug?: string;
   email: string;
+  username?: string;
   fullName: string;
-  phone: string;
-  location: string;
+  phone?: string;
+  location?: string;
   country?: string;
   bio?: string;
   areasOfExpertise?: string[];
   education?: string;
   avatarUrl?: string;
   dateOfBirth?: string;
-  role: UserRole;
+  role?: UserRole;
   membershipTier?: 'free' | 'premium'; // Subscription tier
   membershipStatus?: 'inactive' | 'active' | 'expired' | 'cancelled'; // Subscription status
+  // Backward-compat aliases from DB payloads
+  membership_tier?: 'free' | 'premium';
+  membership_status?: 'inactive' | 'active' | 'expired' | 'cancelled';
   isPrivate?: boolean; // Privacy setting for profile visibility
   // Organization fields
   account_type?: 'individual' | 'organization' | 'volunteer';
@@ -45,9 +50,9 @@ export interface User {
   banReason?: string;
   
   // Stats
-  totalHours: number;
-  activitiesCompleted: number;
-  organizationsHelped: number;
+  totalHours?: number;
+  activitiesCompleted?: number;
+  organizationsHelped?: number;
   
   // 🔥 Streak fields (monthly)
   currentStreak?: number;
@@ -55,11 +60,11 @@ export interface User {
   lastActivityDate?: string;
   
   // Achievements
-  achievements: Achievement[];
+  achievements?: Achievement[];
   
   // Timestamps
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
   
   // Donation stats
   totalDonated?: number;
@@ -95,7 +100,7 @@ export type VisibilityType = 'public' | 'members_only';
 
 export interface Opportunity {
   id: string;
-  slug: string;
+  slug?: string;
   title: string;
   description: string;
   organizationName: string;
@@ -143,11 +148,11 @@ contactPersonPhone?: string;
   visibility?: VisibilityType;
   
   // Admin info
-  createdBy: string; // Admin user ID
+  createdBy?: string; // Admin user ID
   
   // Timestamps
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface OpportunityLink {
@@ -169,10 +174,15 @@ export interface OpportunitySignupWithCheckIn extends OpportunitySignup {
   // User details (from join)
   user?: {
     id: string;
+    slug?: string;
     full_name: string;
     email: string;
     avatar_url?: string;
     phone?: string;
+    role?: UserRole;
+    membership_tier?: 'free' | 'premium';
+    membership_status?: 'inactive' | 'active' | 'expired' | 'cancelled';
+    is_partner_organization?: boolean;
   };
   
   // Opportunity details (from join)
@@ -211,6 +221,7 @@ export interface OpportunitySignup {
   status: 'confirmed' | 'completed' | 'cancelled';
   hoursCompleted?: number;
   signedUpAt: string;
+  signed_up_at?: string;
   completedAt?: string;
   
   // Check-in fields
@@ -251,6 +262,7 @@ export interface Post {
   
   // Content
   text: string;
+  visibility?: 'public' | 'circle';
   mediaUrls?: string[]; // Array of image/video URLs
   mediaTypes?: ('image' | 'video')[]; // Corresponding media types
   
@@ -259,6 +271,7 @@ export interface Post {
   comments: Comment[];
   shares: number;
   reactions?: PostReaction[]; // Array of reactions
+  reactionSummary?: ReactionSummary;
   
   // Optional linked opportunity
   opportunityId?: string;
@@ -556,10 +569,11 @@ export type CauseCategory =
   | 'other';
 
 export type CauseStatus = 'draft' | 'active' | 'paused' | 'completed' | 'cancelled';
+export type PaymentMethodPreference = 'auto' | 'integrated' | 'manual_link';
 
 export interface Cause {
   id: string;
-  slug: string;
+  slug?: string;
   
   // Basic Info
   title: string;
@@ -580,6 +594,8 @@ export interface Cause {
   isDonationsPublic: boolean;
   allowRecurring: boolean;
   minimumDonation: number;
+  paymentMethod?: PaymentMethodPreference;
+  manualPaymentLink?: string;
   
   // Status
   status: CauseStatus;
@@ -589,15 +605,21 @@ export interface Cause {
   donorCount: number;
   
   // Admin
-  createdBy: string;
+  createdBy?: string;
   creator?: User;  // Populated
   
   // Timestamps
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';
+export type PaymentStatus =
+  | 'pending'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'refunded';
 
 export interface Donation {
   id: string;
@@ -790,7 +812,7 @@ export type EventStatus = 'draft' | 'upcoming' | 'ongoing' | 'completed' | 'canc
 
 export interface Event {
   id: string;
-  slug: string;
+  slug?: string;
   
   // Basic Info
   title: string;
@@ -808,6 +830,8 @@ export interface Event {
   virtualLink?: string;
   
   // Timing
+  startDate?: string;
+  endDate?: string;
   eventDate: string;
   startTime: string;
   endTime?: string;
@@ -823,6 +847,8 @@ export interface Event {
   isFree: boolean;
   ticketPrice?: number;
   currency: string;
+  paymentMethod?: PaymentMethodPreference;
+  manualPaymentLink?: string;
   paymentLink?: string;
   
   // Linked cause
@@ -840,15 +866,19 @@ export interface Event {
   visibility?: VisibilityType;
   
   // Admin
-  createdBy: string;
+  createdBy?: string;
   creator?: User;  // Populated
   
   // Timestamps
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-export type EventRegistrationStatus = 'registered' | 'attended' | 'cancelled' | 'no_show';
+export type EventRegistrationStatus =
+  | 'registered'
+  | 'attended'
+  | 'cancelled'
+  | 'no_show';
 
 export interface EventRegistration {
   id: string;
@@ -865,6 +895,7 @@ export interface EventRegistration {
   
   // Payment (if paid event)
   paymentStatus?: PaymentStatus;
+  payment_status?: PaymentStatus;
   transactionNumber?: string;
   amountPaid?: number;
   
@@ -898,6 +929,8 @@ export interface CauseFormData {
   isDonationsPublic: boolean;
   allowRecurring: boolean;
   minimumDonation?: number;
+  paymentMethod?: PaymentMethodPreference;
+  manualPaymentLink?: string;
 }
 
 export interface DonationFormData {
@@ -927,6 +960,8 @@ export interface EventFormData {
   registrationDeadline?: string;
   isFree: boolean;
   ticketPrice?: number;
+  paymentMethod?: PaymentMethodPreference;
+  manualPaymentLink?: string;
   causeId?: string;
   contactName?: string;
   contactEmail?: string;

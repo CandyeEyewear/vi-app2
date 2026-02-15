@@ -105,6 +105,7 @@ export type OrderType = 'donation' | 'event_registration' | 'membership' | 'othe
 export type SubscriptionType = 'recurring_donation' | 'membership' | 'organization_membership' | 'other';
 export type Frequency = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'annually';
 export type PaymentStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled' | 'refunded';
+export type PaymentMethodPreference = 'integrated' | 'manual_link' | 'auto';
 
 export interface PaymentTransaction {
   id: string;
@@ -142,6 +143,8 @@ export interface CreatePaymentParams {
   description?: string;
   platform?: 'web' | 'app'; // Platform source for smart redirects
   returnPath?: string; // Path to redirect to after successful payment (e.g., '/causes/[slug]', '/events/[slug]', '/membership')
+  paymentMethodPreference?: PaymentMethodPreference;
+  manualPaymentLink?: string;
 }
 
 export interface CreateSubscriptionParams {
@@ -156,6 +159,8 @@ export interface CreateSubscriptionParams {
   endDate?: string;
   platform?: 'web' | 'app'; // Platform source for smart redirects
   returnPath?: string; // Path to redirect to after successful payment (e.g., '/causes/[slug]', '/events/[slug]', '/membership')
+  paymentMethodPreference?: PaymentMethodPreference;
+  manualPaymentLink?: string;
 }
 
 export interface PaymentResponse {
@@ -165,6 +170,8 @@ export interface PaymentResponse {
   paymentUrl?: string;
   paymentData?: Record<string, string>;
   error?: string;
+  details?: string;
+  debug?: Record<string, unknown>;
 }
 
 export interface SubscriptionResponse {
@@ -175,6 +182,61 @@ export interface SubscriptionResponse {
   paymentUrl?: string;
   paymentData?: Record<string, string>;
   error?: string;
+}
+
+const normalizePaymentLink = (value?: string): string | undefined => {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+  return undefined;
+};
+
+const GLOBAL_PAYMENT_METHOD = (process.env.EXPO_PUBLIC_PAYMENT_METHOD || 'auto').trim().toLowerCase();
+
+function getGlobalPaymentMethodPreference(): PaymentMethodPreference {
+  if (GLOBAL_PAYMENT_METHOD === 'manual_link' || GLOBAL_PAYMENT_METHOD === 'manual') {
+    return 'manual_link';
+  }
+  if (GLOBAL_PAYMENT_METHOD === 'auto') {
+    return 'auto';
+  }
+  return 'integrated';
+}
+
+function resolvePaymentMethodPreference(override?: PaymentMethodPreference): PaymentMethodPreference {
+  return override || getGlobalPaymentMethodPreference();
+}
+
+function getManualPaymentLinkForOrderType(orderType: OrderType): string | undefined {
+  const defaultLink = normalizePaymentLink(process.env.EXPO_PUBLIC_EZEEPAY_PAYMENT_LINK_DEFAULT);
+
+  switch (orderType) {
+    case 'donation':
+      return normalizePaymentLink(process.env.EXPO_PUBLIC_EZEEPAY_PAYMENT_LINK_DONATION) || defaultLink;
+    case 'event_registration':
+      return normalizePaymentLink(process.env.EXPO_PUBLIC_EZEEPAY_PAYMENT_LINK_EVENT) || defaultLink;
+    case 'membership':
+      return normalizePaymentLink(process.env.EXPO_PUBLIC_EZEEPAY_PAYMENT_LINK_MEMBERSHIP) || defaultLink;
+    default:
+      return defaultLink;
+  }
+}
+
+function getManualPaymentLinkForSubscriptionType(subscriptionType: SubscriptionType): string | undefined {
+  const defaultLink = normalizePaymentLink(process.env.EXPO_PUBLIC_EZEEPAY_PAYMENT_LINK_DEFAULT);
+
+  switch (subscriptionType) {
+    case 'membership':
+      return normalizePaymentLink(process.env.EXPO_PUBLIC_EZEEPAY_PAYMENT_LINK_MEMBERSHIP) || defaultLink;
+    case 'organization_membership':
+      return normalizePaymentLink(process.env.EXPO_PUBLIC_EZEEPAY_PAYMENT_LINK_ORGANIZATION) || defaultLink;
+    case 'recurring_donation':
+      return normalizePaymentLink(process.env.EXPO_PUBLIC_EZEEPAY_PAYMENT_LINK_RECURRING_DONATION) || defaultLink;
+    default:
+      return defaultLink;
+  }
 }
 
 // ============================================
@@ -288,9 +350,16 @@ export async function createPayment(params: CreatePaymentParams): Promise<Paymen
     // Debug: Log the API URL being used
     const apiUrl = `${API_BASE_URL}/api/ezee/create-token`;
     const rawEnvValue = process.env.EXPO_PUBLIC_API_URL;
+    let rawEnvCharCodes = 'null';
+    if (typeof rawEnvValue === 'string') {
+      rawEnvCharCodes = rawEnvValue
+        .split('')
+        .map((ch) => ch.charCodeAt(0))
+        .join(',');
+    }
     console.log('🔵 [PAYMENT] Raw EXPO_PUBLIC_API_URL env var:', JSON.stringify(rawEnvValue));
     console.log('🔵 [PAYMENT] Raw env var length:', rawEnvValue?.length);
-    console.log('🔵 [PAYMENT] Raw env var char codes:', rawEnvValue ? Array.from(rawEnvValue).map(c => c.charCodeAt(0)).join(',') : 'null');
+    console.log('🔵 [PAYMENT] Raw env var char codes:', rawEnvCharCodes);
     console.log('🔵 [PAYMENT] Cleaned API Base URL:', API_BASE_URL);
     console.log('🔵 [PAYMENT] Full API URL:', apiUrl);
     console.log('🔵 [PAYMENT] Request body:', JSON.stringify(requestBody, null, 2));
@@ -474,6 +543,7 @@ export async function processPayment(params: CreatePaymentParams): Promise<{
   success: boolean;
   transactionId?: string;
   error?: string;
+  manualLinkUsed?: boolean;
 }> {
   // Validate inputs first
   const validation = validatePaymentParams(params);
@@ -482,6 +552,37 @@ export async function processPayment(params: CreatePaymentParams): Promise<{
       success: false,
       error: validation.error,
     };
+  }
+
+  const paymentMethodPreference = resolvePaymentMethodPreference(params.paymentMethodPreference);
+  const manualPaymentLink = normalizePaymentLink(params.manualPaymentLink) || getManualPaymentLinkForOrderType(params.orderType);
+
+  const openManualPaymentLink = async (reason?: string) => {
+    if (!manualPaymentLink) {
+      return {
+        success: false,
+        error: reason || 'Manual payment link is not configured for this payment type.',
+        manualLinkUsed: false,
+      };
+    }
+
+    const manualLinkResult = await openPaymentPage(manualPaymentLink);
+    if (!manualLinkResult.success) {
+      return {
+        success: false,
+        error: manualLinkResult.error || reason || 'Failed to open manual payment link.',
+        manualLinkUsed: false,
+      };
+    }
+
+    return {
+      success: true,
+      manualLinkUsed: true,
+    };
+  };
+
+  if (paymentMethodPreference === 'manual_link') {
+    return openManualPaymentLink('Manual payment mode is enabled, but no payment link was configured.');
   }
 
   try {
@@ -496,9 +597,18 @@ export async function processPayment(params: CreatePaymentParams): Promise<{
 
     if (!paymentResult.success || !paymentResult.paymentUrl || !paymentResult.paymentData) {
       console.error('Payment creation failed:', paymentResult);
+
+      if (paymentMethodPreference === 'auto') {
+        const fallbackResult = await openManualPaymentLink(paymentResult.error);
+        if (fallbackResult.success) {
+          return fallbackResult;
+        }
+      }
+
       return {
         success: false,
         error: paymentResult.error || 'Failed to create payment',
+        manualLinkUsed: false,
       };
     }
 
@@ -512,10 +622,22 @@ export async function processPayment(params: CreatePaymentParams): Promise<{
 
     if (!browserResult.success) {
       console.error('Failed to open payment page:', browserResult.error);
+
+      if (paymentMethodPreference === 'auto') {
+        const fallbackResult = await openManualPaymentLink(browserResult.error);
+        if (fallbackResult.success) {
+          return {
+            ...fallbackResult,
+            transactionId: paymentResult.transactionId,
+          };
+        }
+      }
+
       return {
         success: false,
         error: browserResult.error || 'Failed to open payment page',
         transactionId: paymentResult.transactionId,
+        manualLinkUsed: false,
       };
     }
 
@@ -525,6 +647,7 @@ export async function processPayment(params: CreatePaymentParams): Promise<{
       return {
         success: true,  // Assume success since we're redirecting
         transactionId: paymentResult.transactionId,
+        manualLinkUsed: false,
       };
     }
 
@@ -533,12 +656,22 @@ export async function processPayment(params: CreatePaymentParams): Promise<{
       success: browserResult.success,
       transactionId: paymentResult.transactionId,
       error: browserResult.error,
+      manualLinkUsed: false,
     };
   } catch (error) {
     console.error('Process payment error:', error);
+
+    if (paymentMethodPreference === 'auto') {
+      const fallbackResult = await openManualPaymentLink();
+      if (fallbackResult.success) {
+        return fallbackResult;
+      }
+    }
+
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to process payment. Please try again.',
+      manualLinkUsed: false,
     };
   }
 }
@@ -604,6 +737,7 @@ export async function processSubscription(params: CreateSubscriptionParams): Pro
   success: boolean;
   subscriptionId?: string;
   error?: string;
+  manualLinkUsed?: boolean;
 }> {
   // Validate inputs first
   const validation = validateSubscriptionParams(params);
@@ -614,25 +748,75 @@ export async function processSubscription(params: CreateSubscriptionParams): Pro
     };
   }
 
+  const paymentMethodPreference = resolvePaymentMethodPreference(params.paymentMethodPreference);
+  const manualPaymentLink = normalizePaymentLink(params.manualPaymentLink) || getManualPaymentLinkForSubscriptionType(params.subscriptionType);
+
+  const openManualSubscriptionLink = async (reason?: string) => {
+    if (!manualPaymentLink) {
+      return {
+        success: false,
+        error: reason || 'Manual payment link is not configured for this subscription type.',
+        manualLinkUsed: false,
+      };
+    }
+
+    const manualLinkResult = await openPaymentPage(manualPaymentLink);
+    if (!manualLinkResult.success) {
+      return {
+        success: false,
+        error: manualLinkResult.error || reason || 'Failed to open manual payment link.',
+        manualLinkUsed: false,
+      };
+    }
+
+    return {
+      success: true,
+      manualLinkUsed: true,
+    };
+  };
+
+  if (paymentMethodPreference === 'manual_link') {
+    return openManualSubscriptionLink('Manual payment mode is enabled, but no payment link was configured.');
+  }
+
   try {
   // Create subscription
   const subscriptionResult = await createSubscription(params);
 
   if (!subscriptionResult.success || !subscriptionResult.paymentUrl || !subscriptionResult.paymentData) {
+    if (paymentMethodPreference === 'auto') {
+      const fallbackResult = await openManualSubscriptionLink(subscriptionResult.error);
+      if (fallbackResult.success) {
+        return fallbackResult;
+      }
+    }
+
     return {
       success: false,
       error: subscriptionResult.error || 'Failed to create subscription',
+      manualLinkUsed: false,
     };
   }
 
   // Open payment page for first payment
   const browserResult = await openPaymentPage(subscriptionResult.paymentUrl, subscriptionResult.paymentData);
 
+  if (!browserResult.success && paymentMethodPreference === 'auto') {
+    const fallbackResult = await openManualSubscriptionLink(browserResult.error);
+    if (fallbackResult.success) {
+      return {
+        ...fallbackResult,
+        subscriptionId: subscriptionResult.subscriptionId,
+      };
+    }
+  }
+
   // For web, the page redirects so we won't get a response
   if (Platform.OS === 'web') {
     return {
       success: true,  // Assume success since we're redirecting
       subscriptionId: subscriptionResult.subscriptionId,
+      manualLinkUsed: false,
     };
   }
 
@@ -640,12 +824,22 @@ export async function processSubscription(params: CreateSubscriptionParams): Pro
     success: browserResult.success,
     subscriptionId: subscriptionResult.subscriptionId,
     error: browserResult.error,
+    manualLinkUsed: false,
   };
   } catch (error) {
     console.error('Process subscription error:', error);
+
+    if (paymentMethodPreference === 'auto') {
+      const fallbackResult = await openManualSubscriptionLink();
+      if (fallbackResult.success) {
+        return fallbackResult;
+      }
+    }
+
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to process subscription. Please try again.',
+      manualLinkUsed: false,
     };
   }
 }

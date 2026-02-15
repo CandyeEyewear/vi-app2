@@ -241,7 +241,7 @@ const AnimatedTabBar = React.memo(({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.tabBarContent}
       >
-        {tabWidths.length === tabs.length && (
+        {tabWidths.length === tabs.length ? (
           <Animated.View
             style={[
               styles.tabIndicator,
@@ -252,7 +252,7 @@ const AnimatedTabBar = React.memo(({
               },
             ]}
           />
-        )}
+        ) : null}
 
         {tabs.map((tab, index) => {
           const isActive = activeTab === tab.id;
@@ -373,8 +373,8 @@ const EnhancedSearchBar = React.memo(({
             }
           }}
         />
-        {searchQuery.length > 0 && (
-          <Pressable 
+        {searchQuery.length > 0 ? (
+          <Pressable
             onPress={onClearSearch}
             style={({ pressed }) => [
               styles.clearButton,
@@ -384,7 +384,7 @@ const EnhancedSearchBar = React.memo(({
           >
             <X size={16} color={colors.textSecondary} />
           </Pressable>
-        )}
+        ) : null}
       </Animated.View>
     </View>
   );
@@ -517,21 +517,21 @@ const AnimatedFilterChip = React.memo(({
         <Animated.View
           style={[styles.filterChip, { backgroundColor, borderColor, height: responsive.chipHeight }]}
         >
-          {isSelected && (
+          {isSelected ? (
             <View style={styles.chipCheckmark}>
               <Check size={12} color={colors.textOnPrimary} strokeWidth={3} />
             </View>
-          )}
-          {showMapPin && <MapPin size={14} color={isSelected ? colors.textOnPrimary : colors.text} style={{ marginRight: 4 }} />}
-          {Icon && <Icon size={14} color={isSelected ? colors.textOnPrimary : colors.text} style={{ marginRight: 4 }} />}
+          ) : null}
+          {showMapPin ? <MapPin size={14} color={isSelected ? colors.textOnPrimary : colors.text} style={{ marginRight: 4 }} /> : null}
+          {Icon ? <Icon size={14} color={isSelected ? colors.textOnPrimary : colors.text} style={{ marginRight: 4 }} /> : null}
           <Text style={[styles.filterChipText, { color: isSelected ? colors.textOnPrimary : colors.text }, isSelected && styles.filterChipTextSelected]}>
             {label}
           </Text>
-          {count !== undefined && count > 0 && (
+          {count !== undefined && count > 0 ? (
             <View style={[styles.filterChipBadge, { backgroundColor: isSelected ? 'rgba(255,255,255,0.3)' : colors.primary }]}>
               <Text style={[styles.filterChipBadgeText, { color: colors.textOnPrimary }]}>{count}</Text>
             </View>
-          )}
+          ) : null}
         </Animated.View>
       </Pressable>
     </Animated.View>
@@ -957,14 +957,9 @@ export default function DiscoverScreen() {
     saved: savedOpportunityIds.length,
   }), [opportunities, savedOpportunityIds]);
 
-  const sanitizeViewChildren = (node: React.ReactNode) =>
-    React.Children.toArray(node).filter(
-      (child) => !(typeof child === 'string' && child.trim() === '.')
-    );
-
   const renderHeaderContent = useCallback(() => (
     <View style={styles.headerContainer}>
-      {sanitizeViewChildren(isSearchExpanded && (
+      {isSearchExpanded ? (
         <View style={styles.searchBarContainer}>
           <View style={{ flex: 1, marginRight: 8 }}>
             <EnhancedSearchBar searchQuery={searchInputValue} onSearchChange={handleSearchChange} onClearSearch={() => { handleClearSearch(); if (!searchInputValue.trim()) { setIsSearchExpanded(false); Keyboard.dismiss(); } }} searchInputRef={searchInputRef} colors={colors} onFocus={() => setShowSuggestions(true)} onBlur={() => { if (!searchInputValue.trim() && !showSuggestions) setIsSearchExpanded(false); }} onHideSuggestions={() => setShowSuggestions(false)} searchBarRef={searchBarRef} onLayout={(event) => { const { y, height } = event.nativeEvent.layout; setSearchBarLayout({ y, height }); }} />
@@ -973,17 +968,17 @@ export default function DiscoverScreen() {
             <X size={18} color={colors.text} />
           </Pressable>
         </View>
-      ))}
+      ) : null}
 
-      {sanitizeViewChildren(searchQuery.trim() && (
+      {searchQuery.trim() ? (
         <View style={[styles.searchInfoBar, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
-          <Text style={[styles.searchInfoText, { color: colors.textSecondary }]}>{filteredOpportunities.length} {filteredOpportunities.length === 1 ? 'result' : 'results'}{searchQuery && ` for "${searchQuery}"`}</Text>
+          <Text style={[styles.searchInfoText, { color: colors.textSecondary }]}>{filteredOpportunities.length} {filteredOpportunities.length === 1 ? 'result' : 'results'}{searchQuery ? ` for "${searchQuery}"` : ''}</Text>
           <Pressable onPress={() => setShowFilters(!showFilters)} style={({ pressed }) => [styles.filterToggleButton, { backgroundColor: showFilters ? colors.primarySoft : colors.card, borderColor: showFilters ? colors.primary : colors.border }, pressed && { opacity: 0.7 }]}>
             <SlidersHorizontal size={16} color={showFilters ? colors.primary : colors.textSecondary} />
             <Text style={[styles.filterToggleText, { color: showFilters ? colors.primary : colors.textSecondary }]}>Filters</Text>
           </Pressable>
         </View>
-      ))}
+      ) : null}
 
       <FilterPanel visible={showFilters} onClose={() => { handleApplyFilters(); setShowFilters(false); }} colors={colors} dateRange={dateRange} onDateRangeChange={setDateRange} maxDistance={maxDistance} onMaxDistanceChange={setMaxDistance} minSpotsAvailable={minSpotsAvailable} onMinSpotsAvailableChange={setMinSpotsAvailable} organizationVerified={organizationVerified} onOrganizationVerifiedChange={setOrganizationVerified} sortBy={sortBy} onSortByChange={setSortBy} />
 
@@ -1007,21 +1002,21 @@ export default function DiscoverScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
+      <Head><title>Discover | VIbe</title></Head>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        {showSuggestions && (
-          <Pressable 
-            style={StyleSheet.absoluteFill} 
+        {showSuggestions ? (
+          <Pressable
+            style={StyleSheet.absoluteFill}
             onPress={() => { setShowSuggestions(false); Keyboard.dismiss(); }}
           />
-        )}
-        <Head><title>Discover | VIbe</title></Head>
-        {!isDesktop && <ScreenHeader colors={colors} insets={insets} onSearchPress={() => setIsSearchExpanded(true)} />}
+        ) : null}
+        {!isDesktop ? <ScreenHeader colors={colors} insets={insets} onSearchPress={() => setIsSearchExpanded(true)} /> : null}
         <AnimatedTabBar activeTab={activeTab} onTabChange={setActiveTab} colors={colors} />
 
-        {activeTab === 'opportunities' && (
+        {activeTab === 'opportunities' ? (
           <View style={styles.tabContent}>
-            {selectedCategory === 'nearMe' && !locationPermission && !requestingLocation && <LocationBanner type="permission" colors={colors} onEnable={getUserLocation} />}
-            {selectedCategory === 'nearMe' && requestingLocation && <LocationBanner type="loading" colors={colors} />}
+            {selectedCategory === 'nearMe' && !locationPermission && !requestingLocation ? <LocationBanner type="permission" colors={colors} onEnable={getUserLocation} /> : null}
+            {selectedCategory === 'nearMe' && requestingLocation ? <LocationBanner type="loading" colors={colors} /> : null}
             <View style={styles.searchHeaderContainer}>{renderHeaderContent()}</View>
             <SuggestionsDropdown visible={showSuggestions} suggestions={suggestions} colors={colors} onSelectSuggestion={handleSelectSuggestion} topPosition={searchBarLayout.y + searchBarLayout.height + 4} />
             <FlatList
@@ -1037,7 +1032,7 @@ export default function DiscoverScreen() {
               )}
               contentContainerStyle={[
                 styles.listContent,
-                width >= 600 && styles.listContentGrid,
+                width >= 600 ? styles.listContentGrid : undefined,
                 { paddingBottom: 12 + insets.bottom },
               ]}
               columnWrapperStyle={width >= 600 ? styles.columnWrapper : undefined}
@@ -1052,18 +1047,16 @@ export default function DiscoverScreen() {
               keyboardShouldPersistTaps="handled"
             />
           </View>
-        )}
+        ) : null}
 
-        {activeTab === 'causes' && (
+        {activeTab === 'causes' ? (
           <View style={styles.tabContent}>
-            <CausesList 
-              showSearch={false} 
-              showFilters={true} 
+            <CausesList
+              showSearch={false}
+              showFilters={true}
               onCausePress={(cause) => {
-                // Validate slug exists and is not empty
                 if (!cause.slug || cause.slug.trim() === '') {
                   console.error('Cause slug is missing or empty:', cause);
-                  // Fallback to using ID if slug is missing
                   if (cause.id) {
                     router.push(`/causes/${cause.id}`);
                   } else {
@@ -1072,16 +1065,16 @@ export default function DiscoverScreen() {
                   return;
                 }
                 router.push(`/causes/${cause.slug}`);
-              }} 
+              }}
             />
           </View>
-        )}
+        ) : null}
 
-        {activeTab === 'events' && (
+        {activeTab === 'events' ? (
           <View style={styles.tabContent}>
             <EventsList showSearch={false} showFilters={true} />
           </View>
-        )}
+        ) : null}
       </View>
     </>
   );

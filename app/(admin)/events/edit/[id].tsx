@@ -414,7 +414,16 @@ export default function EditEventScreen() {
 
   // Handle save
   const handleSave = useCallback(async () => {
-    if (!validateForm() || !id) return;
+    console.log('[EDIT_EVENT] Save pressed');
+    if (!validateForm()) {
+      console.warn('[EDIT_EVENT] Validation failed - save blocked');
+      return;
+    }
+    if (!id) {
+      console.warn('[EDIT_EVENT] Missing event id - save blocked');
+      showAlert('error', 'Error', 'Missing event ID. Please reload and try again.');
+      return;
+    }
 
     setSubmitting(true);
 
@@ -455,10 +464,18 @@ export default function EditEventScreen() {
         isFree,
         ticketPrice: !isFree ? parseFloat(ticketPrice) : undefined,
         paymentMethod: !isFree ? paymentMethod : 'auto',
-        manualPaymentLink: !isFree ? (manualPaymentLink.trim() || null) : null,
+        manualPaymentLink:
+          !isFree && paymentMethod === 'manual_link'
+            ? (manualPaymentLink.trim() || null)
+            : null,
         contactName: contactName.trim() || undefined,
         contactEmail: contactEmail.trim() || undefined,
         contactPhone: contactPhone.trim() || undefined,
+      });
+      console.log('[EDIT_EVENT] updateEvent response:', {
+        success: response.success,
+        hasData: !!response.data,
+        error: response.error,
       });
 
       if (response.success) {

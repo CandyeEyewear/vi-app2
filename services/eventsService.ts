@@ -9,6 +9,7 @@ import {
   Event,
   EventCategory,
   EventStatus,
+  PaymentMethodPreference,
   EventRegistration,
   EventRegistrationStatus,
   ApiResponse,
@@ -56,6 +57,8 @@ function transformEvent(row: any): Event {
     isFree: row.is_free ?? true,
     ticketPrice: row.ticket_price ? parseFloat(row.ticket_price) : undefined,
     currency: row.currency || 'JMD',
+    paymentMethod: row.payment_method || 'auto',
+    manualPaymentLink: row.manual_payment_link || row.payment_link,
     paymentLink: row.payment_link,
     causeId: row.cause_id,
     cause: row.cause ? {
@@ -222,30 +225,35 @@ export async function getEvents(options?: {
  */
 export async function getEventBySlug(identifier: string): Promise<ApiResponse<Event>> {
   try {
-    let { data, error } = await supabase
-      .from('events')
-      .select(`
+    const selectQuery = `
         *,
         creator:users!created_by(id, full_name, avatar_url),
         cause:causes(id, title, image_url)
-      `)
-      .eq('slug', identifier)
-      .single();
+      `;
 
-    // Fallback to UUID lookup for backward compatibility
-    if ((error || !data) && isValidUUID(identifier)) {
-      const fallback = await supabase
+    // Try UUID lookup first if identifier looks like a UUID, to avoid a spurious 406 on slug miss
+    let data: any = null;
+    let error: any = null;
+
+    if (isValidUUID(identifier)) {
+      const result = await supabase
         .from('events')
-        .select(`
-          *,
-          creator:users!created_by(id, full_name, avatar_url),
-          cause:causes(id, title, image_url)
-        `)
+        .select(selectQuery)
         .eq('id', identifier)
-        .single();
+        .maybeSingle();
+      data = result.data;
+      error = result.error;
+    }
 
-      data = fallback.data;
-      error = fallback.error;
+    // Fall back to slug lookup
+    if (!data && !error) {
+      const result = await supabase
+        .from('events')
+        .select(selectQuery)
+        .eq('slug', identifier)
+        .maybeSingle();
+      data = result.data;
+      error = result.error;
     }
 
     if (error) throw error;
@@ -290,6 +298,8 @@ export async function createEvent(eventData: {
   registrationDeadline?: string;
   isFree?: boolean;
   ticketPrice?: number;
+  paymentMethod?: PaymentMethodPreference;
+  manualPaymentLink?: string | null;
   paymentLink?: string;
   causeId?: string;
   contactName?: string;
@@ -322,6 +332,8 @@ export async function createEvent(eventData: {
         registration_deadline: eventData.registrationDeadline,
         is_free: eventData.isFree ?? true,
         ticket_price: eventData.ticketPrice,
+        payment_method: eventData.paymentMethod || 'auto',
+        manual_payment_link: eventData.manualPaymentLink || null,
         payment_link: eventData.paymentLink,
         cause_id: eventData.causeId,
         contact_name: eventData.contactName,
@@ -343,7 +355,8 @@ export async function createEvent(eventData: {
     return { success: true, data: transformEvent(data) };
   } catch (error) {
     console.error('Error creating event:', error);
-    return { success: false, error: 'Failed to create event' };
+    const message = error instanceof Error ? error.message : 'Failed to create event';
+    return { success: false, error: message };
   }
 }
 
@@ -371,6 +384,9 @@ export async function updateEvent(
     registrationDeadline: string;
     isFree: boolean;
     ticketPrice: number;
+    paymentMethod: PaymentMethodPreference;
+    manualPaymentLink: string | null;
+    paymentLink: string;
     causeId: string;
     contactName: string;
     contactEmail: string;
@@ -402,6 +418,8 @@ export async function updateEvent(
     if (updates.registrationDeadline !== undefined) updateData.registration_deadline = updates.registrationDeadline;
     if (updates.isFree !== undefined) updateData.is_free = updates.isFree;
     if (updates.ticketPrice !== undefined) updateData.ticket_price = updates.ticketPrice;
+    if (updates.paymentMethod !== undefined) updateData.payment_method = updates.paymentMethod;
+    if (updates.manualPaymentLink !== undefined) updateData.manual_payment_link = updates.manualPaymentLink;
     if (updates.paymentLink !== undefined) updateData.payment_link = updates.paymentLink;
     if (updates.causeId !== undefined) updateData.cause_id = updates.causeId;
     if (updates.contactName !== undefined) updateData.contact_name = updates.contactName;
@@ -427,7 +445,8 @@ export async function updateEvent(
     return { success: true, data: transformEvent(data) };
   } catch (error) {
     console.error('Error updating event:', error);
-    return { success: false, error: 'Failed to update event' };
+    const message = error instanceof Error ? error.message : 'Failed to update event';
+    return { success: false, error: message };
   }
 }
 

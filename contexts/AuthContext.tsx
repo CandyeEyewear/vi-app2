@@ -47,6 +47,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const userChannelRef = useRef<any>(null);
   const userChannelUserIdRef = useRef<string | null>(null);
 
+  const getSessionWithTimeout = async (timeoutMs: number = 5000) => {
+    try {
+      const timeoutPromise = new Promise<{ timedOut: true }>((resolve) =>
+        setTimeout(() => resolve({ timedOut: true }), timeoutMs)
+      );
+      const sessionPromise = supabase.auth.getSession();
+      const result = (await Promise.race([sessionPromise, timeoutPromise])) as
+        | { timedOut: true }
+        | { data: { session: any }; error: any };
+
+      if ('timedOut' in result) {
+        return { session: null, error: null, timedOut: true };
+      }
+
+      return {
+        session: result.data?.session ?? null,
+        error: result.error ?? null,
+        timedOut: false,
+      };
+    } catch (error: any) {
+      return { session: null, error, timedOut: false };
+    }
+  };
+
   // Initialize auth state on mount
   useEffect(() => {
     console.log('[AUTH] 🚀 Initializing AuthProvider...');
@@ -75,7 +99,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await new Promise(resolve => setTimeout(resolve, 100));
         
         console.log('[AUTH] 📡 Fetching current session from Supabase...');
-        let { data: { session }, error } = await supabase.auth.getSession();
+        let { session, error, timedOut } = await getSessionWithTimeout(5000);
+        if (timedOut) {
+          console.warn('[AUTH] ?? getSession timed out during initialization, continuing without blocking UI');
+        }
 
         // If no session found, retry multiple times with increasing delays
         // SecureStore might need more time in Expo Dev Client
@@ -84,8 +111,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const retryDelays = [150, 300, 500];
           for (let i = 0; i < retryDelays.length; i++) {
             await new Promise(resolve => setTimeout(resolve, retryDelays[i]));
-            const retryResult = await supabase.auth.getSession();
-            session = retryResult.data.session;
+            const retryResult = await getSessionWithTimeout(5000);
+            session = retryResult.session;
             error = retryResult.error;
             if (session) {
               console.log(`[AUTH] ✅ Session found on retry ${i + 1}`);
@@ -97,6 +124,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (error) {
+          if (timedOut) {
+            console.warn('[AUTH] Skipping signOut after getSession timeout; releasing loading state');
+            setUser(null);
+            setLoading(false);
+            return;
+          }
           // Handle invalid refresh token or any auth errors
           console.log('[AUTH] ⚠️ Session error, clearing auth:', error.message);
           console.log('[AUTH] Error code:', error.code);
@@ -128,7 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           }
 
-          await loadUserProfile(session.user.id);
+          await loadUserProfile(session.user.id, false, session.user.id);
         } else {
           console.log('[AUTH] ℹ️ No active session found');
           setNeedsPasswordSetup(false);
@@ -197,7 +230,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const retryDelays = [100, 200, 500];
           for (let i = 0; i < retryDelays.length; i++) {
             await new Promise(resolve => setTimeout(resolve, retryDelays[i]));
-            const { data: { session: retrySession }, error: retryError } = await supabase.auth.getSession();
+            const { session: retrySession, error: retryError } = await getSessionWithTimeout(5000);
             if (retryError) {
               console.log(`[AUTH] ⚠️ Retry ${i + 1} getSession() error:`, retryError.message);
               continue;
@@ -205,8 +238,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (retrySession) {
               console.log(`[AUTH] ✅ Session found on retry ${i + 1} - User ID:`, retrySession.user.id);
               setNeedsPasswordSetup(retrySession?.user?.user_metadata?.needs_password_setup === true);
-              await loadUserProfile(retrySession.user.id);
-              setupRealtimeSubscription().catch((error) => {
+              await loadUserProfile(retrySession.user.id, false, retrySession.user.id);
+              setupRealtimeSubscription(retrySession.user.id).catch((error) => {
                 console.error('[AUTH] ❌ Error setting up real-time subscription:', error);
               });
               return; // Success, exit early
@@ -225,9 +258,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.log('[AUTH] Session active - User ID:', session.user.id);
           setNeedsPasswordSetup(session?.user?.user_metadata?.needs_password_setup === true);
           setSessionAppRole((session.user as any)?.app_metadata?.app_role ?? null);
-          await loadUserProfile(session.user.id);
+          await loadUserProfile(session.user.id, false, session.user.id);
           // Set up real-time subscription after session is confirmed
-          setupRealtimeSubscription().catch((error) => {
+          setupRealtimeSubscription(session.user.id).catch((error) => {
             console.error('[AUTH] ❌ Error setting up real-time subscription:', error);
           });
         } else {
@@ -264,28 +297,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     // Set up real-time subscription for user profile changes
-    const setupRealtimeSubscription = async () => {
-      console.log('[AUTH] 👂 Setting up real-time user profile subscription...');
+    const setupRealtimeSubscription = async (userIdOverride?: string) => {
+      console.log('[AUTH] ?? Setting up real-time user profile subscription...');
       
       // Get current user ID
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user?.id) {
-        console.log('[AUTH] ⚠️ No session found for real-time subscription');
-        return;
+      let userId = userIdOverride ?? null;
+      if (!userId) {
+        const { session, error: sessionError, timedOut } = await getSessionWithTimeout(5000);
+        if (timedOut) {
+          console.log('[AUTH] Timed out while checking session for real-time subscription');
+          return;
+        }
+        if (sessionError) {
+          console.log('[AUTH] Could not read session for real-time subscription:', sessionError.message);
+          return;
+        }
+        if (!session?.user?.id) {
+          console.log('[AUTH] No session found for real-time subscription');
+          return;
+        }
+        userId = session.user.id;
       }
-      
-      const userId = session.user.id;
-      console.log('[AUTH] 📡 Subscribing to user profile changes for:', userId);
+      if (!userId) return;
+
+      console.log('[AUTH] ?? Subscribing to user profile changes for:', userId);
 
       // Prevent duplicate channels (this was causing multiple callbacks + repeated forced refreshes)
       if (userChannelRef.current && userChannelUserIdRef.current === userId) {
-        console.log('[AUTH] ⏭️ User profile channel already active for this user, skipping setup');
+        console.log('[AUTH] ?? User profile channel already active for this user, skipping setup');
         return;
       }
 
       // Replace any existing channel (e.g. user switched accounts)
       if (userChannelRef.current) {
-        console.log('[AUTH] 🧹 Removing previous user profile channel before re-subscribing...');
+        console.log('[AUTH] ?? Removing previous user profile channel before re-subscribing...');
         supabase.removeChannel(userChannelRef.current);
         userChannelRef.current = null;
         userChannelUserIdRef.current = null;
@@ -302,7 +347,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             filter: `id=eq.${userId}`,
           },
           async (payload) => {
-            console.log('[AUTH] 🔔 User profile updated in database:', payload.new);
+            console.log('[AUTH] ?? User profile updated in database:', payload.new);
             // IMPORTANT: Do not force-refresh the whole profile on every UPDATE.
             // Presence updates (online_status/last_seen) would otherwise create a feedback loop:
             // DB UPDATE -> force refresh -> new user object -> providers re-init -> presence toggles -> DB UPDATE ...
@@ -325,12 +370,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 return merged;
               });
             } catch (e: any) {
-              console.warn('[AUTH] ⚠️ Failed to merge realtime profile update:', e?.message);
+              console.warn('[AUTH] ?? Failed to merge realtime profile update:', e?.message);
             }
           }
         )
         .subscribe((status) => {
-          console.log('[AUTH] 📡 Real-time subscription status:', status);
+          console.log('[AUTH] ?? Real-time subscription status:', status);
         });
 
       userChannelRef.current = channel;
@@ -341,7 +386,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initializeAuth().then(() => {
       // After initialization completes, set up real-time subscription if we have a session
       setupRealtimeSubscription().catch((error) => {
-        console.error('[AUTH] ❌ Error setting up real-time subscription:', error);
+        console.error('[AUTH] ? Error setting up real-time subscription:', error);
       });
     });
     setupAuthListener();
@@ -349,12 +394,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Cleanup subscription on unmount
     return () => {
-      console.log('[AUTH] 🧹 Cleaning up auth subscription...');
+      console.log('[AUTH] ?? Cleaning up auth subscription...');
       if (subscription) {
         subscription.unsubscribe();
       }
       if (userChannelRef.current) {
-        console.log('[AUTH] 🧹 Unsubscribing from user profile changes...');
+        console.log('[AUTH] ?? Unsubscribing from user profile changes...');
         supabase.removeChannel(userChannelRef.current);
         userChannelRef.current = null;
         userChannelUserIdRef.current = null;
@@ -378,9 +423,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const cleanup = subscribeToFCMTokenRefresh(async (newToken) => {
       try {
         await savePushToken(user.id, newToken);
-        console.log('[AUTH] ✅ Updated push token after refresh');
+        console.log('[AUTH] ? Updated push token after refresh');
       } catch (e: any) {
-        console.warn('[AUTH] ⚠️ Failed to update push token after refresh:', e?.message);
+        console.warn('[AUTH] ?? Failed to update push token after refresh:', e?.message);
       }
     });
 
@@ -394,16 +439,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [user?.id]);
 
-  const loadUserProfile = async (userId: string, forceRefresh: boolean = false) => {
+  const loadUserProfile = async (
+    userId: string,
+    forceRefresh: boolean = false,
+    knownSessionUserId?: string | null
+  ) => {
     // GUARD: Prevent concurrent calls for the same user
     if (profileLoadInProgress.current === userId && !forceRefresh) {
-      console.log('[AUTH] ⏭️ Profile load already in progress for this user, skipping...');
+      console.log('[AUTH] ?? Profile load already in progress for this user, skipping...');
       return;
     }
 
     // Set the guard
     profileLoadInProgress.current = userId;
-    console.log('[AUTH] 👤 Loading user profile...');
+    console.log('[AUTH] ?? Loading user profile...');
     console.log('[AUTH] User ID:', userId);
     console.log('[AUTH] Force refresh:', forceRefresh);
 
@@ -411,7 +460,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!forceRefresh) {
       const cachedUser = cache.get<User>(cacheKey);
       if (cachedUser) {
-        console.log('[AUTH] ✅ Using cached user profile');
+        console.log('[AUTH] ? Using cached user profile');
         setUser(cachedUser);
         profileLoadInProgress.current = null;
         setLoading(false);
@@ -419,59 +468,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } else {
       cache.delete(cacheKey);
-      console.log('[AUTH] 🗑️ Cache cleared for forced refresh');
+      console.log('[AUTH] ??? Cache cleared for forced refresh');
     }
 
-    // Hard guard: do not query/create profiles without an active session.
-    // This prevents noisy retries and "Auth session missing!" errors when we're on public routes.
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
+    // Resolve active session user id; trust known id from SIGNED_IN flows to avoid timeout churn on web.
+    let activeSessionUserId = knownSessionUserId ?? null;
+    let sessionCheckTimedOut = false;
 
-    if (sessionError) {
-      console.warn('[AUTH] ⚠️ Cannot read session while loading profile:', sessionError.message);
-      setUser(null);
-      profileLoadInProgress.current = null;
-      setLoading(false);
-      return;
-    }
+    if (!activeSessionUserId) {
+      const { session, error: sessionError, timedOut } = await getSessionWithTimeout(5000);
+      sessionCheckTimedOut = !!timedOut;
+      if (sessionCheckTimedOut) {
+        console.warn('[AUTH] getSession timed out while loading profile');
+      }
 
-    if (!session?.user?.id) {
-      console.log('[AUTH] ℹ️ No active session - skipping profile load');
-      setUser(null);
-      profileLoadInProgress.current = null;
-      setLoading(false);
-      return;
+      if (sessionError) {
+        console.warn('[AUTH] Cannot read session while loading profile:', sessionError.message);
+        profileLoadInProgress.current = null;
+        setLoading(false);
+        return;
+      }
+
+      if (!session?.user?.id) {
+        if (sessionCheckTimedOut) {
+          console.log('[AUTH] Session check timed out and no session is available - skipping profile load');
+        } else {
+          console.log('[AUTH] No active session - skipping profile load');
+          setUser(null);
+        }
+        profileLoadInProgress.current = null;
+        setLoading(false);
+        return;
+      }
+
+      activeSessionUserId = session.user.id;
     }
 
     // If a stale call comes in for a different user, ignore it to avoid loading the wrong profile.
-    if (session.user.id !== userId) {
-      console.log('[AUTH] ⚠️ Session/userId mismatch - skipping profile load', {
-        sessionUserId: session.user.id,
+    if (activeSessionUserId && activeSessionUserId !== userId) {
+      console.log('[AUTH] Session/userId mismatch - skipping profile load', {
+        sessionUserId: activeSessionUserId,
         requestedUserId: userId,
       });
       profileLoadInProgress.current = null;
       return;
     }
 
-    const fetchProfileWithTimeout = async (timeoutMs: number = 10000): Promise<any> => {
-      console.log('[AUTH] 📊 Querying users table...');
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Database query timeout')), timeoutMs);
-      });
-      const queryPromise = supabase
+    const fetchProfile = async (): Promise<any> => {
+      console.log('[AUTH] ?? Querying users table...');
+      return supabase
         .from('users')
         .select('*')
         .eq('id', userId)
         // IMPORTANT: `.single()` throws PGRST116 for 0 rows, which is expected right after signup.
         // `.maybeSingle()` returns `data: null` when no rows match, without treating it as an error.
         .maybeSingle();
-      return Promise.race([queryPromise, timeoutPromise]);
     };
 
-    const maxRetries = 5;
-    const retryDelayMs = 1000;
+    const maxRetries = 2;
+    const retryDelayMs = 700;
 
     try {
       let profileData: any = null;
@@ -479,12 +534,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-          console.log(`[AUTH] 📊 Attempt ${attempt}/${maxRetries} to fetch profile...`);
-          const { data, error }: any = await fetchProfileWithTimeout();
-          console.log('[AUTH] 📊 Query completed');
+          console.log(`[AUTH] ?? Attempt ${attempt}/${maxRetries} to fetch profile...`);
+          const { data, error }: any = await fetchProfile();
+          console.log('[AUTH] ?? Query completed');
 
           if (error) {
-            console.error('[AUTH] ❌ Query error:', error.message);
+            console.error('[AUTH] ? Query error:', error.message);
             console.error('[AUTH] Error code:', error.code);
             lastError = error;
             break;
@@ -493,34 +548,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // With `.maybeSingle()`, "not found" is represented by `data === null` (no error).
           if (!data) {
             if (attempt < maxRetries) {
-              console.log(`[AUTH] ⏳ Profile not found yet, waiting ${retryDelayMs}ms before retry...`);
+              console.log(`[AUTH] ? Profile not found yet, waiting ${retryDelayMs}ms before retry...`);
               await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
               continue;
             }
           } else {
             profileData = data;
-            console.log('[AUTH] ✅ Profile found on attempt', attempt);
+            console.log('[AUTH] ? Profile found on attempt', attempt);
             break;
           }
         } catch (err: any) {
-          console.error('[AUTH] ❌ Attempt', attempt, 'failed:', err.message);
+          console.warn('[AUTH] Attempt', attempt, 'failed:', err.message);
           lastError = err;
-          if (err.message === 'Database query timeout') {
-            console.log('[AUTH] ⚠️ Query timed out, will retry...');
-            if (attempt < maxRetries) {
-              await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
-              continue;
-            }
+          if (attempt < maxRetries) {
+            await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+            continue;
           }
           break;
         }
       }
 
       if (!profileData) {
-        console.log('[AUTH] ⚠️ Profile not found after', maxRetries, 'attempts, attempting to create from auth metadata...');
+        console.log('[AUTH] ?? Profile not found after', maxRetries, 'attempts, attempting to create from auth metadata...');
         
-        // Use the session user directly; `getUser()` can fail with "Auth session missing!" in edge cases.
-        const sessionUser = session.user;
+        const { data: currentUserData, error: currentUserError } = await supabase.auth.getUser();
+        const sessionUser = currentUserData?.user;
+        if (currentUserError || !sessionUser) {
+          console.error('[AUTH] Cannot load auth user while creating profile:', currentUserError?.message || 'No user returned');
+          setUser(null);
+          profileLoadInProgress.current = null;
+          setLoading(false);
+          return;
+        }
         console.log('[AUTH] Building missing profile from auth metadata');
         
         const metadata = sessionUser.user_metadata || {};
@@ -553,7 +612,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           updated_at: new Date().toISOString(),
         };
         
-        console.log('[AUTH] 📝 Creating profile with data:', JSON.stringify(newProfileData, null, 2));
+        console.log('[AUTH] ?? Creating profile with data:', JSON.stringify(newProfileData, null, 2));
         
         try {
           const { data: createdProfile, error: createError } = await supabase
@@ -563,13 +622,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .single();
           
           if (createError) {
-            console.error('[AUTH] ❌ Failed to create profile:', createError.message);
+            console.error('[AUTH] ? Failed to create profile:', createError.message);
             console.error('[AUTH] Error code:', createError.code);
             console.error('[AUTH] Error details:', createError.details);
             
             // If it's a duplicate key error, try to fetch again (race condition)
             if (createError.code === '23505') {
-              console.log('[AUTH] 🔄 Duplicate key - profile may have been created, retrying fetch...');
+              console.log('[AUTH] ?? Duplicate key - profile may have been created, retrying fetch...');
               const { data: retryData, error: retryError } = await supabase
                 .from('users')
                 .select('*')
@@ -578,15 +637,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               
               if (retryData) {
                 profileData = retryData;
-                console.log('[AUTH] ✅ Profile found on retry after duplicate key error');
+                console.log('[AUTH] ? Profile found on retry after duplicate key error');
               } else if (retryError) {
-                console.error('[AUTH] ❌ Still cannot fetch profile:', retryError?.message);
+                console.error('[AUTH] ? Still cannot fetch profile:', retryError?.message);
                 setUser(null);
                 profileLoadInProgress.current = null;
                 setLoading(false);
                 return;
               } else {
-                console.error('[AUTH] ❌ Still cannot fetch profile: no row returned');
+                console.error('[AUTH] ? Still cannot fetch profile: no row returned');
                 setUser(null);
                 profileLoadInProgress.current = null;
                 setLoading(false);
@@ -600,10 +659,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           } else {
             profileData = createdProfile;
-            console.log('[AUTH] ✅ Profile created successfully');
+            console.log('[AUTH] ? Profile created successfully');
           }
         } catch (createException: any) {
-          console.error('[AUTH] ❌ Exception creating profile:', createException.message);
+          console.error('[AUTH] ? Exception creating profile:', createException.message);
           setUser(null);
           profileLoadInProgress.current = null;
           setLoading(false);
@@ -611,7 +670,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      console.log('[AUTH] ✅ Profile data retrieved from database');
+      console.log('[AUTH] ? Profile data retrieved from database');
       console.log('[AUTH] Role (from DB):', profileData.role);
       console.log('[AUTH] Role type:', typeof profileData.role);
 
@@ -621,43 +680,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const cacheTTL = 1 * 60 * 1000;
       cache.set(cacheKey, userData, cacheTTL);
-      console.log('[AUTH] 💾 User profile cached (TTL: 1 minute)');
-      console.log('[AUTH] 📦 User data transformed successfully');
+      console.log('[AUTH] ?? User profile cached (TTL: 1 minute)');
+      console.log('[AUTH] ?? User data transformed successfully');
       setUser(userData);
-      console.log('[AUTH] ✅ User state updated');
+      console.log('[AUTH] ? User state updated');
 
       profileLoadInProgress.current = null;
       setLoading(false);
-      console.log('[AUTH] ✅ Loading complete');
+      console.log('[AUTH] ? Loading complete');
 
       if (!profileData.push_token) {
-        console.log('[AUTH] 🔔 No push token found, registering in background...');
+        console.log('[AUTH] ?? No push token found, registering in background...');
         registerForFCMNotifications()
           .then(async (pushToken) => {
             if (pushToken) {
-              console.log('[AUTH] 💾 Saving new push token...');
+              console.log('[AUTH] ?? Saving new push token...');
               const saveResult = await savePushToken(userId, pushToken);
               if (saveResult) {
-                console.log('[AUTH] ✅ Push token saved successfully');
+                console.log('[AUTH] ? Push token saved successfully');
               } else {
-                console.error('[AUTH] ❌ Failed to save push token to database');
+                console.error('[AUTH] ? Failed to save push token to database');
               }
             } else {
-              console.log('[AUTH] ⚠️ No push token received');
+              console.log('[AUTH] ?? No push token received');
             }
           })
           .catch((error: any) => {
-            console.error('[AUTH] ❌ Push notification registration error:', error?.message);
+            console.error('[AUTH] ? Push notification registration error:', error?.message);
           });
       } else {
-        console.log('[AUTH] ✅ Push token already exists');
+        console.log('[AUTH] ? Push token already exists');
       }
     } catch (error) {
-      console.error('[AUTH] ❌ Exception while loading user:', error);
+      console.error('[AUTH] ? Exception while loading user:', error);
       setUser(null);
       profileLoadInProgress.current = null;
       setLoading(false);
-      console.log('[AUTH] ✅ Loading complete (after error)');
+      console.log('[AUTH] ? Loading complete (after error)');
     }
   };
 
@@ -815,29 +874,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // This covers users created with email confirmation where signup returns before sync runs.
       const existingHubspotContactId = (profileData as any)?.hubspot_contact_id;
       if (!existingHubspotContactId) {
-        console.log('[AUTH] 🔄 HubSpot contact missing, attempting backfill sync...');
-        const hubspotResult = await syncContactToHubSpot({
-          email: userData.email,
-          fullName: userData.fullName || data.email,
-          phone: userData.phone || undefined,
-          location: userData.location || undefined,
-          bio: userData.bio,
-          areasOfExpertise: userData.areasOfExpertise,
-          education: userData.education,
-        });
-
-        if (hubspotResult.success && hubspotResult.contactId) {
-          const saved = await persistHubspotContactId(authData.user.id, hubspotResult.contactId);
-          if (saved) {
-            console.log('[AUTH] ✅ HubSpot Contact ID backfilled on sign-in');
+        console.log('[AUTH] HubSpot contact missing, attempting backfill sync...');
+        void (async () => {
+          const hubspotResult = await syncContactToHubSpot({
+            email: userData.email,
+            fullName: userData.fullName || data.email,
+            phone: userData.phone || undefined,
+            location: userData.location || undefined,
+            bio: userData.bio,
+            areasOfExpertise: userData.areasOfExpertise,
+            education: userData.education,
+          });
+          if (hubspotResult.success && hubspotResult.contactId) {
+            const saved = await persistHubspotContactId(authData.user.id, hubspotResult.contactId);
+            if (saved) {
+              console.log('[AUTH] HubSpot Contact ID backfilled on sign-in');
+            } else {
+              console.error('[AUTH] HubSpot sync succeeded, but failed to persist contact ID during sign-in backfill');
+            }
           } else {
-            console.error('[AUTH] ⚠️ HubSpot sync succeeded, but failed to persist contact ID during sign-in backfill');
+            console.error('[AUTH] HubSpot backfill sync failed on sign-in:', hubspotResult.error);
           }
-        } else {
-          console.error('[AUTH] ⚠️ HubSpot backfill sync failed on sign-in:', hubspotResult.error);
-        }
+        })();
       } else {
-        console.log('[AUTH] ✅ HubSpot contact already linked');
+        console.log('[AUTH] HubSpot contact already linked');
       }
       
       // Register for push notifications

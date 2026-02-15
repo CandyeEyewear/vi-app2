@@ -6,6 +6,7 @@
 
 import React from 'react';
 import { View, StyleSheet, Platform, useWindowDimensions } from 'react-native';
+import { normalizeViewChildren } from '../utils/normalizeViewChildren';
 
 interface WebContainerProps {
   children: React.ReactNode;
@@ -24,7 +25,7 @@ export default function WebContainer({ children, maxWidth = 680 }: WebContainerP
   return (
     <View style={styles.outerContainer}>
       <View style={[styles.innerContainer, { maxWidth }]}>
-        {children}
+        {normalizeViewChildren(children)}
       </View>
     </View>
   );

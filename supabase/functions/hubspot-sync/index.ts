@@ -77,16 +77,36 @@ Deno.serve(async (req) => {
     }
 
     if (phone) properties.phone = phone
-    if (location) properties.city = location
-    if (bio) properties.notes_last_contacted = bio // or use a custom property
-    if (education) properties.school = education
-    if (areasOfExpertise && areasOfExpertise.length > 0) {
-      properties.areas_of_expertise = areasOfExpertise.join(', ')
+
+    // Helper: call HubSpot and handle errors with structured logging
+    async function hubspotFetch(endpoint: string, options: RequestInit): Promise<Response> {
+      const res = await fetch(endpoint, options)
+      if (!res.ok) {
+        const body = await res.text()
+        const truncated = body.length > 500 ? body.slice(0, 500) + '…' : body
+        console.error(JSON.stringify({
+          msg: 'HubSpot API error',
+          endpoint,
+          method: options.method,
+          status: res.status,
+          body: truncated,
+        }))
+        // Surface upstream status category without leaking raw response to client
+        const category = res.status === 401 ? 'auth/token'
+          : res.status === 403 ? 'forbidden/scopes'
+          : res.status === 429 ? 'rate-limited'
+          : `upstream-${res.status}`
+        return new Response(
+          JSON.stringify({ success: false, error: `HubSpot ${options.method} failed (${category})`, upstreamStatus: res.status }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      return res
     }
 
-    // First, try to find existing contact by email
+    // Search for existing contact by email
     const searchUrl = 'https://api.hubapi.com/crm/v3/objects/contacts/search'
-    const searchResponse = await fetch(searchUrl, {
+    const searchResponse = await hubspotFetch(searchUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${HUBSPOT_ACCESS_TOKEN}`,
@@ -102,11 +122,8 @@ Deno.serve(async (req) => {
         }],
       }),
     })
-
-    if (!searchResponse.ok) {
-      const errorText = await searchResponse.text()
-      console.error('[HUBSPOT] Search error:', errorText)
-      throw new Error(`HubSpot search failed: ${searchResponse.status}`)
+    if (searchResponse.headers.get('Content-Type')?.includes('application/json') === false || searchResponse.status === 502) {
+      return searchResponse // already an error response with CORS headers
     }
 
     const searchData = await searchResponse.json()
@@ -115,10 +132,9 @@ Deno.serve(async (req) => {
     let contactId: string
 
     if (existingContact) {
-      // Update existing contact
       console.log('[HUBSPOT] Updating existing contact:', existingContact.id)
       const updateUrl = `https://api.hubapi.com/crm/v3/objects/contacts/${existingContact.id}`
-      const updateResponse = await fetch(updateUrl, {
+      const updateResponse = await hubspotFetch(updateUrl, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${HUBSPOT_ACCESS_TOKEN}`,
@@ -126,19 +142,13 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({ properties }),
       })
-
-      if (!updateResponse.ok) {
-        const errorText = await updateResponse.text()
-        console.error('[HUBSPOT] Update error:', errorText)
-        throw new Error(`HubSpot update failed: ${updateResponse.status}`)
-      }
+      if (updateResponse.status === 502) return updateResponse
 
       contactId = existingContact.id
     } else {
-      // Create new contact
       console.log('[HUBSPOT] Creating new contact')
       const createUrl = 'https://api.hubapi.com/crm/v3/objects/contacts'
-      const createResponse = await fetch(createUrl, {
+      const createResponse = await hubspotFetch(createUrl, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${HUBSPOT_ACCESS_TOKEN}`,
@@ -146,12 +156,7 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({ properties }),
       })
-
-      if (!createResponse.ok) {
-        const errorText = await createResponse.text()
-        console.error('[HUBSPOT] Create error:', errorText)
-        throw new Error(`HubSpot create failed: ${createResponse.status}`)
-      }
+      if (createResponse.status === 502) return createResponse
 
       const createData = await createResponse.json()
       contactId = createData.id

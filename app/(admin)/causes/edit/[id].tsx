@@ -329,8 +329,15 @@ export default function EditCauseScreen() {
 
   // Handle form submission
   const handleSubmit = useCallback(async () => {
-    if (!validateForm() || !id) {
+    console.log('[EDIT_CAUSE] Save pressed');
+    if (!validateForm()) {
+      console.warn('[EDIT_CAUSE] Validation failed - save blocked');
       showAlert('warning', 'Validation Error', 'Please fix the errors in the form');
+      return;
+    }
+    if (!id) {
+      console.warn('[EDIT_CAUSE] Missing cause id - save blocked');
+      showAlert('error', 'Error', 'Missing cause ID. Please reload and try again.');
       return;
     }
 
@@ -364,12 +371,16 @@ export default function EditCauseScreen() {
           allow_recurring: allowRecurring,
           minimum_donation: minimumDonation ? parseFloat(minimumDonation) : 0,
           payment_method: paymentMethod,
-          manual_payment_link: manualPaymentLink.trim() || null,
+          manual_payment_link:
+            paymentMethod === 'manual_link'
+              ? (manualPaymentLink.trim() || null)
+              : null,
           is_featured: isFeatured,
           visibility,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id);
+      console.log('[EDIT_CAUSE] Update query completed', { hasError: !!error, errorMessage: error?.message });
 
       if (error) throw error;
       const causePathId = id;

@@ -29,7 +29,8 @@ import {
   Clock,
   MapPin,
   MessageSquare,
-  Heart
+  Heart,
+  CreditCard,
 } from 'lucide-react-native';
 import { supabase } from '../services/supabase';
 import { calculateTotalRaisedAllCauses } from '../services/causesService';
@@ -476,6 +477,24 @@ export default function AdminDashboardScreen() {
               </Text>
               <Text style={[styles.actionSubtitle, { color: colors.textSecondary }]}>
                 Manage volunteer accounts and permissions
+              </Text>
+            </View>
+          </AnimatedPressable>
+
+          {/* Subscriptions */}
+          <AnimatedPressable
+            style={[styles.actionCard, surfaceShadow, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/(admin)/subscriptions')}
+          >
+            <View style={[styles.actionIconContainer, { backgroundColor: '#3B82F6' + '15' }]}>
+              <CreditCard size={24} color="#3B82F6" />
+            </View>
+            <View style={styles.actionContent}>
+              <Text style={[styles.actionTitle, { color: colors.text }]}>
+                Subscriptions
+              </Text>
+              <Text style={[styles.actionSubtitle, { color: colors.textSecondary }]}>
+                Manage plans and manually assign memberships
               </Text>
             </View>
           </AnimatedPressable>

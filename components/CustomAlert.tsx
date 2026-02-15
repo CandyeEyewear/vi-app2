@@ -3,7 +3,7 @@
  * Themed alert modal to replace native Alert.alert()
  */
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -44,10 +44,6 @@ export default function CustomAlert({
   onConfirm, // NEW
   showCancel = false, // NEW
 }: CustomAlertProps) {
-  useEffect(() => {
-    console.log('[CUSTOM ALERT] Visibility changed:', { visible, title, message, type });
-  }, [visible, title, message, type]);
-
   // NEW: Build buttons based on props
   const finalButtons: AlertButton[] = buttons || (
     showCancel && onConfirm
@@ -74,11 +70,9 @@ export default function CustomAlert({
   };
 
   const handleButtonPress = (button: AlertButton) => {
-    if (button.onPress) {
-      button.onPress();
-    }
-    // Don't auto-close if button has its own onPress
-    if (!button.onPress) {
+    try {
+      button.onPress?.();
+    } finally {
       onClose();
     }
   };

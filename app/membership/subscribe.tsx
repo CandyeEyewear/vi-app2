@@ -5,7 +5,7 @@
  * FIXED: Unified with paymentService
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -37,6 +37,7 @@ import {
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../contexts/AuthContext';
 import { processSubscription, formatPaymentAmount, type Frequency } from '../../services/paymentService';
+import { getDefaultPlanForType, type SubscriptionPlanConfig } from '../../services/subscriptionPlanConfigService';
 
 const screenWidth = Dimensions.get('window').width;
 const isSmallScreen = screenWidth < 380;
@@ -78,6 +79,32 @@ const BENEFIT_ICONS: Record<string, any> = {
   'Auto-renews annually': RefreshCw,
 };
 
+const DEFAULT_MEMBERSHIP_PLAN = {
+  amount: 6000,
+  frequency: 'annually' as Frequency,
+  paymentMethod: 'auto' as const,
+  manualPaymentLink: undefined as string | undefined,
+  name: 'Annual Membership',
+  description: 'VIbe Premium Membership - Annual Plan (Includes VI T-Shirt)',
+};
+
+function frequencyToLabel(frequency: Frequency): string {
+  switch (frequency) {
+    case 'daily':
+      return 'day';
+    case 'weekly':
+      return 'week';
+    case 'monthly':
+      return 'month';
+    case 'quarterly':
+      return 'quarter';
+    case 'annually':
+      return 'year';
+    default:
+      return 'period';
+  }
+}
+
 // ============================================
 // WEB-COMPATIBLE ALERT HELPERS
 // ============================================
@@ -115,8 +142,24 @@ export default function SubscribeScreen() {
   // State
   const [processing, setProcessing] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [planConfig, setPlanConfig] = useState<SubscriptionPlanConfig | null>(null);
 
   const plan = MEMBERSHIP_PLANS.yearly; // Only yearly plan available
+  const checkoutAmount = planConfig?.amount ?? DEFAULT_MEMBERSHIP_PLAN.amount;
+  const checkoutFrequency = planConfig?.frequency ?? DEFAULT_MEMBERSHIP_PLAN.frequency;
+  const checkoutName = planConfig?.name || DEFAULT_MEMBERSHIP_PLAN.name;
+  const checkoutDescription = planConfig?.description || DEFAULT_MEMBERSHIP_PLAN.description;
+  const checkoutPeriodLabel = frequencyToLabel(checkoutFrequency);
+
+  useEffect(() => {
+    const loadPlan = async () => {
+      const result = await getDefaultPlanForType('membership');
+      if (result.success && result.data) {
+        setPlanConfig(result.data);
+      }
+    };
+    loadPlan();
+  }, []);
 
   // Handle subscription
   const handleSubscribe = useCallback(async () => {
@@ -142,21 +185,22 @@ export default function SubscribeScreen() {
     setProcessing(true);
 
     try {
-      // Yearly plan only
-      const frequency: Frequency = 'annually';
+      const frequency: Frequency = checkoutFrequency;
 
       console.log('Calling processSubscription...');
       // Process subscription payment through eZeePayments
       const subscriptionResult = await processSubscription({
-        amount: plan.price,
+        amount: checkoutAmount,
         frequency,
         subscriptionType: 'membership',
         userId: user.id,
         customerEmail: user.email || '',
         customerName: user.fullName || 'VIbe Member',
-        description: 'VIbe Premium Membership - Annual Plan (Includes VI T-Shirt)',
+        description: checkoutDescription,
         platform: Platform.OS === 'web' ? 'web' : 'app',
         returnPath: '/membership', // Return to membership page after payment
+        paymentMethodPreference: planConfig?.paymentMethod,
+        manualPaymentLink: planConfig?.manualPaymentLink,
       });
 
       console.log('Subscription result:', subscriptionResult);
@@ -172,7 +216,7 @@ export default function SubscribeScreen() {
 
       // Payment initiated successfully - webhook will handle the rest
       showAlert(
-        'Payment Initiated! 🎉',
+        'Payment Initiated',
         'You will be redirected to our secure payment gateway. Your premium membership will activate once payment is complete.',
         () => router.replace('/membership')
       );
@@ -182,7 +226,7 @@ export default function SubscribeScreen() {
     } finally {
       setProcessing(false);
     }
-  }, [user, agreedToTerms, plan, router]);
+  }, [user, agreedToTerms, checkoutAmount, checkoutDescription, checkoutFrequency, router, planConfig]);
 
   // Not logged in
   if (!user) {
@@ -267,14 +311,14 @@ export default function SubscribeScreen() {
                 </View>
               </View>
               <Text style={[styles.planDescription, { color: colors.textSecondary }]}>
-                Billed once per year • Includes VI T-Shirt
+                {checkoutName} - Includes VI T-Shirt
               </Text>
             </View>
             <View style={styles.planPriceContainer}>
               <Text style={[styles.planPrice, { color: '#38B6FF' }]}>
-                {formatPaymentAmount(MEMBERSHIP_PLANS.yearly.price)}
+                {formatPaymentAmount(checkoutAmount)}
               </Text>
-              <Text style={[styles.planPeriod, { color: colors.textSecondary }]}>/year</Text>
+              <Text style={[styles.planPeriod, { color: colors.textSecondary }]}>/{checkoutPeriodLabel}</Text>
             </View>
           </View>
         </View>
@@ -314,7 +358,7 @@ export default function SubscribeScreen() {
                 Annual Membership
               </Text>
               <Text style={[styles.summaryValue, { color: colors.text }]}>
-                {formatPaymentAmount(plan.price)}
+                {formatPaymentAmount(checkoutAmount)}
               </Text>
             </View>
             <View style={styles.summaryRow}>
@@ -329,11 +373,11 @@ export default function SubscribeScreen() {
             <View style={styles.summaryRow}>
               <Text style={[styles.totalLabel, { color: colors.text }]}>Total</Text>
               <Text style={[styles.totalValue, { color: '#38B6FF' }]}>
-                {formatPaymentAmount(plan.price)}
+                {formatPaymentAmount(checkoutAmount)}
               </Text>
             </View>
             <Text style={[styles.billingNote, { color: colors.textSecondary }]}>
-              Billed annually • Auto-renews each year
+              Billed every {checkoutPeriodLabel} - Auto-renews
             </Text>
           </View>
         </View>
@@ -385,7 +429,7 @@ export default function SubscribeScreen() {
             <>
               <CreditCard size={22} color="#FFFFFF" />
               <Text style={styles.subscribeButtonText}>
-                Subscribe for {formatPaymentAmount(plan.price)}/year
+                Subscribe for {formatPaymentAmount(checkoutAmount)}/{checkoutPeriodLabel}
               </Text>
             </>
           )}

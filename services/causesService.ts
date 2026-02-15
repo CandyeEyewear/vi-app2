@@ -9,6 +9,7 @@ import {
   Cause,
   CauseCategory,
   CauseStatus,
+  PaymentMethodPreference,
   Donation,
   RecurringDonation,
   RecurringFrequency,
@@ -94,6 +95,8 @@ function transformCause(row: any): Cause {
     isDonationsPublic: row.is_donations_public ?? true,
     allowRecurring: row.allow_recurring ?? true,
     minimumDonation: parseFloat(row.minimum_donation) || 0,
+    paymentMethod: row.payment_method || 'auto',
+    manualPaymentLink: row.manual_payment_link,
     status: row.status,
     isFeatured: row.is_featured ?? false,
     visibility: row.visibility || 'public',
@@ -380,6 +383,8 @@ export async function createCause(causeData: {
   isDonationsPublic?: boolean;
   allowRecurring?: boolean;
   minimumDonation?: number;
+  paymentMethod?: PaymentMethodPreference;
+  manualPaymentLink?: string | null;
   createdBy: string;
   visibility?: 'public' | 'members_only';
 }): Promise<ApiResponse<Cause>> {
@@ -396,6 +401,8 @@ export async function createCause(causeData: {
         is_donations_public: causeData.isDonationsPublic ?? true,
         allow_recurring: causeData.allowRecurring ?? true,
         minimum_donation: causeData.minimumDonation ?? 0,
+        payment_method: causeData.paymentMethod || 'auto',
+        manual_payment_link: causeData.manualPaymentLink || null,
         created_by: causeData.createdBy,
         visibility: causeData.visibility || 'public',
         status: 'active',
@@ -411,7 +418,8 @@ export async function createCause(causeData: {
     return { success: true, data: transformCause(data) };
   } catch (error) {
     console.error('Error creating cause:', error);
-    return { success: false, error: 'Failed to create cause' };
+    const message = error instanceof Error ? error.message : 'Failed to create cause';
+    return { success: false, error: message };
   }
 }
 
@@ -430,6 +438,8 @@ export async function updateCause(
     isDonationsPublic: boolean;
     allowRecurring: boolean;
     minimumDonation: number;
+    paymentMethod: PaymentMethodPreference;
+    manualPaymentLink: string | null;
     status: CauseStatus;
     isFeatured: boolean;
     visibility: 'public' | 'members_only';
@@ -447,6 +457,8 @@ export async function updateCause(
     if (updates.isDonationsPublic !== undefined) updateData.is_donations_public = updates.isDonationsPublic;
     if (updates.allowRecurring !== undefined) updateData.allow_recurring = updates.allowRecurring;
     if (updates.minimumDonation !== undefined) updateData.minimum_donation = updates.minimumDonation;
+    if (updates.paymentMethod !== undefined) updateData.payment_method = updates.paymentMethod;
+    if (updates.manualPaymentLink !== undefined) updateData.manual_payment_link = updates.manualPaymentLink;
     if (updates.status !== undefined) updateData.status = updates.status;
     if (updates.isFeatured !== undefined) updateData.is_featured = updates.isFeatured;
     if (updates.visibility !== undefined) updateData.visibility = updates.visibility;
@@ -466,7 +478,8 @@ export async function updateCause(
     return { success: true, data: transformCause(data) };
   } catch (error) {
     console.error('Error updating cause:', error);
-    return { success: false, error: 'Failed to update cause' };
+    const message = error instanceof Error ? error.message : 'Failed to update cause';
+    return { success: false, error: message };
   }
 }
 

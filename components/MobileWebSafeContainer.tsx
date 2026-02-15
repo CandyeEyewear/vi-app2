@@ -6,6 +6,7 @@
 import React, { ReactNode } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { useMobileWebViewport } from '../hooks/useMobileWebViewport';
+import { normalizeViewChildren } from '../utils/normalizeViewChildren';
 
 interface MobileWebSafeContainerProps {
   children: ReactNode;
@@ -17,7 +18,7 @@ export function MobileWebSafeContainer({ children, style }: MobileWebSafeContain
 
   // On native, just use flex: 1
   if (Platform.OS !== 'web') {
-    return <View style={[styles.container, style]}>{children}</View>;
+    return <View style={[styles.container, style]}>{normalizeViewChildren(children)}</View>;
   }
 
   // On web, only apply fixed height when we have a valid viewport height
@@ -36,7 +37,7 @@ export function MobileWebSafeContainer({ children, style }: MobileWebSafeContain
         style,
       ]}
     >
-      {children}
+      {normalizeViewChildren(children)}
     </View>
   );
 }

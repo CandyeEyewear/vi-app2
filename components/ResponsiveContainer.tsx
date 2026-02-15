@@ -7,6 +7,7 @@ import React from 'react';
 import { View, StyleSheet, ViewStyle } from 'react-native';
 import { useResponsive } from '../hooks/useResponsive';
 import { MAX_CONTENT_WIDTH, isWeb } from '../utils/platform';
+import { normalizeViewChildren } from '../utils/normalizeViewChildren';
 
 interface ResponsiveContainerProps {
   children: React.ReactNode;
@@ -24,6 +25,7 @@ export default function ResponsiveContainer({
   padding,
 }: ResponsiveContainerProps) {
   const { isWeb, width, contentWidth } = useResponsive();
+  const paddingObject = typeof padding === 'object' && padding !== null ? padding : undefined;
 
   const containerStyle: ViewStyle = {
     width: '100%',
@@ -35,15 +37,15 @@ export default function ResponsiveContainer({
     }),
     ...(padding && typeof padding === 'number'
       ? { paddingHorizontal: padding, paddingVertical: padding }
-      : padding
+      : paddingObject
       ? {
-          paddingHorizontal: padding.horizontal,
-          paddingVertical: padding.vertical,
+          paddingHorizontal: paddingObject.horizontal,
+          paddingVertical: paddingObject.vertical,
         }
       : {}),
     ...style,
   };
 
-  return <View style={containerStyle}>{children}</View>;
+  return <View style={containerStyle}>{normalizeViewChildren(children)}</View>;
 }
 

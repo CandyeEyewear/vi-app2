@@ -108,6 +108,7 @@ export default function EditOpportunityScreen() {
 
   // UI state
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertConfig, setAlertConfig] = useState({
@@ -456,10 +457,24 @@ export default function EditOpportunityScreen() {
   };
 
   const handleUpdate = async () => {
-    if (!validateForm()) return;
+    console.log('[EDIT_OPP] Save pressed');
+    if (!validateForm()) {
+      console.warn('[EDIT_OPP] Validation failed - save blocked');
+      return;
+    }
+    if (!opportunityId) {
+      console.warn('[EDIT_OPP] Missing opportunity id - save blocked');
+      showAlert('Error', 'Missing opportunity ID. Please reload and try again.', 'error');
+      return;
+    }
+    if (!user?.id) {
+      console.warn('[EDIT_OPP] Missing authenticated user - save blocked');
+      showAlert('Error', 'Your session is missing or expired. Please sign in again.', 'error');
+      return;
+    }
 
     try {
-      setLoading(true);
+      setSaving(true);
 
       // Only upload new image if user selected a new one (uri starts with 'file://')
       let imageUrl = imageUri;
@@ -496,6 +511,11 @@ export default function EditOpportunityScreen() {
         .eq('id', opportunityId)
         .select()
         .single();
+      console.log('[EDIT_OPP] Update response:', {
+        hasData: !!data,
+        hasError: !!error,
+        errorMessage: error?.message,
+      });
 
       if (error) throw error;
 
@@ -540,7 +560,7 @@ export default function EditOpportunityScreen() {
         'error'
       );
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
@@ -1105,12 +1125,12 @@ export default function EditOpportunityScreen() {
 
           {/* Update Button */}
           <TouchableOpacity
-            style={[styles.createButton, { backgroundColor: colors.primary }, loading && styles.createButtonDisabled]}
+            style={[styles.createButton, { backgroundColor: colors.primary }, saving && styles.createButtonDisabled]}
             onPress={handleUpdate}
-            disabled={loading}
+            disabled={saving}
           >
             <Text style={styles.createButtonText}>
-              {loading ? 'Updating...' : 'Update Opportunity'}
+              {saving ? 'Updating...' : 'Update Opportunity'}
             </Text>
           </TouchableOpacity>
         </ScrollView >

@@ -493,9 +493,11 @@ export default function CreateOpportunityScreen() {
   };
 
   const handleCreate = async () => {
+    console.log('[CREATE_OPP] Submit pressed');
     // Validate form
     const validation = validateForm();
     if (!validation.isValid) {
+      console.warn('[CREATE_OPP] Validation failed - submit blocked');
       showAlert('Validation Error', validation.errorMessage || 'Please check your input', 'error');
       return;
     }
@@ -577,6 +579,11 @@ export default function CreateOpportunityScreen() {
         })
         .select()
         .single();
+      console.log('[CREATE_OPP] Insert response:', {
+        hasData: !!data,
+        hasError: !!error,
+        errorMessage: error?.message,
+      });
 
       if (error) {
         console.error('Database error:', error);
@@ -587,90 +594,65 @@ export default function CreateOpportunityScreen() {
         throw new Error('Failed to create opportunity. No data returned from server.');
       }
 
-      // Notify all users who have opportunity notifications enabled
-      if (data) {
-        // Create notification records using RPC function
-        const { data: userIds, error: notifError } = await supabase.rpc(
-          'create_opportunity_notifications',
-          {
-            p_opportunity_id: data.id,
-            p_title: title.trim(),
-            p_organization_name: organizationName.trim(),
-            p_sender_id: user?.id,
-          }
-        );
+            // Notifications are background work; do not block redirect.
+      void (async () => {
+        try {
+          const { data: userIds, error: notifError } = await supabase.rpc(
+            'create_opportunity_notifications',
+            {
+              p_opportunity_id: data.id,
+              p_title: title.trim(),
+              p_organization_name: organizationName.trim(),
+              p_sender_id: user?.id,
+            }
+          );
 
-        if (!notifError && userIds && Array.isArray(userIds) && userIds.length > 0) {
-          console.log('🔔 Starting push notification process for opportunity...');
-          console.log('📊 Users to notify:', userIds.length);
-          
-          // Get all users with push tokens
-          const userIdsArray = userIds.map(u => u.user_id);
+          if (notifError || !userIds || !Array.isArray(userIds) || userIds.length === 0) {
+            return;
+          }
+
+          const userIdsArray = userIds.map((u) => u.user_id);
           const { data: users, error: usersError } = await supabase
             .from('users')
             .select('id, push_token')
             .in('id', userIdsArray)
             .not('push_token', 'is', null);
 
-          console.log('📊 Users query result:', { 
-            error: usersError, 
-            userCount: users?.length || 0 
+          if (usersError || !users?.length) return;
+
+          const { data: settingsData, error: settingsError } = await supabase
+            .from('user_notification_settings')
+            .select('user_id, opportunities_enabled')
+            .in('user_id', users.map((u) => u.id));
+
+          if (settingsError || !settingsData) return;
+
+          const settingsMap = new Map(settingsData.map((s) => [s.user_id, s.opportunities_enabled]));
+          const enabledUsers = users.filter((u) => {
+            const setting = settingsMap.get(u.id);
+            return setting === true || setting === undefined;
           });
 
-          if (!usersError && users) {
-            console.log('✅ Found', users.length, 'users with push tokens');
-            
-            // Get notification settings for these users
-            const { data: settingsData, error: settingsError } = await supabase
-              .from('user_notification_settings')
-              .select('user_id, opportunities_enabled')
-              .in('user_id', users.map(u => u.id));
-
-            console.log('📊 Settings query result:', { 
-              error: settingsError, 
-              settingsCount: settingsData?.length || 0 
-            });
-
-            if (!settingsError && settingsData) {
-              // Filter users who have opportunities enabled
-              const settingsMap = new Map(settingsData.map(s => [s.user_id, s.opportunities_enabled]));
-              
-              const enabledUsers = users.filter(user => {
-                const setting = settingsMap.get(user.id);
-                return setting === true || setting === undefined;
+          await Promise.allSettled(
+            enabledUsers.map(async (u) => {
+              await sendNotificationToUser(u.id, {
+                type: 'opportunity',
+                id: data.id,
+                title: 'New Opportunity Available',
+                body: `${title.trim()} - ${organizationName.trim()}`,
               });
 
-              console.log('✅ Found', enabledUsers.length, 'users with opportunities enabled');
-
-              for (const userObj of enabledUsers) {
-                console.log('📤 Sending push to user:', userObj.id.substring(0, 8) + '...');
-                try {
-                  await sendNotificationToUser(userObj.id, {
-                    type: 'opportunity',
-                    id: data.id,
-                    title: 'New Opportunity Available',
-                    body: `${title.trim()} - ${organizationName.trim()}`,
-                  });
-                  console.log('✅ Push sent to user:', userObj.id.substring(0, 8) + '...');
-                } catch (pushError) {
-                  console.error('❌ Failed to send push to user:', userObj.id, pushError);
-                }
-
-                // Send email notification (non-blocking)
-                sendEmailNotification(userObj.id, 'opportunity', {
-                  title: title.trim(),
-                  description: description?.trim().substring(0, 200),
-                  id: data.id,
-                }).catch((err) => {
-                  console.warn('Email notification skipped for user:', userObj.id, err);
-                });
-              }
-              
-              console.log('🎉 Push notification process complete!');
-            }
-          }
+              await sendEmailNotification(u.id, 'opportunity', {
+                title: title.trim(),
+                description: description?.trim().substring(0, 200),
+                id: data.id,
+              });
+            })
+          );
+        } catch (notifErr) {
+          console.error('Error in opportunity notification process:', notifErr);
         }
-      }
+      })();
 
       // Show success message
       showAlert(
@@ -1581,3 +1563,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+

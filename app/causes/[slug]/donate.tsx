@@ -925,6 +925,8 @@ export default function DonateScreen() {
           description: `Recurring donation to ${cause.title}`,
           platform: Platform.OS === 'web' ? 'web' : 'app',
           returnPath: `/causes/${id}`, // Return to cause page after payment
+          paymentMethodPreference: cause.paymentMethod || 'auto',
+          manualPaymentLink: cause.manualPaymentLink,
         });
 
         if (!subscriptionResult.success) {
@@ -983,6 +985,8 @@ export default function DonateScreen() {
         description: `Donation to ${cause.title}`,
         platform: Platform.OS === 'web' ? 'web' : 'app',
         returnPath: `/causes/${id}`, // Return to cause page after payment
+        paymentMethodPreference: cause.paymentMethod || 'auto',
+        manualPaymentLink: cause.manualPaymentLink,
       });
 
       console.log('🔵 [DONATE] Payment result:', paymentResult);

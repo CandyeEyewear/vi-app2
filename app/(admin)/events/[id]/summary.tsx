@@ -101,7 +101,7 @@ export default function EventSummaryScreen() {
               } : undefined,
               status: row.status,
               ticketCount: row.ticket_count || 1,
-              paymentStatus: transaction?.status === 'completed' ? 'Completed' : row.payment_status,
+              paymentStatus: transaction?.status || row.payment_status,
               transactionNumber: transaction?.transaction_number || row.transaction_number,
               amountPaid: transaction?.amount ? parseFloat(transaction.amount) : (row.amount_paid ? parseFloat(row.amount_paid) : undefined),
               registeredAt: row.registered_at,
@@ -117,11 +117,11 @@ export default function EventSummaryScreen() {
 
         // Calculate stats
         const totalParticipants = transformedRegistrations.filter(
-          (r) => r.status === 'Registered' || r.status === 'registered' || r.status === 'attended'
+          (r) => r.status === 'registered' || r.status === 'attended'
         ).length;
 
         const paidRegistrations = transformedRegistrations.filter(
-          (r) => r.paymentStatus === 'Completed' && r.amountPaid && r.amountPaid > 0
+          (r) => r.paymentStatus === 'completed' && r.amountPaid && r.amountPaid > 0
         );
 
         const totalFundsPaid = paidRegistrations.reduce((sum, r) => sum + (r.amountPaid || 0), 0);

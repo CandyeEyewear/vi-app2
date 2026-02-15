@@ -11,6 +11,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   TextInput,
   useColorScheme,
   Dimensions,
@@ -268,6 +269,7 @@ export default function CreateCauseScreen() {
 
   // Handle form submission
   const handleSubmit = useCallback(async () => {
+    console.log('[CREATE_CAUSE] Submit pressed');
     if (!validateForm()) {
       showAlert('warning', 'Validation Error', 'Please fix the errors in the form');
       return;
@@ -305,7 +307,10 @@ export default function CreateCauseScreen() {
         allowRecurring,
         minimumDonation: minimumDonation ? parseFloat(minimumDonation) : 0,
         paymentMethod,
-        manualPaymentLink: manualPaymentLink.trim() || undefined,
+        manualPaymentLink:
+          paymentMethod === 'manual_link' && manualPaymentLink.trim()
+            ? manualPaymentLink.trim()
+            : undefined,
         createdBy: user.id,
         visibility,
       });
@@ -318,115 +323,65 @@ export default function CreateCauseScreen() {
         console.log('Ã¢Å“â€¦ Cause created successfully!');
         console.log('Ã°Å¸â€œÅ  Cause ID:', causeId);
 
-        // Create notifications using database function
-        console.log('Ã°Å¸â€â€ Starting notification process...');
-        console.log('Ã°Å¸â€Â§ Calling RPC function: create_cause_notifications');
-        console.log('Ã°Å¸â€œÂ¦ Function parameters:', {
-          p_cause_id: causeId,
-          p_title: causeTitle,
-          p_creator_id: user.id,
-        });
-        
-        try {
-          const { data: notifiedUsers, error: notifError } = await supabase.rpc(
-            'create_cause_notifications',
-            {
-              p_cause_id: causeId,
-              p_title: causeTitle,
-              p_creator_id: user.id,
+        // Notifications are background work; do not block redirect.
+        void (async () => {
+          try {
+            const { data: notifiedUsers, error: notifError } = await supabase.rpc(
+              'create_cause_notifications',
+              {
+                p_cause_id: causeId,
+                p_title: causeTitle,
+                p_creator_id: user.id,
+              }
+            );
+
+            if (notifError) {
+              console.error('Notification creation error:', notifError);
+              return;
             }
-          );
 
-          console.log('Ã°Å¸â€Â RPC function response:', {
-            notifiedUsers,
-            error: notifError,
-          });
+            console.log('Notifications created:', notifiedUsers?.length || 0);
 
-          if (notifError) {
-            console.error('Ã¢ÂÅ’ Notification creation error:', notifError);
-            console.error('Ã¢ÂÅ’ Error details:', {
-              message: notifError.message,
-              code: notifError.code,
-              details: notifError.details,
-              hint: notifError.hint,
-            });
-            console.warn('Ã¢Å¡Â Ã¯Â¸Â Cause created but notifications failed');
-            // Don't throw - cause was created successfully
-          } else {
-            console.log('Ã¢Å“â€¦ Notifications created successfully');
-            console.log('Ã°Å¸â€œÅ  Total notifications sent:', notifiedUsers?.length || 0);
-
-            // Send push notifications to users with push tokens and causes notifications enabled
-            console.log('Ã°Å¸â€â€ Starting push notification process...');
-            
-            // Get all users with push tokens
             const { data: users, error: usersError } = await supabase
               .from('users')
               .select('id, push_token')
               .not('push_token', 'is', null);
 
-            console.log('Ã°Å¸â€œÅ  Users query result:', { 
-              error: usersError, 
-              userCount: users?.length || 0 
+            if (usersError || !users?.length) return;
+
+            const { data: settingsData, error: settingsError } = await supabase
+              .from('user_notification_settings')
+              .select('user_id, causes_enabled')
+              .in('user_id', users.map((u) => u.id));
+
+            if (settingsError || !settingsData) return;
+
+            const settingsMap = new Map(settingsData.map((s) => [s.user_id, s.causes_enabled]));
+            const enabledUsers = users.filter((u) => {
+              const setting = settingsMap.get(u.id);
+              return setting === true || setting === undefined;
             });
 
-            if (!usersError && users) {
-              console.log('Ã¢Å“â€¦ Found', users.length, 'users with push tokens');
-              
-              // Get notification settings for these users
-              const { data: settingsData, error: settingsError } = await supabase
-                .from('user_notification_settings')
-                .select('user_id, causes_enabled')
-                .in('user_id', users.map(u => u.id));
-
-              console.log('Ã°Å¸â€œÅ  Settings query result:', { 
-                error: settingsError, 
-                settingsCount: settingsData?.length || 0 
-              });
-
-              if (!settingsError && settingsData) {
-                // Filter users who have causes enabled
-                const settingsMap = new Map(settingsData.map(s => [s.user_id, s.causes_enabled]));
-                
-                const enabledUsers = users.filter(user => {
-                  const setting = settingsMap.get(user.id);
-                  return setting === true || setting === undefined;
+            await Promise.allSettled(
+              enabledUsers.map(async (u) => {
+                await sendNotificationToUser(u.id, {
+                  type: 'cause',
+                  id: causeId,
+                  title: 'New Fundraising Cause',
+                  body: `${causeTitle} - Help make a difference!`,
                 });
 
-                console.log('Ã¢Å“â€¦ Found', enabledUsers.length, 'users with causes notifications enabled');
-
-                for (const userObj of enabledUsers) {
-                  console.log('Ã°Å¸â€œÂ¤ Sending push to user:', userObj.id.substring(0, 8) + '...');
-                  try {
-                    await sendNotificationToUser(userObj.id, {
-                      type: 'cause',
-                      id: causeId,
-                      title: 'New Fundraising Cause',
-                      body: `${causeTitle} - Help make a difference!`,
-                    });
-                    console.log('Ã¢Å“â€¦ Push sent to user:', userObj.id.substring(0, 8) + '...');
-                  } catch (pushError) {
-                    console.error('Ã¢ÂÅ’ Failed to send push to user:', userObj.id, pushError);
-                  }
-
-                  // Send email notification (non-blocking)
-                  sendEmailNotification(userObj.id, 'cause', {
-                    title: causeTitle,
-                    description: description.trim().substring(0, 200),
-                    id: causeId,
-                  }).catch((err) => {
-                    console.warn('Email notification skipped for user:', userObj.id, err);
-                  });
-                }
-                
-                console.log('Ã°Å¸Å½â€° Push notification process complete!');
-              }
-            }
+                await sendEmailNotification(u.id, 'cause', {
+                  title: causeTitle,
+                  description: description.trim().substring(0, 200),
+                  id: causeId,
+                });
+              })
+            );
+          } catch (notifErr) {
+            console.error('Error in cause notification process:', notifErr);
           }
-        } catch (notifErr) {
-          console.error('Ã¢ÂÅ’ Error in notification process:', notifErr);
-          // Don't fail the whole operation if notifications fail
-        }
+        })();
 
         showAlert(
           'success',
@@ -857,11 +812,15 @@ export default function CreateCauseScreen() {
 
       {/* Submit Button */}
       <View style={[styles.bottomBar, { backgroundColor: colors.background, paddingBottom: insets.bottom + 16, borderTopColor: colors.border }]}>
-        <TouchableOpacity
-          style={[styles.submitButton, { backgroundColor: '#38B6FF' }, submitting && styles.submitButtonDisabled]}
+        <Pressable
+          style={({ pressed }) => [
+            styles.submitButton,
+            { backgroundColor: '#38B6FF' },
+            pressed && !submitting && styles.submitButtonPressed,
+            submitting && styles.submitButtonDisabled,
+          ]}
           onPress={handleSubmit}
           disabled={submitting}
-          activeOpacity={0.8}
         >
           {submitting ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
@@ -871,7 +830,7 @@ export default function CreateCauseScreen() {
               <Text style={styles.submitButtonText}>Create Cause</Text>
             </>
           )}
-        </TouchableOpacity>
+        </Pressable>
       </View>
 
       {/* Image Cropper */}
@@ -1135,6 +1094,9 @@ const styles = StyleSheet.create({
   submitButtonDisabled: {
     opacity: 0.6,
   },
+  submitButtonPressed: {
+    opacity: 0.9,
+  },
   submitButtonText: {
     color: '#FFFFFF',
     fontSize: 17,
@@ -1157,3 +1119,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
+

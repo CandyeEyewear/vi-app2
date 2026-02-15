@@ -8,6 +8,7 @@ import { View, StyleSheet, ViewStyle, useColorScheme } from 'react-native';
 import { useResponsive } from '../hooks/useResponsive';
 import { Colors } from '../constants/colors';
 import ResponsiveContainer from './ResponsiveContainer';
+import { normalizeViewChildren } from '../utils/normalizeViewChildren';
 
 interface WebLayoutProps {
   children: React.ReactNode;
@@ -27,19 +28,19 @@ export default function WebLayout({
   const colors = Colors[colorScheme];
 
   if (!isWeb) {
-    return <View style={style}>{children}</View>;
+    return <View style={style}>{normalizeViewChildren(children)}</View>;
   }
 
   return (
     <View style={[styles.container, style]}>
       <View style={styles.mainContent}>
         <ResponsiveContainer style={contentStyle}>
-          {children}
+          {normalizeViewChildren(children)}
         </ResponsiveContainer>
       </View>
       {showSidebar && sidebar && (
         <View style={[styles.sidebar, { borderLeftColor: colors.border, backgroundColor: colors.card }]}>
-          {sidebar}
+          {normalizeViewChildren(sidebar)}
         </View>
       )}
     </View>

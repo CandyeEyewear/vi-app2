@@ -92,7 +92,8 @@ export default function CrossPlatformDateTimePicker({
             onChange={(e) => {
               if (e.target.value) {
                 if (mode === 'date') {
-                  onChange(new Date(e.target.value));
+                  const [y, m, d] = e.target.value.split('-').map(Number);
+                  onChange(new Date(y, m - 1, d));
                 } else {
                   // For time, combine with current date
                   const [hours, minutes] = e.target.value.split(':').map(Number);

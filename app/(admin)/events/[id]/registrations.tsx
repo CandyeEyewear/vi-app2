@@ -94,7 +94,7 @@ function RegistrationItem({
 }: RegistrationItemProps) {
   const [loading, setLoading] = useState(false);
   
-  const statusConfigs = {
+  const statusConfigs: Record<string, { label: string; color: string; bgColor: string }> = {
     registered: { label: 'Registered', color: '#2196F3', bgColor: '#E3F2FD' },
     attended: { label: 'Attended', color: '#4CAF50', bgColor: '#E8F5E9' },
     cancelled: { label: 'Cancelled', color: '#9E9E9E', bgColor: '#FAFAFA' },
@@ -179,7 +179,7 @@ function RegistrationItem({
         )}
         {registration.paymentStatus && (
           <View style={styles.detailRow}>
-            <CheckCircle size={14} color={(registration.paymentStatus === 'Completed' || registration.paymentStatus === 'completed') ? '#4CAF50' : colors.textSecondary} />
+            <CheckCircle size={14} color={registration.paymentStatus === 'completed' ? '#4CAF50' : colors.textSecondary} />
             <Text style={[styles.detailText, { color: colors.textSecondary }]}>
               Payment: {registration.paymentStatus}
             </Text>
@@ -203,8 +203,8 @@ function RegistrationItem({
               </>
             )}
           </TouchableOpacity>
-          {!eventIsFree && 
-           (registration.paymentStatus === 'Completed' || registration.paymentStatus === 'completed') && 
+          {!eventIsFree &&
+           registration.paymentStatus === 'completed' &&
            registration.amountPaid && 
            registration.amountPaid > 0 && (
             <TouchableOpacity
@@ -289,7 +289,7 @@ export default function EventRegistrationsScreen() {
               ...reg,
               amountPaid: transaction?.amount || 0,
               // Prefer event_registrations.payment_status, fallback to transaction status
-              paymentStatus: reg.payment_status || (transaction?.status === 'completed' ? 'Completed' : transaction?.status) || undefined,
+              paymentStatus: reg.payment_status || transaction?.status || undefined,
               transactionNumber: transaction?.transaction_number || undefined,
             };
           })

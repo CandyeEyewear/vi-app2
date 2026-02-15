@@ -9,7 +9,8 @@ import { supabase } from './supabase';
 if (Platform.OS !== 'web') {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
       shouldPlaySound: true,
       shouldSetBadge: true,
     }),
@@ -326,6 +327,30 @@ async function sendFCMNotificationViaEdgeFunction(
   }
 }
 
+function isUnregisteredFcmError(error?: string): boolean {
+  if (!error) return false;
+  const normalized = error.toLowerCase();
+  return normalized.includes('unregistered') || normalized.includes('requested entity was not found');
+}
+
+function isTransientEmailError(error?: string): boolean {
+  if (!error) return false;
+  const normalized = error.toLowerCase();
+  return (
+    normalized.includes('non-2xx') ||
+    normalized.includes('500') ||
+    normalized.includes('502') ||
+    normalized.includes('503') ||
+    normalized.includes('504') ||
+    normalized.includes('timeout') ||
+    normalized.includes('network')
+  );
+}
+
+async function delay(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Send a test push notification to the current user.
  * Returns a helpful error string if delivery could not be initiated.
@@ -376,6 +401,10 @@ export async function sendNotificationToUser(
       return true;
     } else {
       console.error('[PUSH] ❌ Failed to send notification:', result.error);
+      if (isUnregisteredFcmError(result.error)) {
+        console.warn('[PUSH] Stale FCM token detected; clearing token for user:', userId.substring(0, 8) + '...');
+        await removePushToken(userId);
+      }
       return false;
     }
   } catch (error: any) {
@@ -506,17 +535,31 @@ export async function sendEmailNotification(
   console.log('[EMAIL] Recipient:', recipientUserId.substring(0, 8) + '...');
   console.log('[EMAIL] Type:', type);
 
-  try {
+  const invokeOnce = async (): Promise<{ result?: any; errorMessage?: string }> => {
     const { data: result, error } = await supabase.functions.invoke(
       'send-notification-email',
       {
         body: { recipientUserId, type, data },
       }
     );
+    if (error) return { errorMessage: error.message };
+    return { result };
+  };
 
-    if (error) {
-      console.error('[EMAIL] ❌ Error invoking Edge Function:', error);
-      return { success: false, error: error.message };
+  try {
+    let { result, errorMessage } = await invokeOnce();
+
+    if (errorMessage && isTransientEmailError(errorMessage)) {
+      console.warn('[EMAIL] Transient invoke error; retrying once:', errorMessage);
+      await delay(750);
+      const retry = await invokeOnce();
+      result = retry.result;
+      errorMessage = retry.errorMessage;
+    }
+
+    if (errorMessage) {
+      console.warn('[EMAIL] Edge Function invoke failed:', errorMessage);
+      return { success: false, error: errorMessage };
     }
 
     if (result?.success) {
@@ -528,10 +571,11 @@ export async function sendEmailNotification(
       return { success: true };
     }
 
-    console.error('[EMAIL] ❌ Failed to send email:', result?.error);
-    return { success: false, error: result?.error || 'Unknown error' };
+    const resultError = result?.error || 'Unknown error';
+    console.warn('[EMAIL] Email notification not sent:', resultError);
+    return { success: false, error: resultError };
   } catch (error: any) {
-    console.error('[EMAIL] ❌ Exception sending email notification:', error);
+    console.warn('[EMAIL] Exception sending email notification:', error);
     return { success: false, error: error.message };
   }
 }

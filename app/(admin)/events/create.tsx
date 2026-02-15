@@ -11,6 +11,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   TextInput,
   useColorScheme,
   Dimensions,
@@ -328,7 +329,17 @@ export default function CreateEventScreen() {
 
   // Handle submit
   const handleSubmit = useCallback(async () => {
-    if (!validateForm() || !user) return;
+    console.log('[CREATE_EVENT] Submit pressed');
+    const isValid = validateForm();
+    if (!isValid) {
+      console.warn('[CREATE_EVENT] Validation failed - submit blocked');
+      return;
+    }
+    if (!user?.id) {
+      console.warn('[CREATE_EVENT] Missing authenticated user - submit blocked');
+      showAlert('error', 'Not Signed In', 'Your session is missing or expired. Please sign in again.');
+      return;
+    }
 
     setSubmitting(true);
 
@@ -366,12 +377,21 @@ export default function CreateEventScreen() {
         isFree,
         ticketPrice: !isFree ? parseFloat(ticketPrice) : undefined,
         paymentMethod: !isFree ? paymentMethod : 'auto',
-        manualPaymentLink: !isFree && manualPaymentLink.trim() ? manualPaymentLink.trim() : undefined,
+        manualPaymentLink:
+          !isFree && paymentMethod === 'manual_link' && manualPaymentLink.trim()
+            ? manualPaymentLink.trim()
+            : undefined,
         contactName: contactName.trim() || undefined,
         contactEmail: contactEmail.trim() || undefined,
         contactPhone: contactPhone.trim() || undefined,
         createdBy: user.id,
         visibility,
+      });
+
+      console.log('[CREATE_EVENT] createEvent response:', {
+        success: response.success,
+        hasData: !!response.data,
+        error: response.error,
       });
 
       if (response.success && response.data) {
@@ -384,119 +404,70 @@ export default function CreateEventScreen() {
 
         // Create notifications using database function
         console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ¢â‚¬Â Starting notification process...');
-        console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â§ Calling RPC function: create_event_notifications');
-        console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â¦ Function parameters:', {
-          p_event_id: eventId,
-          p_title: eventTitle,
-          p_creator_id: user.id,
-        });
-        
-        try {
-          const { data: notifiedUsers, error: notifError } = await supabase.rpc(
-            'create_event_notifications',
-            {
-              p_event_id: eventId,
-              p_title: eventTitle,
-              p_creator_id: user.id,
+        // Notifications are background work; do not block redirect.
+        void (async () => {
+          try {
+            const { data: notifiedUsers, error: notifError } = await supabase.rpc(
+              'create_event_notifications',
+              {
+                p_event_id: eventId,
+                p_title: eventTitle,
+                p_creator_id: user.id,
+              }
+            );
+
+            if (notifError) {
+              console.error('Notification creation error:', notifError);
+              return;
             }
-          );
 
-          console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â RPC function response:', {
-            notifiedUsers,
-            error: notifError,
-          });
+            console.log('Notifications created:', notifiedUsers?.length || 0);
 
-          if (notifError) {
-            console.error('ÃƒÂ¢Ã‚ÂÃ…â€™ Notification creation error:', notifError);
-            console.error('ÃƒÂ¢Ã‚ÂÃ…â€™ Error details:', {
-              message: notifError.message,
-              code: notifError.code,
-              details: notifError.details,
-              hint: notifError.hint,
-            });
-            console.warn('ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Event created but notifications failed');
-            // Don't throw - event was created successfully
-          } else {
-            console.log('ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Notifications created successfully');
-            console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â  Total notifications sent:', notifiedUsers?.length || 0);
-
-            // Send push notifications to users with push tokens and events notifications enabled
-            console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ¢â‚¬Â Starting push notification process...');
-            
-            // Get all users with push tokens
             const { data: users, error: usersError } = await supabase
               .from('users')
               .select('id, push_token')
               .not('push_token', 'is', null);
 
-            console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â  Users query result:', { 
-              error: usersError, 
-              userCount: users?.length || 0 
+            if (usersError || !users?.length) return;
+
+            const { data: settingsData, error: settingsError } = await supabase
+              .from('user_notification_settings')
+              .select('user_id, events_enabled')
+              .in('user_id', users.map((u) => u.id));
+
+            if (settingsError || !settingsData) return;
+
+            const settingsMap = new Map(settingsData.map((s) => [s.user_id, s.events_enabled]));
+            const enabledUsers = users.filter((u) => {
+              const setting = settingsMap.get(u.id);
+              return setting === true || setting === undefined;
             });
 
-            if (!usersError && users) {
-              console.log('ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Found', users.length, 'users with push tokens');
-              
-              // Get notification settings for these users
-              const { data: settingsData, error: settingsError } = await supabase
-                .from('user_notification_settings')
-                .select('user_id, events_enabled')
-                .in('user_id', users.map(u => u.id));
-
-              console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â  Settings query result:', { 
-                error: settingsError, 
-                settingsCount: settingsData?.length || 0 
-              });
-
-              if (!settingsError && settingsData) {
-                // Filter users who have events enabled
-                const settingsMap = new Map(settingsData.map(s => [s.user_id, s.events_enabled]));
-                
-                const enabledUsers = users.filter(user => {
-                  const setting = settingsMap.get(user.id);
-                  return setting === true || setting === undefined;
+            await Promise.allSettled(
+              enabledUsers.map(async (u) => {
+                await sendNotificationToUser(u.id, {
+                  type: 'event',
+                  id: eventId,
+                  title: 'New Event',
+                  body: `${eventTitle} - Join us!`,
                 });
 
-                console.log('ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Found', enabledUsers.length, 'users with events notifications enabled');
-
-                for (const userObj of enabledUsers) {
-                  console.log('ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â¤ Sending push to user:', userObj.id.substring(0, 8) + '...');
-                  try {
-                    await sendNotificationToUser(userObj.id, {
-                      type: 'event',
-                      id: eventId,
-                      title: 'New Event',
-                      body: `${eventTitle} - Join us!`,
-                    });
-                    console.log('ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Push sent to user:', userObj.id.substring(0, 8) + '...');
-                  } catch (pushError) {
-                    console.error('ÃƒÂ¢Ã‚ÂÃ…â€™ Failed to send push to user:', userObj.id, pushError);
-                  }
-
-                  // Send email notification (non-blocking)
-                  sendEmailNotification(userObj.id, 'event', {
-                    title: eventTitle,
-                    description: description.trim().substring(0, 200),
-                    id: eventId,
-                  }).catch((err) => {
-                    console.warn('Email notification skipped for user:', userObj.id, err);
-                  });
-                }
-                
-                console.log('ÃƒÂ°Ã…Â¸Ã…Â½Ã¢â‚¬Â° Push notification process complete!');
-              }
-            }
+                await sendEmailNotification(u.id, 'event', {
+                  title: eventTitle,
+                  description: description.trim().substring(0, 200),
+                  id: eventId,
+                });
+              })
+            );
+          } catch (notifErr) {
+            console.error('Error in event notification process:', notifErr);
           }
-        } catch (notifErr) {
-          console.error('ÃƒÂ¢Ã‚ÂÃ…â€™ Error in notification process:', notifErr);
-          // Don't fail the whole operation if notifications fail
-        }
+        })();
 
         showAlert(
           'success',
           'Event Created!',
-          `"${eventTitle}" has been created successfully. Volunteers will be notified.`,
-          () => router.replace(`/events/${eventSlug}` as any)
+          `"${eventTitle}" has been created successfully. Volunteers will be notified.`
         );
         setTimeout(() => {
           router.replace(`/events/${eventSlug}` as any);
@@ -1087,11 +1058,15 @@ export default function CreateEventScreen() {
 
       {/* Submit Button */}
       <View style={[styles.bottomBar, { backgroundColor: colors.background, paddingBottom: insets.bottom + 16, borderTopColor: colors.border }]}>
-        <TouchableOpacity
-          style={[styles.submitButton, { backgroundColor: colors.primary }, submitting && styles.submitButtonDisabled]}
+        <Pressable
+          style={({ pressed }) => [
+            styles.submitButton,
+            { backgroundColor: colors.primary },
+            pressed && !submitting && styles.submitButtonPressed,
+            submitting && styles.submitButtonDisabled,
+          ]}
           onPress={handleSubmit}
           disabled={submitting}
-          activeOpacity={0.8}
         >
           {submitting ? (
             <ActivityIndicator size="small" color={colors.textOnPrimary} />
@@ -1101,7 +1076,7 @@ export default function CreateEventScreen() {
               <Text style={styles.submitButtonText}>Create Event</Text>
             </>
           )}
-        </TouchableOpacity>
+        </Pressable>
       </View>
 
       {/* Image Cropper */}
@@ -1302,6 +1277,9 @@ const styles = StyleSheet.create({
   },
   submitButtonDisabled: {
     opacity: 0.7,
+  },
+  submitButtonPressed: {
+    opacity: 0.9,
   },
   submitButtonText: {
     fontSize: 17,
