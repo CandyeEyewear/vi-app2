@@ -1,46 +1,82 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { CheckCircle } from 'lucide-react-native';
 import { useColorScheme } from 'react-native';
 import { Colors } from '../../constants/colors';
 
+const APP_URL = process.env.EXPO_PUBLIC_SUPABASE_URL
+  ? 'https://vibe.volunteersinc.org'
+  : 'https://vibe.volunteersinc.org';
+
 export default function PaymentSuccessScreen() {
   const params = useLocalSearchParams();
   const orderId = Array.isArray(params.orderId) ? params.orderId[0] : params.orderId;
   const returnPathRaw = params.returnPath || params.return_path;
   const platformParam = params.platform;
-  // Handle both string and array formats from useLocalSearchParams
   const returnPath = Array.isArray(returnPathRaw) ? returnPathRaw[0] : returnPathRaw;
   const isAppPlatform = platformParam === 'app' || (!Platform.OS || Platform.OS !== 'web');
-  
+
   const [countdown, setCountdown] = useState(5);
   const [redirectAttempted, setRedirectAttempted] = useState(false);
+  const [confirming, setConfirming] = useState(!!orderId);
+  const [confirmed, setConfirmed] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  const confirmCalled = useRef(false);
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
 
+  // Confirm the payment on mount
   useEffect(() => {
-    // If this is opened in a mobile browser (not in the app), try to redirect to the app
+    if (!orderId || confirmCalled.current) return;
+    confirmCalled.current = true;
+
+    const confirmPayment = async () => {
+      try {
+        console.log('[PAYMENT SUCCESS] Confirming payment for orderId:', orderId);
+        const response = await fetch(`${APP_URL}/api/ezee/confirm-payment`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order_id: orderId }),
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          console.log('[PAYMENT SUCCESS] Payment confirmed:', data.message);
+          setConfirmed(true);
+        } else {
+          console.warn('[PAYMENT SUCCESS] Confirmation response:', data);
+          setConfirmError(data.error || 'Could not confirm payment');
+        }
+      } catch (err: any) {
+        console.error('[PAYMENT SUCCESS] Confirmation error:', err);
+        setConfirmError(err.message || 'Network error confirming payment');
+      } finally {
+        setConfirming(false);
+      }
+    };
+
+    confirmPayment();
+  }, [orderId]);
+
+  // Mobile deep-link redirect + countdown
+  useEffect(() => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       const isMobile = /iPhone|iPad|iPod|Android/i.test(window.navigator.userAgent);
       const isInApp = window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
-      
-      // If on mobile browser (not in app), try to open the app
+
       if (isMobile && !isInApp && !redirectAttempted) {
         setRedirectAttempted(true);
         const deepLinkParams = new URLSearchParams();
         if (orderId) deepLinkParams.append('orderId', orderId);
         if (returnPath) deepLinkParams.append('returnPath', returnPath);
-        
+
         const deepLink = `vibe://payment/success?${deepLinkParams.toString()}`;
         console.log('[PAYMENT SUCCESS] Attempting to redirect to app:', deepLink);
-        
-        // Try to open the app
         window.location.href = deepLink;
-        
-        // Fallback: if app doesn't open within 2 seconds, show the page
+
         setTimeout(() => {
-          // If we're still here, the app didn't open, so continue with normal flow
           console.log('[PAYMENT SUCCESS] App redirect failed, showing web page');
         }, 2000);
       }
@@ -50,11 +86,10 @@ export default function PaymentSuccessScreen() {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          // Redirect to returnPath if provided, otherwise default to feed
-          const redirectPath = returnPath && typeof returnPath === 'string' 
-            ? returnPath 
+          const redirectPath = returnPath && typeof returnPath === 'string'
+            ? returnPath
             : '/feed';
-          console.log('[PAYMENT SUCCESS] Redirecting to:', redirectPath, 'from returnPath:', returnPath);
+          console.log('[PAYMENT SUCCESS] Redirecting to:', redirectPath);
           router.replace(redirectPath);
           return 0;
         }
@@ -68,16 +103,32 @@ export default function PaymentSuccessScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <View style={styles.iconContainer}>
-          <CheckCircle size={80} color="#10B981" />
-        </View>
-        <Text style={[styles.title, { color: '#10B981' }]}>Payment Successful!</Text>
-        <Text style={[styles.message, { color: colors.textSecondary }]}>
-          Thank you for your payment. Your transaction has been completed successfully.
-        </Text>
-        {orderId && (
-          <Text style={[styles.orderId, { color: colors.textSecondary }]}>Order ID: {orderId}</Text>
+        {confirming ? (
+          <>
+            <ActivityIndicator size="large" color="#38B6FF" style={styles.iconContainer} />
+            <Text style={[styles.title, { color: '#38B6FF' }]}>Confirming Payment...</Text>
+            <Text style={[styles.message, { color: colors.textSecondary }]}>
+              Please wait while we confirm your transaction.
+            </Text>
+          </>
+        ) : (
+          <>
+            <View style={styles.iconContainer}>
+              <CheckCircle size={80} color="#10B981" />
+            </View>
+            <Text style={[styles.title, { color: '#10B981' }]}>
+              {confirmed ? 'Payment Confirmed!' : 'Payment Successful!'}
+            </Text>
+            <Text style={[styles.message, { color: colors.textSecondary }]}>
+              {confirmed
+                ? 'Your transaction has been confirmed and your registration is complete.'
+                : 'Thank you for your payment. Your transaction has been completed successfully.'}
+            </Text>
+          </>
         )}
+        {orderId ? (
+          <Text style={[styles.orderId, { color: colors.textSecondary }]}>Order ID: {orderId}</Text>
+        ) : null}
         <Text style={[styles.redirect, { color: '#38B6FF' }]}>
           Redirecting in {countdown} seconds...
         </Text>
@@ -130,4 +181,3 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
 });
-

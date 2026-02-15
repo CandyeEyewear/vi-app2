@@ -68,16 +68,37 @@ serve(async (req) => {
 
     console.log(`${logPrefix} Starting pending payment check...`);
 
-    // Find all pending transactions older than 1 hour
+    // First: timeout transactions older than 24 hours
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    const { data: timedOut, error: timeoutError } = await supabase
+      .from('payment_transactions')
+      .update({
+        status: 'failed',
+        response_description: 'Payment timeout - no confirmation received within 24 hours',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('status', 'pending')
+      .lt('created_at', twentyFourHoursAgo)
+      .select('id');
+
+    if (timeoutError) {
+      console.error(`${logPrefix} Timeout update error:`, timeoutError);
+    } else if (timedOut && timedOut.length > 0) {
+      console.log(`${logPrefix} Timed out ${timedOut.length} transactions older than 24 hours`);
+    }
+
+    // Then: check transactions between 1-24 hours old
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    
+
     const { data: pendingTransactions, error: fetchError } = await supabase
       .from('payment_transactions')
       .select('*, metadata')
       .eq('status', 'pending')
       .lt('created_at', oneHourAgo)
+      .gte('created_at', twentyFourHoursAgo)
       .order('created_at', { ascending: true })
-      .limit(100); // Process up to 100 transactions per run
+      .limit(100);
 
     if (fetchError) {
       throw new Error(`Failed to fetch pending transactions: ${fetchError.message}`);
@@ -90,6 +111,7 @@ serve(async (req) => {
           checked: 0,
           processed: 0,
           failed: 0,
+          timed_out: timedOut?.length || 0,
           errors: [],
           message: 'No pending transactions to check',
         }),
