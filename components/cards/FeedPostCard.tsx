@@ -626,47 +626,40 @@ export default function FeedPostCard({ post }: FeedPostCardProps) {
 
                 {/* Input Container - Fixed at bottom, above keyboard and nav bar */}
                 <SafeAreaView edges={['bottom']} style={styles.modalInputSafeArea}>
-                  <ScrollView
-                    horizontal
-                    scrollEnabled={false}
-                    contentContainerStyle={styles.modalInputScrollContent}
-                    keyboardShouldPersistTaps="always"
-                  >
-                    <View style={[
-                      styles.modalInput,
-                      {
-                        paddingBottom: Math.max(insets.bottom, 8),
-                        paddingTop: 8,
-                      }
-                    ]}>
-                      <View style={styles.commentInputWrapper}>
-                        <MentionInput
-                          style={styles.commentInput}
-                          placeholder="Write a comment... Use @ to mention"
-                          value={commentText}
-                          onChangeText={setCommentText}
-                          multiline
-                          maxLength={500}
-                          textAlignVertical="center"
-                          onSubmitEditing={handleSubmitComment}
-                          returnKeyType="default"
-                          blurOnSubmit={false}
-                        />
-                      </View>
-                      <TouchableOpacity
-                        style={[styles.sendButton, (!commentText.trim() || submitting) && styles.sendButtonDisabled]}
-                        onPress={handleSubmitComment}
-                        disabled={!commentText.trim() || submitting}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                      >
-                        {submitting ? (
-                          <ActivityIndicator size="small" color="#FFFFFF" />
-                        ) : (
-                          <Text style={styles.sendButtonText}>Send</Text>
-                        )}
-                      </TouchableOpacity>
+                  <View style={[
+                    styles.modalInput,
+                    {
+                      paddingBottom: Math.max(insets.bottom, 8),
+                      paddingTop: 8,
+                    }
+                  ]}>
+                    <View style={styles.commentInputWrapper}>
+                      <MentionInput
+                        style={styles.commentInput}
+                        placeholder="Write a comment... Use @ to mention"
+                        value={commentText}
+                        onChangeText={setCommentText}
+                        multiline
+                        maxLength={500}
+                        textAlignVertical="center"
+                        onSubmitEditing={handleSubmitComment}
+                        returnKeyType="default"
+                        blurOnSubmit={false}
+                      />
                     </View>
-                  </ScrollView>
+                    <TouchableOpacity
+                      style={[styles.sendButton, (!commentText.trim() || submitting) && styles.sendButtonDisabled]}
+                      onPress={handleSubmitComment}
+                      disabled={!commentText.trim() || submitting}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      {submitting ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <Text style={styles.sendButtonText}>Send</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
                 </SafeAreaView>
               </View>
             </Pressable>
@@ -1272,9 +1265,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.background,
     borderTopWidth: 1,
     borderTopColor: Colors.light.border,
-  },
-  modalInputScrollContent: {
-    flexGrow: 1,
+    zIndex: 10,
+    overflow: 'visible',
   },
   modalInput: {
     flexDirection: 'row',
@@ -1283,10 +1275,14 @@ const styles = StyleSheet.create({
     gap: 12,
     minHeight: 60,
     width: '100%',
+    overflow: 'visible',
+    zIndex: 10,
   },
   commentInputWrapper: {
     flex: 1,
     minWidth: 0,
+    overflow: 'visible',
+    zIndex: 10,
   },
   commentInput: {
     backgroundColor: Colors.light.card,

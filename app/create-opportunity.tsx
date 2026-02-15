@@ -138,14 +138,20 @@ export default function CreateOpportunityScreen() {
   // Check network connectivity
   const checkNetworkStatus = async (): Promise<boolean> => {
     try {
-      // Simple connectivity check by attempting a lightweight Supabase query
-      const { error } = await supabase.from('opportunities').select('id').limit(1);
-      const online = !error || error.code !== 'PGRST301';
+      // Simple connectivity check with timeout to prevent hanging
+      const result = await Promise.race([
+        supabase.from('opportunities').select('id').limit(1),
+        new Promise<{ error: { code: string } }>((_, reject) =>
+          setTimeout(() => reject(new Error('Network check timeout')), 5000)
+        ),
+      ]);
+      const online = !result.error || result.error.code !== 'PGRST301';
       setIsOnline(online);
       return online;
     } catch (error) {
-      setIsOnline(false);
-      return false;
+      // Timeout or network error — assume online and let the actual request determine connectivity
+      setIsOnline(true);
+      return true;
     }
   };
 
@@ -501,9 +507,11 @@ export default function CreateOpportunityScreen() {
       showAlert('Validation Error', validation.errorMessage || 'Please check your input', 'error');
       return;
     }
+    console.log('[CREATE_OPP] Validation passed');
 
     // Check network connectivity
     const online = await checkNetworkStatus();
+    console.log('[CREATE_OPP] Network check:', online ? 'online' : 'offline');
     if (!online) {
       showAlert(
         'Connection Check',
@@ -514,10 +522,12 @@ export default function CreateOpportunityScreen() {
 
     try {
       setLoading(true);
+      console.log('[CREATE_OPP] Starting creation...');
 
       // Upload image if provided
       let imageUrl = null;
       if (imageUri) {
+        console.log('[CREATE_OPP] Uploading image...');
         showAlert('Uploading', 'Uploading image, please wait...', 'warning');
         imageUrl = await uploadImage(imageUri);
         if (!imageUrl) {
@@ -538,7 +548,9 @@ export default function CreateOpportunityScreen() {
       }
 
       // Validate geocoding was successful
+      console.log('[CREATE_OPP] Geocoding state:', JSON.stringify(geocodingLocation));
       if (!geocodingLocation || !geocodingLocation.success) {
+        console.warn('[CREATE_OPP] Geocoding not ready');
         showAlert(
           'Location Error',
           'Please enter a valid location and wait for coordinates to be found.',

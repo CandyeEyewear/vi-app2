@@ -361,7 +361,7 @@ export default function OpportunityDetailsScreen() {
         data = result.data;
         error = result.error;
       } else {
-        // It's a slug, try slug first
+        // It's a slug, query by slug
         const slugResult = await supabase
           .from('opportunities')
           .select('*')
@@ -371,14 +371,7 @@ export default function OpportunityDetailsScreen() {
         if (slugResult.data) {
           data = slugResult.data;
         } else {
-          // Fallback: maybe it's a UUID that failed the regex (shouldn't happen, but safe)
-          const idResult = await supabase
-            .from('opportunities')
-            .select('*')
-            .eq('id', identifier)
-            .single();
-          data = idResult.data;
-          error = idResult.error;
+          error = slugResult.error || { message: 'Opportunity not found', code: 'NOT_FOUND' } as any;
         }
       }
 

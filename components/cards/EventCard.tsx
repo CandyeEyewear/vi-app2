@@ -53,8 +53,9 @@ export function EventCard({ event, onPress, onShare }: EventCardProps) {
 
 
   const categoryConfig = EVENT_CATEGORY_CONFIG[event.category] || EVENT_CATEGORY_CONFIG.other;
-  const spotsLeft = event.spotsRemaining ?? event.capacity ?? 0;
-  const hasLimitedSpots = spotsLeft !== undefined && spotsLeft <= 10 && spotsLeft > 0;
+  const hasCapacity = event.capacity != null && event.capacity > 0;
+  const spotsLeft = hasCapacity ? (event.spotsRemaining ?? event.capacity) : null;
+  const hasLimitedSpots = spotsLeft != null && spotsLeft <= 10 && spotsLeft > 0;
 
 
   const handleSharePress = () => {
@@ -162,13 +163,14 @@ export function EventCard({ event, onPress, onShare }: EventCardProps) {
 
         {/* Footer */}
         <View style={styles.footer}>
+          {hasCapacity && (
           <View style={styles.detailRow}>
-            <Users size={14} color={hasLimitedSpots ? colors.warning : colors.textSecondary} />
+            <Users size={14} color={spotsLeft === 0 ? colors.error : hasLimitedSpots ? colors.warning : colors.textSecondary} />
             <Text
               style={[
                 styles.detailText,
-                { 
-                  color: hasLimitedSpots ? colors.warning : colors.textSecondary,
+                {
+                  color: spotsLeft === 0 ? colors.error : hasLimitedSpots ? colors.warning : colors.textSecondary,
                   fontWeight: '600'
                 }
               ]}
@@ -176,6 +178,7 @@ export function EventCard({ event, onPress, onShare }: EventCardProps) {
               {spotsLeft === 0 ? 'Sold out' : `${spotsLeft} spots left`}
             </Text>
           </View>
+          )}
           <Text style={[styles.date, { color: colors.text }]}>
             {(() => {
               const eventDate = new Date(event.eventDate);
