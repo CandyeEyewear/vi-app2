@@ -19,6 +19,25 @@ import { formatStorageUrl } from '../utils/storageHelpers';
 // ==================== HELPER FUNCTIONS ====================
 
 /**
+ * Parse a date-only value (YYYY-MM-DD) as a LOCAL date.
+ * Avoids timezone shifts caused by new Date('YYYY-MM-DD') which is parsed as UTC.
+ */
+function parseDateOnlyLocal(dateString: string): Date {
+  if (!dateString) return new Date(NaN);
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateString.trim());
+  if (match) {
+    const year = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10);
+    const day = parseInt(match[3], 10);
+    return new Date(year, month - 1, day);
+  }
+
+  // Fallback for non date-only strings
+  return new Date(dateString);
+}
+
+/**
  * Transform database row (snake_case) to Event object (camelCase)
  */
 function transformEvent(row: any): Event {
@@ -205,7 +224,7 @@ export async function getEvents(options?: {
       events = events.filter((event) => {
         if (!event.eventDate) return true; // Show events without dates
         
-        const eventDate = new Date(event.eventDate);
+        const eventDate = parseDateOnlyLocal(event.eventDate);
         eventDate.setHours(23, 59, 59, 999);
         
         // Show event if it's today or in the future
@@ -796,7 +815,7 @@ export async function deregisterUser(
  * Format event date for display
  */
 export function formatEventDate(dateString: string): string {
-  const date = new Date(dateString);
+  const date = parseDateOnlyLocal(dateString);
   return date.toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
@@ -837,8 +856,9 @@ export function formatEventTime(timeString: string | null | undefined): string {
  * Check if event is happening today
  */
 export function isEventToday(dateString: string): boolean {
-  const eventDate = new Date(dateString);
+  const eventDate = parseDateOnlyLocal(dateString);
   const today = new Date();
+  today.setHours(0, 0, 0, 0);
   return eventDate.toDateString() === today.toDateString();
 }
 
@@ -846,7 +866,7 @@ export function isEventToday(dateString: string): boolean {
  * Check if event is in the past
  */
 export function isEventPast(dateString: string): boolean {
-  const eventDate = new Date(dateString);
+  const eventDate = parseDateOnlyLocal(dateString);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return eventDate < today;
@@ -856,7 +876,7 @@ export function isEventPast(dateString: string): boolean {
  * Get days until event
  */
 export function getDaysUntilEvent(dateString: string): number {
-  const eventDate = new Date(dateString);
+  const eventDate = parseDateOnlyLocal(dateString);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   eventDate.setHours(0, 0, 0, 0);

@@ -100,7 +100,7 @@ export default function OpportunityReviewsScreen() {
         return;
       }
 
-      setOpportunities(data || []);
+      setOpportunities((data as PendingOpportunity[]) || []);
     } catch (error) {
       console.error('Error loading pending opportunities:', error);
     } finally {

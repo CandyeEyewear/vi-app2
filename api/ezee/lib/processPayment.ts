@@ -151,6 +151,11 @@ async function handleEventRegistration(
       .eq('id', transaction.reference_id)
       .single();
 
+    if (!registration) {
+      console.error(`${logPrefix} Registration not found for reference_id: ${transaction.reference_id}`);
+      throw new Error(`Registration not found: ${transaction.reference_id}`);
+    }
+
     const { error: eventError } = await supabase
       .from('event_registrations')
       .update({

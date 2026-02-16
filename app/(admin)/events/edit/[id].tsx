@@ -159,6 +159,18 @@ export default function EditEventScreen() {
     return `${year}-${month}-${day}`;
   };
 
+  // Parse YYYY-MM-DD as a local date to avoid timezone day-shift
+  const parseDateInputLocal = (value: string): Date => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value.trim());
+    if (match) {
+      const year = parseInt(match[1], 10);
+      const month = parseInt(match[2], 10);
+      const day = parseInt(match[3], 10);
+      return new Date(year, month - 1, day);
+    }
+    return new Date(value);
+  };
+
   // Capacity
   const [hasCapacity, setHasCapacity] = useState(false);
   const [capacity, setCapacity] = useState('');
@@ -224,7 +236,7 @@ export default function EditEventScreen() {
           setLongitude(event.longitude || null);
           // Parse date and time
           if (event.eventDate) {
-            const eventDateObj = new Date(event.eventDate);
+            const eventDateObj = parseDateInputLocal(event.eventDate);
             setEventDate(eventDateObj);
           }
           if (event.startTime) {
@@ -237,7 +249,7 @@ export default function EditEventScreen() {
           setCapacity(event.capacity?.toString() || '');
           setRegistrationRequired(event.registrationRequired);
           if (event.registrationDeadline) {
-            setRegistrationDeadline(new Date(event.registrationDeadline));
+            setRegistrationDeadline(parseDateInputLocal(event.registrationDeadline));
           }
           setIsFree(event.isFree);
           setTicketPrice(event.ticketPrice?.toString() || '');

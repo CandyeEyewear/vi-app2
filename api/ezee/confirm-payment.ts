@@ -103,18 +103,22 @@ export default async function handler(req: any, res: any) {
     }
 
     // Log to payment_webhooks for audit trail
-    await supabase.from('payment_webhooks').insert({
-      event_type: 'success_page_confirm',
-      transaction_number: transactionNumber,
-      payload: {
-        transaction_id: transaction.id,
-        order_id,
-        order_type: transaction.order_type,
-        confirmed_via: 'payment_success_redirect',
-      },
-      processed: true,
-      processed_at: new Date().toISOString(),
-    }).catch(err => console.error(`${logPrefix} Audit log error:`, err));
+    try {
+      await supabase.from('payment_webhooks').insert({
+        event_type: 'success_page_confirm',
+        transaction_number: transactionNumber,
+        payload: {
+          transaction_id: transaction.id,
+          order_id,
+          order_type: transaction.order_type,
+          confirmed_via: 'payment_success_redirect',
+        },
+        processed: true,
+        processed_at: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error(`${logPrefix} Audit log error:`, err);
+    }
 
     return res.status(200).json({
       success: true,
