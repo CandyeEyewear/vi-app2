@@ -2,6 +2,9 @@ import { createClient, type SupportedStorage } from '@supabase/supabase-js';
 
 import { supabaseConfig } from '../config/supabase.config';
 
+// Safe __DEV__ check — React Native (Metro) defines this global, but Node.js/Vercel does not
+const isDev = typeof __DEV__ !== 'undefined' && __DEV__;
+
 // Detect environment: React Native, Web, or Node.js server
 const isWeb = typeof window !== 'undefined' && typeof document !== 'undefined';
 
@@ -81,7 +84,7 @@ const createSecureStoreAdapter = (): SupportedStorage => {
         cache.set(key, { value, timestamp: now });
         
         // Only log if value changed or it's the first read
-        if (__DEV__ && (key !== lastLoggedKey || value !== lastLoggedValue)) {
+        if (isDev && (key !== lastLoggedKey || value !== lastLoggedValue)) {
           if (key.includes('auth')) {
             console.log(`[SUPABASE] 🔍 Session check: ${value ? '✅ Found' : '❌ Not found'}`);
             if (value) {
@@ -117,7 +120,7 @@ const createSecureStoreAdapter = (): SupportedStorage => {
         cache.set(key, { value, timestamp: Date.now() });
         
         // Only log on actual changes
-        if (__DEV__ && key.includes('auth')) {
+        if (isDev && key.includes('auth')) {
           try {
             const parsed = JSON.parse(value);
             console.log(`[SUPABASE] 💾 Session updated:`, {
@@ -141,7 +144,7 @@ const createSecureStoreAdapter = (): SupportedStorage => {
         await SecureStore.deleteItemAsync(key);
         // Clear cache
         cache.delete(key);
-        if (__DEV__ && key.includes('auth')) {
+        if (isDev && key.includes('auth')) {
           console.log(`[SUPABASE] 🗑️ Session cleared`);
         }
       } catch (error) {
@@ -203,7 +206,7 @@ const createAsyncStorageAdapter = (): SupportedStorage => {
 const getStorage = (): SupportedStorage | undefined => {
   // Server environment - no storage needed
   if (isServer) {
-    if (__DEV__) {
+    if (isDev) {
       console.log('[SUPABASE] Server environment - no storage needed');
     }
     return undefined;
@@ -211,7 +214,7 @@ const getStorage = (): SupportedStorage | undefined => {
 
   // Web environment - Supabase uses localStorage automatically
   if (isWeb) {
-    if (__DEV__) {
+    if (isDev) {
       console.log('[SUPABASE] Using localStorage for session persistence (web)');
     }
     return undefined;
@@ -219,7 +222,7 @@ const getStorage = (): SupportedStorage | undefined => {
 
   // React Native environment - use SecureStore
   if (isReactNative) {
-    if (__DEV__) {
+    if (isDev) {
       console.log('[SUPABASE] ✅ Using SecureStore for session persistence (PKCE-compatible)');
       console.log('[SUPABASE] Platform.OS:', Platform?.OS ?? 'unknown');
     }
@@ -227,7 +230,7 @@ const getStorage = (): SupportedStorage | undefined => {
     // Verify SecureStore is actually available
     if (!SecureStore || !SecureStore.getItemAsync) {
       if (AsyncStorage && AsyncStorage.getItem && AsyncStorage.setItem && AsyncStorage.removeItem) {
-        if (__DEV__) {
+        if (isDev) {
           console.warn('[SUPABASE] ⚠️ SecureStore not available. Using AsyncStorage adapter.');
         }
         return createAsyncStorageAdapter();
@@ -238,14 +241,14 @@ const getStorage = (): SupportedStorage | undefined => {
     }
     
     const adapter = createSecureStoreAdapter();
-    if (__DEV__) {
+    if (isDev) {
       console.log('[SUPABASE] ✅ SecureStore adapter created with caching');
     }
     return adapter;
   }
 
   // Fallback
-  if (__DEV__) {
+  if (isDev) {
     console.log('[SUPABASE] ⚠️ Unknown environment, using default storage');
   }
   return undefined;
@@ -253,7 +256,7 @@ const getStorage = (): SupportedStorage | undefined => {
 
 // Initialize storage
 const storage = getStorage();
-if (__DEV__) {
+if (isDev) {
   console.log('[SUPABASE] 📦 Storage initialized:', storage ? 'SecureStore adapter' : 'undefined (using default)');
 }
 
@@ -273,7 +276,7 @@ export const supabase = createClient(
   }
 );
 
-if (__DEV__) {
+if (isDev) {
   console.log('[SUPABASE] ✅ Supabase client created with storage:', storage ? 'SecureStore' : 'default');
 }
 
