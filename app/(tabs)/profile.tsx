@@ -20,7 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors } from '../../constants/colors';
-import { Shield, ShoppingBag, Plus, Edit, Settings, Calendar, Crown, Heart, ChevronRight, ExternalLink } from 'lucide-react-native';
+import { Shield, ShoppingBag, Plus, Edit, Settings, Calendar, Crown, Heart, ChevronRight, ExternalLink, Building2 } from 'lucide-react-native';
 import StreakBadge from '../../components/StreakBadge';
 import { UserAvatar, UserNameWithBadge } from '../../components/index';
 import Head from 'expo-router/head';
@@ -249,6 +249,42 @@ export default function ProfileScreen() {
               <Text style={styles.adminCardTitle}>Admin Dashboard</Text>
               <Text style={styles.adminCardSubtitle}>
                 Manage opportunities, events, and announcements
+              </Text>
+            </View>
+          </View>
+        </AnimatedPressable>
+      )}
+
+      {/* Partner Dashboard Access - Only visible to partner organizations with active membership */}
+      {user?.is_partner_organization && user?.membershipStatus === 'active' && (
+        <AnimatedPressable
+          style={[styles.adminCard, surfaceShadow, { backgroundColor: '#F59E0B' }]}
+          onPress={() => router.push('/(partner)/dashboard')}
+        >
+          <View style={styles.adminCardContent}>
+            <Building2 size={32} color="#FFFFFF" strokeWidth={2} />
+            <View style={styles.adminCardText}>
+              <Text style={styles.adminCardTitle}>Partner Dashboard</Text>
+              <Text style={styles.adminCardSubtitle}>
+                Manage your team and view metrics
+              </Text>
+            </View>
+          </View>
+        </AnimatedPressable>
+      )}
+
+      {/* Partner Renewal Card - Shown when partner org has inactive/expired membership */}
+      {user?.is_partner_organization && user?.membershipStatus !== 'active' && (
+        <AnimatedPressable
+          style={[styles.adminCard, surfaceShadow, { backgroundColor: '#78716C' }]}
+          onPress={() => router.push('/(organization)/subscribe')}
+        >
+          <View style={styles.adminCardContent}>
+            <Building2 size={32} color="#FFFFFF" strokeWidth={2} />
+            <View style={styles.adminCardText}>
+              <Text style={styles.adminCardTitle}>Partner Dashboard</Text>
+              <Text style={styles.adminCardSubtitle}>
+                Subscription inactive — tap to renew
               </Text>
             </View>
           </View>

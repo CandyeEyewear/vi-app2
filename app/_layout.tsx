@@ -28,6 +28,8 @@ import { useAlert } from '../hooks/useAlert';
 import CustomAlert from '../components/CustomAlert';
 import { AlertProvider } from '../contexts/AlertContext';
 import { isWeb } from '../utils/platform';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from '../services/queryClient';
 
 Sentry.init({
   dsn: 'https://e3cd7fd70496e616a2ed41f8085eaee3@o4510512782180352.ingest.us.sentry.io/4510512792600576',
@@ -74,7 +76,7 @@ function AppContent() {
   const showWebNav = isDesktop && !!user;
 
   const sanitizedPathname = pathname || '/';
-  const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/reset-password', '/set-password'];
+  const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/reset-password', '/set-password', '/accept-invite'];
   const publicRoutePrefixes = ['/post/'];
   const isPublicRoute =
     publicRoutes.includes(sanitizedPathname) ||
@@ -415,6 +417,18 @@ function AppContent() {
 
       // Handle web URLs
       if (parsed.hostname === 'vibe.volunteersinc.org' || parsed.scheme === 'vibe') {
+        // Partner invite acceptance
+        if (parsed.path === '/accept-invite' || parsed.path?.includes('accept-invite')) {
+          const inviteToken = parsed.queryParams?.token;
+          if (inviteToken) {
+            const tkn = Array.isArray(inviteToken) ? inviteToken[0] : inviteToken;
+            logger.info('[DEEP LINK] Navigating to accept-invite', { token: tkn });
+            router.push(`/accept-invite?token=${tkn}` as any);
+            return;
+          }
+        }
+
+        // Referral invite (existing flow)
         if (parsed.path === '/invite' || parsed.path?.includes('invite')) {
           const inviteCode = parsed.queryParams?.code || parsed.queryParams?.ref || parsed.queryParams?.invite;
           if (inviteCode) {
@@ -505,25 +519,27 @@ function AppContent() {
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <NetworkProvider>
-        <AuthProvider>
-          <FeedProvider>
-            <MessagingProvider>
-              <AlertProvider>
-                {isWeb ? (
-                  <MobileWebSafeContainer>
-                    <AppContent />
-                  </MobileWebSafeContainer>
-                ) : (
-                  <View style={styles.container}>
-                    <AppContent />
-                  </View>
-                )}
-              </AlertProvider>
-            </MessagingProvider>
-          </FeedProvider>
-        </AuthProvider>
-      </NetworkProvider>
+      <QueryClientProvider client={queryClient}>
+        <NetworkProvider>
+          <AuthProvider>
+            <FeedProvider>
+              <MessagingProvider>
+                <AlertProvider>
+                  {isWeb ? (
+                    <MobileWebSafeContainer>
+                      <AppContent />
+                    </MobileWebSafeContainer>
+                  ) : (
+                    <View style={styles.container}>
+                      <AppContent />
+                    </View>
+                  )}
+                </AlertProvider>
+              </MessagingProvider>
+            </FeedProvider>
+          </AuthProvider>
+        </NetworkProvider>
+      </QueryClientProvider>
     </GestureHandlerRootView>
   );
 }

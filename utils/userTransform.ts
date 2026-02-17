@@ -41,6 +41,7 @@ export interface DbUser {
   account_type: string | null;
   approval_status: string | null;
   is_partner_organization: boolean | null;
+  partner_org_id: string | null;
   organization_data: any | null;
 
   // Moderation fields (optional)
@@ -109,6 +110,7 @@ export function mapDbUserToUser(dbUser: DbUser): User {
     account_type: coerceAccountType(dbUser.account_type),
     approval_status: (dbUser.approval_status as User['approval_status']) ?? undefined,
     is_partner_organization: dbUser.is_partner_organization || false,
+    partner_org_id: dbUser.partner_org_id ?? null,
     organization_data: (dbUser.organization_data as User['organization_data']) ?? null,
 
     isBanned: dbUser.is_banned ?? undefined,

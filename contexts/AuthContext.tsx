@@ -31,6 +31,8 @@ interface AuthContextType {
   refreshSession: () => Promise<boolean>;
   isAdmin: boolean;
   isSup: boolean;
+  isPartner: boolean;
+  isPartnerActive: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -1447,6 +1449,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isAdmin = sessionAppRole === 'admin' || user?.role === 'admin';
   const isSup = sessionAppRole === 'sup' || user?.role === 'sup';
+  const isPartner = user?.is_partner_organization === true;
+  const isPartnerActive = isPartner && user?.membershipStatus === 'active';
   
   // Debug logging for role checks
   if (__DEV__ && user) {
@@ -1476,6 +1480,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         refreshSession,
         isAdmin,
         isSup,
+        isPartner,
+        isPartnerActive,
       }}
     >
       {children}

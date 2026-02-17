@@ -34,6 +34,7 @@ export interface User {
   account_type?: 'individual' | 'organization' | 'volunteer';
   approval_status?: 'pending' | 'approved' | 'rejected';
   is_partner_organization?: boolean;
+  partner_org_id?: string | null;
   organization_data?: {
     organization_name: string;
     registration_number: string;
