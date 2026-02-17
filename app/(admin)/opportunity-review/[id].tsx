@@ -187,8 +187,64 @@ export default function OpportunityReviewDetailScreen() {
         });
       }
 
+      // Broadcast "New Opportunity" notification to all volunteers (same as admin-created)
+      void (async () => {
+        try {
+          const { data: userIds, error: notifError } = await supabase.rpc(
+            'create_opportunity_notifications',
+            {
+              p_opportunity_id: opportunityId,
+              p_title: opportunity.title,
+              p_organization_name: opportunity.organization_name,
+              p_sender_id: user.id,
+            }
+          );
+
+          if (notifError || !userIds || !Array.isArray(userIds) || userIds.length === 0) return;
+
+          const userIdsArray = userIds.map((u: any) => u.user_id);
+          const { data: users, error: usersError } = await supabase
+            .from('users')
+            .select('id, push_token')
+            .in('id', userIdsArray)
+            .not('push_token', 'is', null);
+
+          if (usersError || !users?.length) return;
+
+          const { data: settingsData } = await supabase
+            .from('user_notification_settings')
+            .select('user_id, opportunities_enabled')
+            .in('user_id', users.map((u: any) => u.id));
+
+          const settingsMap = new Map((settingsData || []).map((s: any) => [s.user_id, s.opportunities_enabled]));
+          const enabledUsers = users.filter((u: any) => {
+            const setting = settingsMap.get(u.id);
+            return setting === true || setting === undefined;
+          });
+
+          await Promise.allSettled(
+            enabledUsers.map(async (u: any) => {
+              await sendNotificationToUser(u.id, {
+                type: 'opportunity',
+                id: opportunityId as string,
+                title: 'New Opportunity Available',
+                body: `${opportunity.title} - ${opportunity.organization_name}`,
+              });
+
+              await sendEmailNotification(u.id, 'opportunity', {
+                title: opportunity.title,
+                description: opportunity.description?.substring(0, 200),
+                id: opportunityId as string,
+              });
+            })
+          );
+        } catch (broadcastErr) {
+          console.error('Error broadcasting opportunity notification:', broadcastErr);
+        }
+      })();
+
       showAlert('Success!', 'Opportunity has been approved and is now active', 'success');
-      
+
       setTimeout(() => {
         router.back();
       }, 2000);
