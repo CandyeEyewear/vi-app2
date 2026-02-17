@@ -137,14 +137,20 @@ export default function ProposeOpportunityScreen() {
   // Check network connectivity
   const checkNetworkStatus = async (): Promise<boolean> => {
     try {
-      // Simple connectivity check by attempting a lightweight Supabase query
-      const { error } = await supabase.from('opportunities').select('id').limit(1);
-      const online = !error || error.code !== 'PGRST301';
+      // Simple connectivity check with timeout to prevent hanging
+      const result = await Promise.race([
+        supabase.from('opportunities').select('id').limit(1),
+        new Promise<{ error: { code: string } }>((_, reject) =>
+          setTimeout(() => reject(new Error('Network check timeout')), 5000)
+        ),
+      ]);
+      const online = !result.error || result.error.code !== 'PGRST301';
       setIsOnline(online);
       return online;
     } catch (error) {
-      setIsOnline(false);
-      return false;
+      // Timeout or network error — assume online and let the actual request determine connectivity
+      setIsOnline(true);
+      return true;
     }
   };
 
