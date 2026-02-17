@@ -1350,10 +1350,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const fullName = userData?.full_name || 'there';
 
-      // Determine redirect URL based on platform
-      const redirectUrl = isWeb 
-        ? 'https://vibe.volunteersinc.org/reset-password'
-        : 'vibe://reset-password';
+      // Always use the web URL for password reset redirects.
+      // Emails are opened in a browser, and custom schemes (vibe://) don't work
+      // reliably from web browsers or through email link wrappers (e.g. Gmail).
+      const redirectUrl = 'https://vibe.volunteersinc.org/reset-password';
       
       console.log('[AUTH] 📧 Redirect URL:', redirectUrl);
 
