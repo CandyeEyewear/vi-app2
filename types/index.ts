@@ -97,7 +97,7 @@ export type OpportunityCategory =
 
 export type OpportunityStatus = 'active' | 'full' | 'completed' | 'cancelled';
 
-export type VisibilityType = 'public' | 'members_only';
+export type VisibilityType = 'public' | 'members_only' | 'organization_only';
 
 export interface Opportunity {
   id: string;
@@ -147,7 +147,8 @@ contactPersonPhone?: string;
   // Status
   status: OpportunityStatus;
   visibility?: VisibilityType;
-  
+  ownerOrgId?: string;
+
   // Admin info
   createdBy?: string; // Admin user ID
   

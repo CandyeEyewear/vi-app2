@@ -35,7 +35,7 @@ import {
   UIManager,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack, useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { Swipeable } from 'react-native-gesture-handler';
 import { LinearGradient } from 'expo-linear-gradient';
 import { 
@@ -54,6 +54,7 @@ import { useDebounce } from '../../hooks/useDebounce';
 import { CausesList } from '../../components/CausesList';
 import { EventsList } from '../../components/EventsList';
 import Head from 'expo-router/head';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import {
   searchOpportunities,
   getSearchHistory,
@@ -755,9 +756,6 @@ export default function DiscoverScreen() {
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
   
   const [searchBarLayout, setSearchBarLayout] = useState({ y: 0, height: 0 });
-  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<OpportunityCategory | 'all' | 'nearMe'>((params.category as any) || 'all');
   const [searchQuery, setSearchQuery] = useState((params.query as string) || '');
   const [searchInputValue, setSearchInputValue] = useState((params.query as string) || '');
@@ -776,9 +774,14 @@ export default function DiscoverScreen() {
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationPermission, setLocationPermission] = useState<boolean>(false);
   const [requestingLocation, setRequestingLocation] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const PAGE_SIZE = 20;
+  const roundedLocationForKey = useMemo(() => {
+    if (!userLocation) return { lat: null as number | null, lng: null as number | null };
+    return {
+      lat: Math.round(userLocation.latitude * 100) / 100,
+      lng: Math.round(userLocation.longitude * 100) / 100,
+    };
+  }, [userLocation]);
 
   // Load search history
   const loadSearchHistory = async () => { setSearchHistory(await getSearchHistory()); };
@@ -820,58 +823,118 @@ export default function DiscoverScreen() {
 
   useEffect(() => { if (selectedCategory === 'nearMe' && !userLocation && !requestingLocation) getUserLocation(); }, [selectedCategory]);
 
-  // Load opportunities
-  const loadOpportunities = async (append: boolean = false) => {
-    try {
-      if (!append) { setLoading(true); setError(null); } else { setLoadingMore(true); }
+  const fetchOpportunitiesPage = useCallback(async (startIndex: number): Promise<Opportunity[]> => {
+    let isPremiumMember = false;
+    let isAdminUser = false;
 
-      let isPremiumMember = false, isAdminUser = false;
-      if (user?.id) {
-        const { data: userData } = await supabase.from('users').select('membership_tier, membership_status, role').eq('id', user.id).single();
-        isPremiumMember = userData?.membership_tier === 'premium' && userData?.membership_status === 'active';
-        isAdminUser = userData?.role === 'admin';
-      }
+    if (user?.id) {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('membership_tier, membership_status, role')
+        .eq('id', user.id)
+        .single();
+      isPremiumMember = userData?.membership_tier === 'premium' && userData?.membership_status === 'active';
+      isAdminUser = userData?.role === 'admin';
+    }
 
-      let query = supabase.from('opportunities').select('*').eq('status', 'active').or('proposal_status.is.null,proposal_status.eq.approved');
-      if (!isAdminUser && !isPremiumMember) query = query.or('visibility.is.null,visibility.eq.public');
-      if (selectedCategory !== 'all' && selectedCategory !== 'nearMe') query = query.eq('category', selectedCategory);
-      query = query.order('date', { ascending: true });
-      if (append) query = query.range(opportunities.length, opportunities.length + PAGE_SIZE - 1);
-      else query = query.limit(PAGE_SIZE);
+    let query = supabase
+      .from('opportunities')
+      .select('*')
+      .eq('status', 'active')
+      .or('proposal_status.is.null,proposal_status.eq.approved');
 
-      const { data, error: queryError } = await query;
-      if (queryError) throw queryError;
+    if (!isAdminUser && !isPremiumMember) query = query.or('visibility.is.null,visibility.eq.public');
+    if (selectedCategory !== 'all' && selectedCategory !== 'nearMe') query = query.eq('category', selectedCategory);
 
-      const opportunitiesData: Opportunity[] = (data || []).map((opp) => ({
-        id: opp.id,
-        slug: opp.slug,
-        title: opp.title, description: opp.description, organizationName: opp.organization_name,
-        organizationVerified: opp.organization_verified, category: opp.category, location: opp.location,
-        latitude: opp.latitude, longitude: opp.longitude, mapLink: opp.map_link, date: opp.date,
-        dateStart: opp.date_start, dateEnd: opp.date_end, timeStart: opp.time_start, timeEnd: opp.time_end,
-        duration: opp.duration, spotsAvailable: opp.spots_available, spotsTotal: opp.spots_total,
-        requirements: opp.requirements, skillsNeeded: opp.skills_needed, impactStatement: opp.impact_statement,
-        imageUrl: opp.image_url, status: opp.status, visibility: opp.visibility || 'public',
-        createdBy: opp.created_by, createdAt: opp.created_at, updatedAt: opp.updated_at,
-        distance: userLocation && opp.latitude && opp.longitude ? calculateDistance(userLocation.latitude, userLocation.longitude, opp.latitude, opp.longitude) : undefined,
-      }));
+    query = query
+      .order('date', { ascending: true })
+      .range(startIndex, startIndex + PAGE_SIZE - 1);
 
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      let filteredData = isAdminUser ? opportunitiesData : opportunitiesData.filter((opp) => {
-        const oppDate = opp.dateEnd ? new Date(opp.dateEnd) : opp.date ? new Date(opp.date) : null;
-        if (!oppDate) return true;
-        const oppDateEnd = new Date(oppDate); oppDateEnd.setHours(23, 59, 59, 999);
-        return oppDateEnd >= today;
-      });
+    const { data, error } = await query;
+    if (error) throw error;
 
-      if (append) { setOpportunities(prev => [...prev, ...filteredData]); setHasMore(filteredData.length === PAGE_SIZE); }
-      else { setOpportunities(filteredData); setHasMore(filteredData.length === PAGE_SIZE); }
-    } catch (error: any) { console.error('Error loading opportunities:', error); setError(error.message || 'Failed to load opportunities'); }
-    finally { setLoading(false); setLoadingMore(false); }
-  };
+    const opportunitiesData: Opportunity[] = (data || []).map((opp) => ({
+      id: opp.id,
+      slug: opp.slug,
+      title: opp.title,
+      description: opp.description,
+      organizationName: opp.organization_name,
+      organizationVerified: opp.organization_verified,
+      category: opp.category,
+      location: opp.location,
+      latitude: opp.latitude,
+      longitude: opp.longitude,
+      mapLink: opp.map_link,
+      date: opp.date,
+      dateStart: opp.date_start,
+      dateEnd: opp.date_end,
+      timeStart: opp.time_start,
+      timeEnd: opp.time_end,
+      duration: opp.duration,
+      spotsAvailable: opp.spots_available,
+      spotsTotal: opp.spots_total,
+      requirements: opp.requirements,
+      skillsNeeded: opp.skills_needed,
+      impactStatement: opp.impact_statement,
+      imageUrl: opp.image_url,
+      status: opp.status,
+      visibility: opp.visibility || 'public',
+      ownerOrgId: opp.owner_org_id,
+      createdBy: opp.created_by,
+      createdAt: opp.created_at,
+      updatedAt: opp.updated_at,
+      distance:
+        userLocation && opp.latitude && opp.longitude
+          ? calculateDistance(userLocation.latitude, userLocation.longitude, opp.latitude, opp.longitude)
+          : undefined,
+    }));
 
-  useEffect(() => { loadOpportunities(); }, [selectedCategory]);
-  useEffect(() => { if (userLocation) loadOpportunities(); }, [userLocation]);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return isAdminUser
+      ? opportunitiesData
+      : opportunitiesData.filter((opp) => {
+          const oppDate = opp.dateEnd ? new Date(opp.dateEnd) : opp.date ? new Date(opp.date) : null;
+          if (!oppDate) return true;
+          const oppDateEnd = new Date(oppDate);
+          oppDateEnd.setHours(23, 59, 59, 999);
+          return oppDateEnd >= today;
+        });
+  }, [PAGE_SIZE, selectedCategory, user?.id, userLocation]);
+
+  const {
+    data: opportunitiesPages,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    refetch: refetchOpportunities,
+    error: opportunitiesError,
+  } = useInfiniteQuery({
+    queryKey: [
+      'discover',
+      'opportunities',
+      user?.id ?? 'anonymous',
+      selectedCategory,
+      roundedLocationForKey.lat,
+      roundedLocationForKey.lng,
+    ],
+    queryFn: ({ pageParam }) => fetchOpportunitiesPage(pageParam as number),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.length === PAGE_SIZE ? allPages.length * PAGE_SIZE : undefined,
+    staleTime: 60_000,
+  });
+
+  const opportunities = useMemo(
+    () => opportunitiesPages?.pages.flatMap((page) => page) ?? [],
+    [opportunitiesPages]
+  );
+  const loading = isLoading && opportunities.length === 0;
+  const loadingMore = isFetchingNextPage;
+  const hasMore = !!hasNextPage;
+  const error = opportunitiesError instanceof Error ? opportunitiesError.message : null;
 
   // Filtered opportunities
   const filteredOpportunities = useMemo(() => {
@@ -943,13 +1006,21 @@ export default function DiscoverScreen() {
 
   const handleClearSearch = useCallback(() => { if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current); setSearchInputValue(''); setSearchQuery(''); setShowSuggestions(false); setTimeout(() => searchInputRef.current?.focus(), 50); }, []);
   const handleSelectSuggestion = useCallback((suggestion: string) => { setSearchInputValue(suggestion); setSearchQuery(suggestion); setShowSuggestions(false); saveSearchToHistory(suggestion); loadSearchHistory(); }, []);
-  const handleSelectCategory = useCallback((category: string) => { setSelectedCategory(category as any); setSelectedQuickFilter(null); loadOpportunities(); }, []);
+  const handleSelectCategory = useCallback((category: string) => {
+    setSelectedCategory(category as any);
+    setSelectedQuickFilter(null);
+  }, []);
   const handleSelectQuickFilter = useCallback(async (filterId: string) => { if (selectedQuickFilter === filterId) { setSelectedQuickFilter(null); return; } setSelectedQuickFilter(filterId); setSelectedCategory('all'); if (filterId === 'saved') await loadSavedOpportunityIds(); }, [selectedQuickFilter, loadSavedOpportunityIds]);
-  const handleApplyFilters = useCallback(() => { loadOpportunities(); }, []);
-  const handleLoadMore = useCallback(() => { if (!loadingMore && hasMore && !searchQuery.trim()) loadOpportunities(true); }, [loadingMore, hasMore, searchQuery]);
+  const handleApplyFilters = useCallback(() => {
+    refetchOpportunities();
+  }, [refetchOpportunities]);
+  const handleLoadMore = useCallback(() => {
+    if (!loadingMore && hasMore && !searchQuery.trim()) {
+      fetchNextPage();
+    }
+  }, [loadingMore, hasMore, searchQuery, fetchNextPage]);
 
   useEffect(() => { return () => { if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current); }; }, []);
-  useFocusEffect(React.useCallback(() => { loadOpportunities(); }, []));
 
   const filterCounts = useMemo(() => ({
     trending: opportunities.length > 0 ? Math.min(opportunities.length, 12) : 0,
@@ -992,12 +1063,12 @@ export default function DiscoverScreen() {
 
   const renderEmptyComponent = useCallback(() => {
     if (loading) return <View style={styles.listContent}><OpportunitiesSkeleton count={4} /></View>;
-    if (error) return <EmptyState icon={X} title="Error loading opportunities" subtitle={error} action={{ label: 'Retry', onPress: () => loadOpportunities() }} colors={colors} />;
+    if (error) return <EmptyState icon={X} title="Error loading opportunities" subtitle={error} action={{ label: 'Retry', onPress: () => refetchOpportunities() }} colors={colors} />;
     if (searchQuery.trim() && filteredOpportunities.length === 0) return <EmptyState icon={Search} title="No results for that search" subtitle={`We couldn't find opportunities matching "${searchQuery}"`} action={{ label: 'Clear Search', onPress: () => { setSearchQuery(''); setSearchInputValue(''); setSelectedQuickFilter(null); } }} suggestions={['Try different keywords', 'Browse all opportunities']} colors={colors} />;
     if (selectedCategory !== 'all' && filteredOpportunities.length === 0) return <EmptyState icon={Filter} title="No opportunities in this category" subtitle={`There are no ${selectedCategory} opportunities right now`} action={{ label: 'View All', onPress: () => handleSelectCategory('all') }} colors={colors} />;
     if (selectedQuickFilter && filteredOpportunities.length === 0) return <EmptyState icon={selectedQuickFilter === 'saved' ? Bookmark : TrendingUp} title={`No ${QUICK_FILTERS.find(f => f.id === selectedQuickFilter)?.label || ''} opportunities`} subtitle="Try a different filter" action={{ label: 'View All', onPress: () => { setSelectedQuickFilter(null); handleSelectCategory('all'); } }} colors={colors} />;
     return <EmptyState icon={Lightbulb} title="Discover volunteer opportunities" subtitle="Browse and find opportunities that match your interests" action={{ label: 'Browse Categories', onPress: () => handleSelectCategory('all') }} colors={colors} />;
-  }, [loading, error, colors, searchQuery, selectedCategory, selectedQuickFilter, filteredOpportunities.length, handleSelectCategory]);
+  }, [loading, error, colors, searchQuery, selectedCategory, selectedQuickFilter, filteredOpportunities.length, handleSelectCategory, refetchOpportunities]);
 
   return (
     <>
@@ -1036,7 +1107,9 @@ export default function DiscoverScreen() {
                 { paddingBottom: 12 + insets.bottom },
               ]}
               columnWrapperStyle={width >= 600 ? styles.columnWrapper : undefined}
-              refreshControl={<RefreshControl refreshing={loading && !loadingMore} onRefresh={() => loadOpportunities()} tintColor={colors.primary} colors={[colors.primary]} />}
+              refreshControl={<RefreshControl refreshing={loading && !loadingMore} onRefresh={() => {
+                refetchOpportunities();
+              }} tintColor={colors.primary} colors={[colors.primary]} />}
               ListEmptyComponent={renderEmptyComponent}
               ListFooterComponent={loadingMore ? <LoadingFooter colors={colors} /> : null}
               onEndReached={handleLoadMore}

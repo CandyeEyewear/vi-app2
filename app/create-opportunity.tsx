@@ -14,7 +14,6 @@ import {
   Platform,
   Image,
   ActivityIndicator,
-  Switch,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -36,6 +35,7 @@ import {
   Link as LinkIcon,
   Globe,
   Lock,
+  Building2,
 } from 'lucide-react-native';
 import { supabase } from '../services/supabase';
 import { geocodeLocation, GeocodeResult } from '../services/geocoding';
@@ -588,6 +588,7 @@ export default function CreateOpportunityScreen() {
           status: 'active',
           created_by: user.id,
           visibility,
+          owner_org_id: visibility === 'organization_only' ? user.id : null,
         })
         .select()
         .single();
@@ -1239,30 +1240,67 @@ export default function CreateOpportunityScreen() {
 
         {/* Visibility */}
         <View style={[styles.field, { marginTop: 16 }]}>
-          <View style={[styles.toggleRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={styles.toggleInfo}>
-              {visibility === 'public' ? (
-                <Globe size={responsive.iconSize.md} color={colors.success} />
-              ) : (
-                <Lock size={responsive.iconSize.md} color={colors.warning} />
-              )}
+          <Text style={[styles.label, { color: colors.text }]}>Visibility</Text>
+          <View style={{ gap: 10 }}>
+            <AnimatedPressable
+              style={[
+                styles.visibilityCard,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: visibility === 'public' ? colors.primary : colors.border,
+                  borderWidth: visibility === 'public' ? 2 : 1,
+                },
+              ]}
+              onPress={() => setVisibility('public')}
+            >
+              <Globe size={responsive.iconSize.md} color={visibility === 'public' ? colors.success : colors.textSecondary} />
               <View style={{ flex: 1 }}>
-                <Text style={[styles.toggleLabel, { color: colors.text }]}>
-                  {visibility === 'public' ? 'Public' : 'Members Only'}
-                </Text>
-                <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
-                  {visibility === 'public' 
-                    ? 'Visible to everyone, including visitors' 
-                    : 'Only visible to logged-in members'}
+                <Text style={[styles.visibilityCardTitle, { color: colors.text }]}>Public</Text>
+                <Text style={[styles.visibilityCardDesc, { color: colors.textSecondary }]}>
+                  Visible to everyone, including visitors
                 </Text>
               </View>
-            </View>
-            <Switch
-              value={visibility === 'members_only'}
-              onValueChange={(value) => setVisibility(value ? 'members_only' : 'public')}
-              trackColor={{ false: colors.border, true: colors.warning }}
-              thumbColor={colors.textOnPrimary}
-            />
+            </AnimatedPressable>
+            <AnimatedPressable
+              style={[
+                styles.visibilityCard,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: visibility === 'members_only' ? colors.primary : colors.border,
+                  borderWidth: visibility === 'members_only' ? 2 : 1,
+                },
+              ]}
+              onPress={() => setVisibility('members_only')}
+            >
+              <Lock size={responsive.iconSize.md} color={visibility === 'members_only' ? colors.warning : colors.textSecondary} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.visibilityCardTitle, { color: colors.text }]}>Members Only</Text>
+                <Text style={[styles.visibilityCardDesc, { color: colors.textSecondary }]}>
+                  Only visible to logged-in members
+                </Text>
+              </View>
+            </AnimatedPressable>
+            {user?.is_partner_organization && (
+              <AnimatedPressable
+                style={[
+                  styles.visibilityCard,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: visibility === 'organization_only' ? colors.primary : colors.border,
+                    borderWidth: visibility === 'organization_only' ? 2 : 1,
+                  },
+                ]}
+                onPress={() => setVisibility('organization_only')}
+              >
+                <Building2 size={responsive.iconSize.md} color={visibility === 'organization_only' ? colors.primary : colors.textSecondary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.visibilityCardTitle, { color: colors.text }]}>Organization Only</Text>
+                  <Text style={[styles.visibilityCardDesc, { color: colors.textSecondary }]}>
+                    Only visible to your organization's team members
+                  </Text>
+                </View>
+              </AnimatedPressable>
+            )}
           </View>
         </View>
 
@@ -1514,26 +1552,18 @@ const styles = StyleSheet.create({
     marginTop: 4,
     lineHeight: 18,
   },
-  toggleRow: {
+  visibilityCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     padding: 16,
     borderRadius: 12,
-    borderWidth: 1,
     gap: 12,
   },
-  toggleInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 12,
-  },
-  toggleLabel: {
+  visibilityCardTitle: {
     fontSize: 15,
     fontWeight: '600',
   },
-  toggleDescription: {
+  visibilityCardDesc: {
     fontSize: 13,
     marginTop: 2,
   },

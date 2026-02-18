@@ -32,6 +32,8 @@ import {
   X,
   Plus,
   Link as LinkIcon,
+  Globe,
+  Building2,
 } from 'lucide-react-native';
 import { supabase } from '../services/supabase';
 import { geocodeLocation, GeocodeResult } from '../services/geocoding';
@@ -45,6 +47,7 @@ import ImageCropperModal from '../components/ImageCropperModal';
 import Button from '../components/Button';
 import { sendNotificationToUser, sendEmailNotification } from '../services/pushNotifications';
 import { MembershipFeatureScreen } from '../components/MembershipFeatureScreen';
+import { VisibilityType } from '../types';
 
 const CATEGORIES = [
   { value: 'environment', label: 'Environment' },
@@ -60,11 +63,10 @@ export default function ProposeOpportunityScreen() {
   const colors = Colors[colorScheme];
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, isAdmin } = useAuth();
+  const { user, hasPaidAccess, hasStaffAccess } = useAuth();
 
-  // Check if user has premium membership or is admin
-  const isPremium = user?.membershipTier === 'premium' && user?.membershipStatus === 'active';
-  const hasAccess = isPremium || isAdmin;
+  // Check if user has premium membership or is staff (admin/sup)
+  const hasAccess = hasPaidAccess || hasStaffAccess;
 
   // Form state
   const [title, setTitle] = useState('');
@@ -99,6 +101,11 @@ export default function ProposeOpportunityScreen() {
   const [cropperVisible, setCropperVisible] = useState(false);
   const [contactPersonName, setContactPersonName] = useState('');
   const [contactPersonPhone, setContactPersonPhone] = useState('');
+  const [visibility, setVisibility] = useState<VisibilityType>('public');
+
+  // Determine if user is an org user (partner organization)
+  const isOrgUser = !!user?.is_partner_organization;
+  const orgOwnerId = user?.id;
 
   // Array fields
   const [requirements, setRequirements] = useState<string[]>([]);
@@ -579,6 +586,8 @@ export default function ProposeOpportunityScreen() {
           proposal_status: 'pending',
           created_by: user.id,
           submitted_by: user.id,
+          visibility,
+          owner_org_id: visibility === 'organization_only' ? orgOwnerId : null,
         })
         .select()
         .single();
@@ -1172,6 +1181,53 @@ export default function ProposeOpportunityScreen() {
             </View>
           )}
         </View>
+{/* Visibility Picker - only shown for org users */}
+        {isOrgUser && (
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>Visibility</Text>
+            <View style={{ gap: 10 }}>
+              <TouchableOpacity
+                style={[
+                  styles.visibilityCard,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: visibility === 'public' ? colors.primary : colors.border,
+                    borderWidth: visibility === 'public' ? 2 : 1,
+                  },
+                ]}
+                onPress={() => setVisibility('public')}
+              >
+                <Globe size={20} color={visibility === 'public' ? colors.primary : colors.textSecondary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.visibilityCardTitle, { color: colors.text }]}>Public</Text>
+                  <Text style={[styles.visibilityCardDesc, { color: colors.textSecondary }]}>
+                    Visible to everyone after approval
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.visibilityCard,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: visibility === 'organization_only' ? colors.primary : colors.border,
+                    borderWidth: visibility === 'organization_only' ? 2 : 1,
+                  },
+                ]}
+                onPress={() => setVisibility('organization_only')}
+              >
+                <Building2 size={20} color={visibility === 'organization_only' ? colors.primary : colors.textSecondary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.visibilityCardTitle, { color: colors.text }]}>My Organization Only</Text>
+                  <Text style={[styles.visibilityCardDesc, { color: colors.textSecondary }]}>
+                    Only visible to your organization's team members
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
 {/* Contact Person */}
         <View style={styles.field}>
           <Text style={[styles.label, { color: colors.text }]}>
@@ -1530,5 +1586,20 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  visibilityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    gap: 12,
+  },
+  visibilityCardTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  visibilityCardDesc: {
+    fontSize: 13,
+    marginTop: 2,
   },
 });
