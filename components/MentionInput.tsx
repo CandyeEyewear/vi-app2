@@ -105,6 +105,11 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
   const mentionMapRef = useRef<Map<string, InsertedMention>>(new Map());
   const hashtagMapRef = useRef<Map<string, InsertedHashtag>>(new Map());
 
+  // Track mention/hashtag trigger context so handleSelectUser doesn't depend on
+  // potentially-stale cursorPosition state (fixes mention insertion on web & native)
+  const mentionTriggerRef = useRef<{ atIndex: number; cursorPos: number } | null>(null);
+  const hashtagTriggerRef = useRef<{ hashIndex: number; cursorPos: number } | null>(null);
+
   // Sync display text when value changes externally
   useEffect(() => {
     const newDisplay = rawToDisplay(value);
@@ -365,12 +370,16 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
   // Handle text changes
   const handleTextChange = (newDisplayText: string) => {
     setDisplayText(newDisplayText);
-    
+
     const newCursorPos = cursorPosition + (newDisplayText.length - displayText.length);
-    
+    setCursorPosition(newCursorPos);
+
     // Check for @ mention
     const typingMention = getTypingMention(newDisplayText, newCursorPos);
     if (typingMention !== null) {
+      const beforeCursor = newDisplayText.slice(0, newCursorPos);
+      const atIdx = beforeCursor.lastIndexOf('@');
+      mentionTriggerRef.current = { atIndex: atIdx, cursorPos: newCursorPos };
       setPickerMode('mention');
       setSearchQuery(typingMention);
       if (typingMention.length > 0) {
@@ -381,10 +390,13 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
       onChangeText(displayToRaw(newDisplayText));
       return;
     }
-    
+
     // Check for # hashtag
     const typingHashtag = getTypingHashtag(newDisplayText, newCursorPos);
     if (typingHashtag !== null) {
+      const beforeCursor = newDisplayText.slice(0, newCursorPos);
+      const hashIdx = beforeCursor.lastIndexOf('#');
+      hashtagTriggerRef.current = { hashIndex: hashIdx, cursorPos: newCursorPos };
       setPickerMode('hashtag');
       setSearchQuery(typingHashtag);
       if (typingHashtag.length > 0) {
@@ -395,8 +407,10 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
       onChangeText(displayToRaw(newDisplayText));
       return;
     }
-    
+
     // No special character being typed
+    mentionTriggerRef.current = null;
+    hashtagTriggerRef.current = null;
     setPickerMode('none');
     setSearchQuery('');
     onChangeText(displayToRaw(newDisplayText));
@@ -405,10 +419,13 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
   const handleSelectionChange = (event: any) => {
     const position = event.nativeEvent.selection.end;
     setCursorPosition(position);
-    
+
     // Check for mention
     const typingMention = getTypingMention(displayText, position);
     if (typingMention !== null) {
+      const beforeCursor = displayText.slice(0, position);
+      const atIdx = beforeCursor.lastIndexOf('@');
+      mentionTriggerRef.current = { atIndex: atIdx, cursorPos: position };
       setPickerMode('mention');
       setSearchQuery(typingMention);
       if (typingMention.length > 0) {
@@ -418,10 +435,13 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
       }
       return;
     }
-    
+
     // Check for hashtag
     const typingHashtag = getTypingHashtag(displayText, position);
     if (typingHashtag !== null) {
+      const beforeCursor = displayText.slice(0, position);
+      const hashIdx = beforeCursor.lastIndexOf('#');
+      hashtagTriggerRef.current = { hashIndex: hashIdx, cursorPos: position };
       setPickerMode('hashtag');
       setSearchQuery(typingHashtag);
       if (typingHashtag.length > 0) {
@@ -431,37 +451,52 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
       }
       return;
     }
-    
+
     setPickerMode('none');
   };
 
   // Handle user selection (mention)
   const handleSelectUser = (user: SearchUser) => {
-    const textBeforeCursor = displayText.slice(0, cursorPosition);
-    const atIndex = textBeforeCursor.lastIndexOf('@');
-    
-    if (atIndex === -1) return;
-    
+    // Use the saved trigger ref — cursorPosition state can be stale if
+    // onSelectionChange fires (or doesn't fire) between typing and tapping
+    // the picker item.
+    const trigger = mentionTriggerRef.current;
+
+    let atIndex: number;
+    let afterIndex: number;
+
+    if (trigger && trigger.atIndex >= 0) {
+      atIndex = trigger.atIndex;
+      afterIndex = trigger.cursorPos;
+    } else {
+      // Fallback: search for @<query> in the current text
+      const pattern = `@${searchQuery}`;
+      atIndex = displayText.lastIndexOf(pattern);
+      if (atIndex === -1) return;
+      afterIndex = atIndex + pattern.length;
+    }
+
     const textBefore = displayText.slice(0, atIndex);
-    const textAfter = displayText.slice(cursorPosition);
-    
+    const textAfter = displayText.slice(afterIndex);
+
     const displayMention = `@${user.fullName}`;
     const rawMention = `@[${user.fullName}](${user.id})`;
-    
+
     mentionMapRef.current.set(displayMention, {
       userId: user.id,
       fullName: user.fullName,
       displayText: displayMention,
       rawText: rawMention,
     });
-    
+
     const newDisplayText = textBefore + displayMention + ' ' + textAfter;
     const newRawText = displayToRaw(newDisplayText);
-    
+
     setDisplayText(newDisplayText);
     onChangeText(newRawText);
     setCursorPosition(textBefore.length + displayMention.length + 1);
-    
+
+    mentionTriggerRef.current = null;
     setPickerMode('none');
     setSearchQuery('');
     inputRef.current?.focus();
@@ -469,17 +504,27 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
 
   // Handle hashtag selection
   const handleSelectHashtag = (item: HashtagItem) => {
-    const textBeforeCursor = displayText.slice(0, cursorPosition);
-    const hashIndex = textBeforeCursor.lastIndexOf('#');
-    
-    if (hashIndex === -1) return;
-    
+    const trigger = hashtagTriggerRef.current;
+
+    let hashIndex: number;
+    let afterIndex: number;
+
+    if (trigger && trigger.hashIndex >= 0) {
+      hashIndex = trigger.hashIndex;
+      afterIndex = trigger.cursorPos;
+    } else {
+      const pattern = `#${searchQuery}`;
+      hashIndex = displayText.lastIndexOf(pattern);
+      if (hashIndex === -1) return;
+      afterIndex = hashIndex + pattern.length;
+    }
+
     const textBefore = displayText.slice(0, hashIndex);
-    const textAfter = displayText.slice(cursorPosition);
-    
+    const textAfter = displayText.slice(afterIndex);
+
     const displayHashtag = `#${item.name}`;
     const rawHashtag = `#[${item.name}](${item.type}:${item.id})`;
-    
+
     hashtagMapRef.current.set(displayHashtag, {
       id: item.id,
       name: item.name,
@@ -487,14 +532,15 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
       displayText: displayHashtag,
       rawText: rawHashtag,
     });
-    
+
     const newDisplayText = textBefore + displayHashtag + ' ' + textAfter;
     const newRawText = displayToRaw(newDisplayText);
-    
+
     setDisplayText(newDisplayText);
     onChangeText(newRawText);
     setCursorPosition(textBefore.length + displayHashtag.length + 1);
-    
+
+    hashtagTriggerRef.current = null;
     setPickerMode('none');
     setSearchQuery('');
     inputRef.current?.focus();
