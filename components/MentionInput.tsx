@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
   useColorScheme,
   Keyboard,
+  Platform,
   TextInputProps,
 } from 'react-native';
 import { Colors } from '../constants/colors';
@@ -497,6 +498,7 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
     setCursorPosition(textBefore.length + displayMention.length + 1);
 
     mentionTriggerRef.current = null;
+    if (keyboardHideTimerRef.current) clearTimeout(keyboardHideTimerRef.current);
     setPickerMode('none');
     setSearchQuery('');
     inputRef.current?.focus();
@@ -541,6 +543,7 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
     setCursorPosition(textBefore.length + displayHashtag.length + 1);
 
     hashtagTriggerRef.current = null;
+    if (keyboardHideTimerRef.current) clearTimeout(keyboardHideTimerRef.current);
     setPickerMode('none');
     setSearchQuery('');
     inputRef.current?.focus();
@@ -556,11 +559,23 @@ const MentionInput = forwardRef<TextInput, MentionInputProps>(({
     }
   };
 
+  // Close picker when keyboard hides, but with a short delay on mobile so that
+  // a tap on a picker item has time to fire onPress before the picker unmounts.
+  const keyboardHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
-      setPickerMode('none');
+      if (Platform.OS === 'web') {
+        setPickerMode('none');
+      } else {
+        keyboardHideTimerRef.current = setTimeout(() => {
+          setPickerMode('none');
+        }, 150);
+      }
     });
-    return () => hideSubscription.remove();
+    return () => {
+      hideSubscription.remove();
+      if (keyboardHideTimerRef.current) clearTimeout(keyboardHideTimerRef.current);
+    };
   }, []);
 
   // Get current hashtag results based on tab
@@ -758,10 +773,13 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   picker: {
-    position: 'absolute',
-    bottom: '100%',
-    left: 0,
-    right: 0,
+    // On web, float above the input. On mobile, render in normal document
+    // flow so touches aren't clipped by the parent view bounds (Android
+    // clips touch events to parent bounds for absolutely-positioned children
+    // that extend outside).
+    ...(Platform.OS === 'web'
+      ? { position: 'absolute' as const, bottom: '100%', left: 0, right: 0 }
+      : {}),
     maxHeight: 300,
     borderRadius: 12,
     borderWidth: 1,
