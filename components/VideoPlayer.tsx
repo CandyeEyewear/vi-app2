@@ -4,14 +4,44 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, TouchableOpacity, ActivityIndicator, Text } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ActivityIndicator, Text, Platform } from 'react-native';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { Play, Pause, Volume2, VolumeX } from 'lucide-react-native';
+import { supabase } from '../services/supabase';
 
 interface VideoPlayerProps {
   uri: string;
   thumbnailUri?: string;
   style?: any;
+}
+
+function parseSupabasePublicObjectUrl(url: string): { bucket: string; path: string } | null {
+  // Example: https://<project>.supabase.co/storage/v1/object/public/<bucket>/<path...>
+  const marker = '/storage/v1/object/public/';
+  const idx = url.indexOf(marker);
+  if (idx === -1) return null;
+
+  const rest = url.slice(idx + marker.length);
+  const firstSlash = rest.indexOf('/');
+  if (firstSlash === -1) return null;
+
+  const bucket = rest.slice(0, firstSlash);
+  const encodedPath = rest.slice(firstSlash + 1);
+  if (!bucket || !encodedPath) return null;
+
+  // Supabase expects the raw storage path (not URL-encoded)
+  const path = encodedPath
+    .split('/')
+    .map(seg => {
+      try {
+        return decodeURIComponent(seg);
+      } catch {
+        return seg;
+      }
+    })
+    .join('/');
+
+  return { bucket, path };
 }
 
 export default function VideoPlayer({ uri, thumbnailUri, style }: VideoPlayerProps) {
@@ -20,15 +50,64 @@ export default function VideoPlayer({ uri, thumbnailUri, style }: VideoPlayerPro
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [isReady, setIsReady] = useState(false);
-  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [resolvedUri, setResolvedUri] = useState(uri);
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const player = useVideoPlayer(uri, (playerInstance) => {
+  const player = useVideoPlayer(resolvedUri, (playerInstance) => {
     playerInstance.loop = true;
     playerInstance.muted = true;
   });
 
+  // Resolve the best playable URL.
+  // If the bucket is private, the "public" URL will 403; in that case generate a signed URL.
   useEffect(() => {
-    console.log('[VIDEO] Setting up player listeners for URI:', uri);
+    let cancelled = false;
+
+    const resolve = async () => {
+      setHasError(false);
+      setIsLoading(true);
+      setIsReady(false);
+      setIsPlaying(false);
+      setResolvedUri(uri);
+
+      const parsed = parseSupabasePublicObjectUrl(uri);
+      if (!parsed) return;
+
+      // Preflight request to detect private buckets / blocked access.
+      // Use a tiny range GET because some runtimes don't support HEAD reliably.
+      try {
+        const resp = await fetch(uri, {
+          method: 'GET',
+          headers: { Range: 'bytes=0-1' },
+        });
+        if (resp.ok) return; // public access works
+        if (resp.status !== 401 && resp.status !== 403) return;
+      } catch {
+        // Network errors fall through to try signed URL (best effort)
+      }
+
+      try {
+        const { data, error } = await supabase.storage.from(parsed.bucket).createSignedUrl(parsed.path, 60 * 60);
+        if (cancelled) return;
+        if (error || !data?.signedUrl) {
+          console.warn('[VIDEO] Failed to create signed URL:', error?.message);
+          return;
+        }
+        console.log('[VIDEO] Using signed URL for playback');
+        setResolvedUri(data.signedUrl);
+      } catch (e) {
+        console.warn('[VIDEO] Signed URL generation threw:', e);
+      }
+    };
+
+    void resolve();
+    return () => {
+      cancelled = true;
+    };
+  }, [uri]);
+
+  useEffect(() => {
+    console.log('[VIDEO] Setting up player listeners for URI:', resolvedUri);
     
     // Set up listeners for player state changes
     const playingSub = player.addListener('playingChange', (playing: boolean) => {
@@ -69,11 +148,10 @@ export default function VideoPlayer({ uri, thumbnailUri, style }: VideoPlayerPro
       // Ignore
     }
 
-    // Fallback: Clear loading after a timeout if no events fire
+    // Fallback: stop the spinner after a timeout (do NOT mark ready)
     loadingTimeoutRef.current = setTimeout(() => {
-      console.log('[VIDEO] Loading timeout, showing controls anyway');
+      console.log('[VIDEO] Loading timeout, stopping spinner');
       setIsLoading(false);
-      setIsReady(true);
     }, 2000);
 
     return () => {
@@ -85,7 +163,7 @@ export default function VideoPlayer({ uri, thumbnailUri, style }: VideoPlayerPro
         clearTimeout(loadingTimeoutRef.current);
       }
     };
-  }, [player, uri]);
+  }, [player, resolvedUri]);
 
   // Auto-play when ready (optional - remove if you want manual play)
   useEffect(() => {
@@ -97,11 +175,6 @@ export default function VideoPlayer({ uri, thumbnailUri, style }: VideoPlayerPro
 
   const handlePlayPause = () => {
     try {
-      if (!isReady) {
-        console.log('[VIDEO] Player not ready yet');
-        return;
-      }
-
       if (isPlaying) {
         player.pause();
         setIsPlaying(false);
