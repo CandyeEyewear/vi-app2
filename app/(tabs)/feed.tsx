@@ -525,7 +525,7 @@ const loadNotificationCount = async () => {
           uri: asset.uri,
           type: asset.type === 'video' ? 'video' : 'image',
           fileSize: typeof asset.fileSize === 'number' ? asset.fileSize : undefined,
-          duration: typeof asset.duration === 'number' ? asset.duration : undefined,
+          duration: typeof asset.duration === 'number' ? asset.duration / 1000 : undefined,
         }));
 
         const nextTotalCount = selectedMedia.length + normalized.length;
