@@ -180,13 +180,13 @@ async function handleEventRegistration(
       .select('title, start_date, location')
       .eq('id', registration.event_id)
       .single();
-    
+
     const { data: userData1 } = await supabase
       .from('users')
       .select('email, full_name')
       .eq('id', transaction.user_id)
       .single();
-    
+
     if (eventData1 && userData1) {
       sendEventConfirmationEmail(
         userData1.email,
@@ -208,7 +208,7 @@ async function handleEventRegistration(
         if (!existingTickets || existingTickets.length === 0) {
           const ticketCount = registration.ticket_count || 1;
           console.log(`${logPrefix} Generating ${ticketCount} ticket(s) for registration ${transaction.reference_id}`);
-          
+
           const ticketsToInsert = [];
           for (let i = 1; i <= ticketCount; i++) {
             const qrCode = `EVT_${registration.event_id}_${transaction.reference_id}_${i}`;
@@ -241,7 +241,7 @@ async function handleEventRegistration(
   // If no reference_id, check metadata for event_id (new registration flow)
   const eventId = transaction.metadata?.event_id;
   const ticketCount = transaction.metadata?.ticket_count || 1;
-  
+
   if (!eventId || !transaction.user_id) {
     console.warn(`${logPrefix} Event registration has no reference_id and no event_id/user_id in metadata, cannot create registration`);
     console.warn(`${logPrefix} Transaction metadata:`, JSON.stringify(transaction.metadata, null, 2));
@@ -260,7 +260,7 @@ async function handleEventRegistration(
 
   if (existingReg && existingReg.status !== 'cancelled') {
     console.log(`${logPrefix} User already registered, updating existing registration: ${existingReg.id}`);
-    
+
     const { error: updateError } = await supabase
       .from('event_registrations')
       .update({
@@ -286,13 +286,13 @@ async function handleEventRegistration(
       .select('title, start_date, location')
       .eq('id', eventId)
       .single();
-    
+
     const { data: userData2 } = await supabase
       .from('users')
       .select('email, full_name')
       .eq('id', transaction.user_id)
       .single();
-    
+
     if (eventData2 && userData2) {
       sendEventConfirmationEmail(
         userData2.email,
@@ -338,7 +338,7 @@ async function handleEventRegistration(
   // Generate tickets for the registration
   try {
     console.log(`${logPrefix} Generating ${ticketCount} ticket(s) for registration ${newRegistration.id}`);
-    
+
     // Check if tickets already exist
     const { data: existingTickets } = await supabase
       .from('event_tickets')
@@ -384,13 +384,13 @@ async function handleEventRegistration(
     .select('title, start_date, location')
     .eq('id', eventId)
     .single();
-  
+
   const { data: userData3 } = await supabase
     .from('users')
     .select('email, full_name')
     .eq('id', transaction.user_id)
     .single();
-  
+
   if (eventData3 && userData3) {
     sendEventConfirmationEmail(
       userData3.email,
@@ -484,6 +484,30 @@ async function handleMembership(transaction: any, logPrefix: string) {
   }, logPrefix);
 
   console.log(`${logPrefix} User membership updated successfully`);
+
+  // Also update the linked payment_subscriptions record to active.
+  // eZee webhooks for first payments arrive without subscription_id, so the
+  // subscription-specific path in webhook.ts is never reached. This ensures
+  // the subscription status stays in sync with the completed transaction.
+  const subscriptionId = transaction.metadata?.payment_subscriptions_id;
+  if (subscriptionId) {
+    console.log(`${logPrefix} Updating linked payment_subscription: ${subscriptionId}`);
+
+    const { error: subUpdateError } = await supabase
+      .from('payment_subscriptions')
+      .update({
+        status: 'active',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', subscriptionId);
+
+    if (subUpdateError) {
+      console.error(`${logPrefix} payment_subscriptions update FAILED:`, subUpdateError);
+      // Don't throw - user membership is already updated
+    } else {
+      console.log(`${logPrefix} payment_subscriptions status set to active`);
+    }
+  }
 }
 
 /**
@@ -714,6 +738,7 @@ async function updateUserMembership(
 
   if (accountType === 'organization') {
     updateData.is_partner_organization = true;
+    updateData.membership_tier = 'premium';
   } else {
     updateData.is_premium = true;
     updateData.membership_tier = 'premium';
@@ -804,15 +829,15 @@ async function generateReceiptForTransaction(
     // Send payment receipt email (non-blocking)
     console.log(`${logPrefix} 📧 Sending payment receipt email...`);
     const receiptDescription = transaction.description || `Payment for ${transaction.order_type}`;
-    const receiptDate = new Date(transaction.created_at || Date.now()).toLocaleDateString('en-US', { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
+    const receiptDate = new Date(transaction.created_at || Date.now()).toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
     });
-    
+
     sendPaymentReceiptEmail(
       transaction.customer_email,
       transaction.customer_name || 'Valued Customer',
