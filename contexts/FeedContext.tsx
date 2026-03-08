@@ -4,7 +4,7 @@
  * ENHANCED with real-time for posts, comments, updates, deletes
  */
 
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
 import { Post, Comment, ApiResponse, ReactionType, PostReaction, ReactionSummary, ShoutoutCategoryId, ShoutoutCategory, User } from '../types';
 import { supabase } from '../services/supabase';
 import { getCauseById } from '../services/causesService';
@@ -39,6 +39,8 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
   const userId = user?.id ?? null;
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(false);
+  // Track post IDs currently being edited so realtime doesn't clobber optimistic updates
+  const editingPostIds = useRef<Set<string>>(new Set());
 
   // Targeted announcements should only be visible to eligible users.
   const getEligibleTargetedAnnouncementPostIds = async (userId: string): Promise<Set<string>> => {
@@ -526,6 +528,13 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
         (payload) => {
           console.log('[FEED] 🔄 Post updated:', payload.new);
           const updatedPostData = payload.new as any;
+
+          // Skip realtime updates for posts we're currently editing
+          // (we already applied the optimistic update locally)
+          if (editingPostIds.current.has(updatedPostData.id)) {
+            console.log('[FEED] ⏭️ Skipping realtime update for post being edited:', updatedPostData.id);
+            return;
+          }
 
           setPosts((prev) =>
             prev.map((p) => {
@@ -2169,7 +2178,7 @@ const postsWithEvents = await Promise.all(
     try {
       console.log('[FEED] ✏️ Updating post:', postId);
       const nextText = text.trim();
-      
+
       // Check if user is admin or post owner
       const post = posts.find((p) => p.id === postId);
       if (!post) {
@@ -2180,11 +2189,15 @@ const postsWithEvents = await Promise.all(
         return { success: false, error: 'Not authorized to edit this post' };
       }
 
+      // Mark this post so the realtime handler doesn't clobber our optimistic update
+      editingPostIds.current.add(postId);
+
       // Optimistically update UI
+      const now = new Date().toISOString();
       setPosts((prev) =>
         prev.map((p) =>
           p.id === postId
-            ? { ...p, text: nextText, updatedAt: new Date().toISOString() }
+            ? { ...p, text: nextText, updatedAt: now }
             : p
         )
       );
@@ -2194,7 +2207,7 @@ const postsWithEvents = await Promise.all(
         .from('posts')
         .update({
           text: nextText,
-          updated_at: new Date().toISOString(),
+          updated_at: now,
         })
         .eq('id', postId)
         .select()
@@ -2204,30 +2217,20 @@ const postsWithEvents = await Promise.all(
 
       console.log('[FEED] ✅ Post updated successfully');
 
-      // Reconcile local state from server response (avoid full feed reload, which can cause modal flicker).
-      const updatedAt = data?.updated_at || new Date().toISOString();
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === postId
-            ? {
-                ...p,
-                text: data?.text ?? nextText,
-                updatedAt,
-              }
-            : p
-        )
-      );
+      // Allow realtime updates for this post again
+      editingPostIds.current.delete(postId);
 
       return {
         success: true,
         data: {
           ...post,
           text: data?.text ?? nextText,
-          updatedAt,
+          updatedAt: data?.updated_at || now,
         },
       };
     } catch (error: any) {
       console.error('[FEED] ❌ Update post error:', error);
+      editingPostIds.current.delete(postId);
       // Reload feed to restore state if update failed
       await loadFeed();
       return { success: false, error: error.message };
