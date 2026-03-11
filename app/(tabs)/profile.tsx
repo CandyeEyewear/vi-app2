@@ -36,9 +36,9 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 992;
-  const { user, signOut, isAdmin, isSup, refreshUser } = useAuth();
-  const isPremium = user?.membershipTier === 'premium' && user?.membershipStatus === 'active';
-  const isOfficialMember = isPremium || isAdmin;
+  const { user, signOut, isAdmin, isSup, refreshUser, hasPaidAccess, hasStaffAccess } = useAuth();
+  // Official Member badge is for paid users or staff
+  const isOfficialMember = hasPaidAccess || hasStaffAccess;
   const hasProposeAccess = isOfficialMember;
   const [refreshing, setRefreshing] = useState(false);
   const { alertProps, showAlert } = useAlert();
@@ -96,7 +96,7 @@ export default function ProfileScreen() {
 
   const getAchievements = () => {
     const achievements = [];
-    
+
     if (user.totalHours >= 10) {
       achievements.push({
         id: '1',
@@ -104,7 +104,7 @@ export default function ProfileScreen() {
         description: '10+ hours volunteered',
       });
     }
-    
+
     if (user.activitiesCompleted >= 5) {
       achievements.push({
         id: '2',
@@ -112,7 +112,7 @@ export default function ProfileScreen() {
         description: '5+ activities completed',
       });
     }
-    
+
     if (user.organizationsHelped >= 3) {
       achievements.push({
         id: '3',
@@ -145,8 +145,8 @@ export default function ProfileScreen() {
   });
 
   return (
-    <ScrollView 
-      style={[styles.container, { backgroundColor: colors.card }]} 
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.card }]}
       contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
       refreshControl={
         <RefreshControl
@@ -162,56 +162,56 @@ export default function ProfileScreen() {
       </Head>
       {!isDesktop && (
         <View style={[styles.header, { paddingTop: insets.top + 32, backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-        <View style={styles.avatarSection}>
-          <UserAvatar
-            avatarUrl={user.avatarUrl || null}
-            fullName={user.fullName}
-            size={100}
+          <View style={styles.avatarSection}>
+            <UserAvatar
+              avatarUrl={user.avatarUrl || null}
+              fullName={user.fullName}
+              size={100}
+              role={user.role || 'volunteer'}
+              membershipTier={user.membershipTier || 'free'}
+              membershipStatus={user.membershipStatus || 'inactive'}
+              isPartnerOrganization={user.is_partner_organization}
+            />
+          </View>
+          <UserNameWithBadge
+            name={user.fullName}
             role={user.role || 'volunteer'}
             membershipTier={user.membershipTier || 'free'}
             membershipStatus={user.membershipStatus || 'inactive'}
             isPartnerOrganization={user.is_partner_organization}
+            nameStyle={{ ...styles.name, color: colors.text }}
           />
+          <Text style={{ ...styles.email, color: colors.textSecondary }}>{user.email}</Text>
+          {user.location && (
+            <Text style={[styles.location, { color: colors.textSecondary }]}>{user.location}</Text>
+          )}
+          {user.dateOfBirth && (
+            <View style={[styles.ageRow, { marginTop: 8 }]}>
+              <Calendar size={16} color={colors.textSecondary} />
+              <Text style={[styles.ageText, { color: colors.textSecondary, marginLeft: 8 }]}>
+                {(() => {
+                  const calculateAge = (dob: string) => {
+                    const today = new Date();
+                    const birthDate = new Date(dob);
+                    let age = today.getFullYear() - birthDate.getFullYear();
+                    const monthDiff = today.getMonth() - birthDate.getMonth();
+                    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                      age--;
+                    }
+                    return age;
+                  };
+                  return `${calculateAge(user.dateOfBirth)} years old`;
+                })()}
+              </Text>
+            </View>
+          )}
         </View>
-        <UserNameWithBadge
-          name={user.fullName}
-          role={user.role || 'volunteer'}
-          membershipTier={user.membershipTier || 'free'}
-          membershipStatus={user.membershipStatus || 'inactive'}
-          isPartnerOrganization={user.is_partner_organization}
-          nameStyle={{ ...styles.name, color: colors.text }}
-        />
-        <Text style={{ ...styles.email, color: colors.textSecondary }}>{user.email}</Text>
-        {user.location && (
-          <Text style={[styles.location, { color: colors.textSecondary }]}>{user.location}</Text>
-        )}
-        {user.dateOfBirth && (
-          <View style={[styles.ageRow, { marginTop: 8 }]}>
-            <Calendar size={16} color={colors.textSecondary} />
-            <Text style={[styles.ageText, { color: colors.textSecondary, marginLeft: 8 }]}>
-              {(() => {
-                const calculateAge = (dob: string) => {
-                  const today = new Date();
-                  const birthDate = new Date(dob);
-                  let age = today.getFullYear() - birthDate.getFullYear();
-                  const monthDiff = today.getMonth() - birthDate.getMonth();
-                  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-                    age--;
-                  }
-                  return age;
-                };
-                return `${calculateAge(user.dateOfBirth)} years old`;
-              })()}
-            </Text>
-          </View>
-        )}
-      </View>
       )}
 
       {/* 🔥 STREAK BADGE - Shows if user has a streak */}
       {(user.currentStreak ?? 0) > 0 && (
         <View style={styles.streakSection}>
-          <StreakBadge 
+          <StreakBadge
             currentStreak={user.currentStreak ?? 0}
             longestStreak={user.longestStreak ?? 0}
             size="medium"
@@ -379,14 +379,14 @@ export default function ProfileScreen() {
       {(user.education || (user.areasOfExpertise && user.areasOfExpertise.length > 0)) && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Professional Info</Text>
-          
+
           {user.education && (
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Education</Text>
               <Text style={styles.infoValue}>{user.education}</Text>
             </View>
           )}
-          
+
           {user.areasOfExpertise && user.areasOfExpertise.length > 0 && (
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Areas of Expertise</Text>
@@ -489,22 +489,22 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.menuContent}>
               <Text style={[styles.menuTitle, { color: colors.text }]}>
-                {user?.account_type === 'organization' 
+                {user?.account_type === 'organization'
                   ? (user?.is_partner_organization && user?.membershipStatus === 'active'
-                      ? 'Partner Membership'
-                      : 'Partner Membership')
+                    ? 'Partner Membership'
+                    : 'Partner Membership')
                   : (user?.membershipTier === 'premium' && user?.membershipStatus === 'active'
-                      ? 'View Membership'
-                      : 'Upgrade Membership')}
+                    ? 'View Membership'
+                    : 'Upgrade Membership')}
               </Text>
               <Text style={[styles.menuSubtitle, { color: colors.textSecondary }]}>
-                {user?.account_type === 'organization' 
+                {user?.account_type === 'organization'
                   ? (user?.is_partner_organization && user?.membershipStatus === 'active'
-                      ? 'Partner Organization ✓'
-                      : 'Complete Payment to Activate')
-                  : (user?.membershipTier === 'premium' && user?.membershipStatus === 'active' 
-                      ? 'Official Member ✓' 
-                      : 'Upgrade to Full Membership')}
+                    ? 'Partner Organization ✓'
+                    : 'Complete Payment to Activate')
+                  : (user?.membershipTier === 'premium' && user?.membershipStatus === 'active'
+                    ? 'Official Member ✓'
+                    : 'Upgrade to Full Membership')}
               </Text>
             </View>
             <ChevronRight size={20} color={colors.textSecondary} />

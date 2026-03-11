@@ -66,6 +66,7 @@ function transformEvent(row: any): Event {
     isVirtual: row.is_virtual ?? false,
     virtualLink: row.virtual_link,
     eventDate: row.event_date,
+    endDate: row.end_date ?? undefined,
     startTime: row.start_time && typeof row.start_time === 'string' ? row.start_time : undefined,
     endTime: row.end_time && typeof row.end_time === 'string' ? row.end_time : undefined,
     timezone: row.timezone || 'America/Jamaica',
@@ -310,6 +311,7 @@ export async function createEvent(eventData: {
   isVirtual?: boolean;
   virtualLink?: string;
   eventDate: string;
+  endDate?: string;
   startTime: string;
   endTime?: string;
   capacity?: number;
@@ -343,6 +345,7 @@ export async function createEvent(eventData: {
         is_virtual: eventData.isVirtual ?? false,
         virtual_link: eventData.virtualLink,
         event_date: eventData.eventDate,
+        end_date: eventData.endDate || null,
         start_time: eventData.startTime,
         end_time: eventData.endTime,
         capacity: eventData.capacity,
@@ -396,6 +399,7 @@ export async function updateEvent(
     isVirtual: boolean;
     virtualLink: string;
     eventDate: string;
+    endDate: string | null;
     startTime: string;
     endTime: string;
     capacity: number;
@@ -430,6 +434,7 @@ export async function updateEvent(
     if (updates.isVirtual !== undefined) updateData.is_virtual = updates.isVirtual;
     if (updates.virtualLink !== undefined) updateData.virtual_link = updates.virtualLink;
     if (updates.eventDate !== undefined) updateData.event_date = updates.eventDate;
+    if (updates.endDate !== undefined) updateData.end_date = updates.endDate;
     if (updates.startTime !== undefined) updateData.start_time = updates.startTime;
     if (updates.endTime !== undefined) updateData.end_time = updates.endTime;
     if (updates.capacity !== undefined) updateData.capacity = updates.capacity;
@@ -498,6 +503,7 @@ export async function registerForEvent(data: {
   eventId: string;
   userId: string;
   ticketCount?: number;
+  paymentStatus?: 'pending' | 'completed';
 }): Promise<ApiResponse<EventRegistration>> {
   try {
     // Check if already registered
@@ -521,6 +527,7 @@ export async function registerForEvent(data: {
           ticket_count: data.ticketCount || 1,
           registered_at: new Date().toISOString(),
           cancelled_at: null,
+          ...(data.paymentStatus ? { payment_status: data.paymentStatus } : {}),
         })
         .eq('id', existing.id)
         .select()
@@ -538,6 +545,7 @@ export async function registerForEvent(data: {
         user_id: data.userId,
         ticket_count: data.ticketCount || 1,
         status: 'registered',
+        ...(data.paymentStatus ? { payment_status: data.paymentStatus } : {}),
       })
       .select()
       .single();
@@ -822,6 +830,12 @@ export function formatEventDate(dateString: string): string {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+export function formatEventDateRange(startDate: string, endDate?: string): string {
+  const start = formatEventDate(startDate);
+  if (!endDate || endDate === startDate) return start;
+  return `${start} – ${formatEventDate(endDate)}`;
 }
 
 /**

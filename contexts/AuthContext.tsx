@@ -33,6 +33,8 @@ interface AuthContextType {
   isSup: boolean;
   isPartner: boolean;
   isPartnerActive: boolean;
+  hasPaidAccess: boolean;
+  hasStaffAccess: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -80,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const initializeAuth = async () => {
       console.log('[AUTH] 🔐 Starting auth initialization...');
-      
+
       // Check for password recovery tokens in URL (web only)
       // NOTE: Don't set isPasswordRecovery yet - defer until we know if this is
       // a HubSpot password setup flow (needs_password_setup). Recovery links are
@@ -99,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Add a small delay to ensure SecureStore is ready (especially in Expo Dev Client)
         console.log('[AUTH] ⏳ Waiting for SecureStore to initialize...');
         await new Promise(resolve => setTimeout(resolve, 100));
-        
+
         console.log('[AUTH] 📡 Fetching current session from Supabase...');
         let { session, error, timedOut } = await getSessionWithTimeout(5000);
         if (timedOut) {
@@ -135,7 +137,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Handle invalid refresh token or any auth errors
           console.log('[AUTH] ⚠️ Session error, clearing auth:', error.message);
           console.log('[AUTH] Error code:', error.code);
-          await supabase.auth.signOut().catch(() => {});
+          await supabase.auth.signOut().catch(() => { });
           setUser(null);
           setLoading(false);
           return;
@@ -171,7 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         console.error('[AUTH] ❌ Error initializing auth:', error);
-        await supabase.auth.signOut().catch(() => {});
+        await supabase.auth.signOut().catch(() => { });
         setUser(null);
         setNeedsPasswordSetup(false);
         setLoading(false);
@@ -190,7 +192,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AUTH] 👂 Setting up auth state listener...');
       const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(async (event, session) => {
         console.log('[AUTH] 🔔 Auth state changed:', event);
-        
+
         // Check for recovery flow — but only treat it as a "forgot password" recovery
         // if the user does NOT have needs_password_setup (HubSpot signup).
         // HubSpot users arrive via recovery links but should use /set-password instead.
@@ -221,38 +223,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.log('[AUTH] ⏭️ Ignoring INITIAL_SESSION - user already loaded');
             return;
           }
-          
-        // If INITIAL_SESSION fires with null session during initialization,
-        // it might mean SecureStore hasn't loaded yet. Wait and retry getSession()
-        if (!session && !initialAuthComplete) {
-          console.log('[AUTH] ⚠️ INITIAL_SESSION fired with null session during initialization');
-          console.log('[AUTH] 🔄 Retrying getSession() multiple times with increasing delays...');
-          
-          // Try multiple times with increasing delays
-          const retryDelays = [100, 200, 500];
-          for (let i = 0; i < retryDelays.length; i++) {
-            await new Promise(resolve => setTimeout(resolve, retryDelays[i]));
-            const { session: retrySession, error: retryError } = await getSessionWithTimeout(5000);
-            if (retryError) {
-              console.log(`[AUTH] ⚠️ Retry ${i + 1} getSession() error:`, retryError.message);
-              continue;
+
+          // If INITIAL_SESSION fires with null session during initialization,
+          // it might mean SecureStore hasn't loaded yet. Wait and retry getSession()
+          if (!session && !initialAuthComplete) {
+            console.log('[AUTH] ⚠️ INITIAL_SESSION fired with null session during initialization');
+            console.log('[AUTH] 🔄 Retrying getSession() multiple times with increasing delays...');
+
+            // Try multiple times with increasing delays
+            const retryDelays = [100, 200, 500];
+            for (let i = 0; i < retryDelays.length; i++) {
+              await new Promise(resolve => setTimeout(resolve, retryDelays[i]));
+              const { session: retrySession, error: retryError } = await getSessionWithTimeout(5000);
+              if (retryError) {
+                console.log(`[AUTH] ⚠️ Retry ${i + 1} getSession() error:`, retryError.message);
+                continue;
+              }
+              if (retrySession) {
+                console.log(`[AUTH] ✅ Session found on retry ${i + 1} - User ID:`, retrySession.user.id);
+                setNeedsPasswordSetup(retrySession?.user?.user_metadata?.needs_password_setup === true);
+                await loadUserProfile(retrySession.user.id, false, retrySession.user.id);
+                setupRealtimeSubscription(retrySession.user.id).catch((error) => {
+                  console.error('[AUTH] ❌ Error setting up real-time subscription:', error);
+                });
+                return; // Success, exit early
+              } else {
+                console.log(`[AUTH] ℹ️ No session on retry ${i + 1}, will try again...`);
+              }
             }
-            if (retrySession) {
-              console.log(`[AUTH] ✅ Session found on retry ${i + 1} - User ID:`, retrySession.user.id);
-              setNeedsPasswordSetup(retrySession?.user?.user_metadata?.needs_password_setup === true);
-              await loadUserProfile(retrySession.user.id, false, retrySession.user.id);
-              setupRealtimeSubscription(retrySession.user.id).catch((error) => {
-                console.error('[AUTH] ❌ Error setting up real-time subscription:', error);
-              });
-              return; // Success, exit early
-            } else {
-              console.log(`[AUTH] ℹ️ No session on retry ${i + 1}, will try again...`);
-            }
+            console.log('[AUTH] ❌ No session found after all retries - user needs to sign in');
+            return; // Don't process this INITIAL_SESSION event further
           }
-          console.log('[AUTH] ❌ No session found after all retries - user needs to sign in');
-          return; // Don't process this INITIAL_SESSION event further
-        }
-          
+
           console.log('[AUTH] 📧 Processing INITIAL_SESSION');
         }
 
@@ -275,7 +277,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.log('[AUTH] ⏭️ Ignoring INITIAL_SESSION with null session during initialization (timing issue)');
             return;
           }
-          
+
           if (!initialAuthComplete) {
             console.log('[AUTH] ⏭️ Skipping loading state update - initial auth still in progress');
             return;
@@ -301,7 +303,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Set up real-time subscription for user profile changes
     const setupRealtimeSubscription = async (userIdOverride?: string) => {
       console.log('[AUTH] ?? Setting up real-time user profile subscription...');
-      
+
       // Get current user ID
       let userId = userIdOverride ?? null;
       if (!userId) {
@@ -337,7 +339,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         userChannelRef.current = null;
         userChannelUserIdRef.current = null;
       }
-      
+
       const channel = supabase
         .channel(`user-profile-${userId}`)
         .on(
@@ -572,7 +574,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!profileData) {
         console.log('[AUTH] ?? Profile not found after', maxRetries, 'attempts, attempting to create from auth metadata...');
-        
+
         const { data: currentUserData, error: currentUserError } = await supabase.auth.getUser();
         const sessionUser = currentUserData?.user;
         if (currentUserError || !sessionUser) {
@@ -583,10 +585,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
         console.log('[AUTH] Building missing profile from auth metadata');
-        
+
         const metadata = sessionUser.user_metadata || {};
         const isOrganization = metadata.account_type === 'organization';
-        
+
         // Prepare profile data from metadata
         const newProfileData = {
           id: userId,
@@ -613,21 +615,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
-        
+
         console.log('[AUTH] ?? Creating profile with data:', JSON.stringify(newProfileData, null, 2));
-        
+
         try {
           const { data: createdProfile, error: createError } = await supabase
             .from('users')
             .insert(newProfileData)
             .select()
             .single();
-          
+
           if (createError) {
             console.error('[AUTH] ? Failed to create profile:', createError.message);
             console.error('[AUTH] Error code:', createError.code);
             console.error('[AUTH] Error details:', createError.details);
-            
+
             // If it's a duplicate key error, try to fetch again (race condition)
             if (createError.code === '23505') {
               console.log('[AUTH] ?? Duplicate key - profile may have been created, retrying fetch...');
@@ -636,7 +638,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 .select('*')
                 .eq('id', userId)
                 .maybeSingle();
-              
+
               if (retryData) {
                 profileData = retryData;
                 console.log('[AUTH] ? Profile found on retry after duplicate key error');
@@ -771,7 +773,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log('[AUTH] ✅ Authentication successful');
       console.log('[AUTH] User ID:', authData.user.id);
-      
+
       // Verify session is saved to SecureStore
       console.log('[AUTH] 🔍 Verifying session persistence...');
       await new Promise(resolve => setTimeout(resolve, 100)); // Give SecureStore time to save
@@ -781,7 +783,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         console.error('[AUTH] ⚠️ WARNING: Session not found in SecureStore after sign-in!');
       }
-      
+
       const { data: { user } } = await supabase.auth.getUser();
       const needsSetup = user?.user_metadata?.needs_password_setup === true;
       setNeedsPasswordSetup(needsSetup);
@@ -901,12 +903,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         console.log('[AUTH] HubSpot contact already linked');
       }
-      
+
       // Register for push notifications
       console.log('[AUTH] 🔔 Registering for push notifications...');
       try {
         const pushToken = await registerForFCMNotifications();
-        
+
         if (pushToken) {
           console.log('[AUTH] ✅ Push token received, saving to database...');
           const saveResult = await savePushToken(authData.user.id, pushToken);
@@ -1022,7 +1024,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // The register screen manages its own local loading state instead.
 
       console.log('[AUTH] 🚀 Starting signup process (SDK 54)');
-      
+
       // Prepare metadata object
       const metadata = {
         full_name: data.fullName,
@@ -1043,7 +1045,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // 🔍 DEBUG: Log metadata being sent
       console.log('[AUTH] 📤 Metadata being sent to Supabase:');
       console.log('[AUTH] Metadata keys:', Object.keys(metadata));
-      
+
       // Determine signup confirmation redirect URL based on platform.
       // If Supabase email confirmations are enabled, this is where the "Confirm your email" link sends users.
       // - Web: send to hosted web app
@@ -1075,7 +1077,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log('[AUTH] User ID:', authData.user?.id);
         console.log('[AUTH] Signup response received');
         console.log('[AUTH] Session exists:', !!authData.session);
-        
+
         if (authData.user) {
           const receivedMetadata = authData.user.user_metadata || {};
           if (!receivedMetadata.full_name || !receivedMetadata.phone || !receivedMetadata.location) {
@@ -1109,10 +1111,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.error('[AUTH] ⚠️ HubSpot pre-sync failed during email-confirmation signup flow:', hubspotPreSyncResult.error);
         }
 
-        return { 
-          success: true, 
+        return {
+          success: true,
           data: null, // No user data yet - email confirmation required
-          requiresEmailConfirmation: true 
+          requiresEmailConfirmation: true
         } as any;
       }
 
@@ -1129,18 +1131,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .select('*')
           .eq('id', authData.user.id)
           .single();
-        
+
         if (data) {
           profileData = data;
           console.log('[AUTH] ✅ Profile found after', retries + 1, 'attempts');
           break;
         }
-        
+
         if (error && error.code !== 'PGRST116') {
           console.error('[AUTH] ❌ Error fetching profile:', error);
           return { success: false, error: error.message };
         }
-        
+
         retries++;
         if (retries < maxRetries) {
           console.log(`[AUTH] ⏳ Waiting for trigger... (${retries}/${maxRetries})`);
@@ -1213,27 +1215,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log('[AUTH] 🎉 Signup complete!');
       return { success: true, data: userData };
-      
+
     } catch (error: any) {
       console.error('[AUTH] ❌ Signup error:', error);
       console.error('[AUTH] Error type:', typeof error);
       console.error('[AUTH] Error details:', JSON.stringify(error, null, 2));
-      
+
       // Handle different error types
       if (error?.code || error?.message) {
         const friendlyError = getSignUpErrorMessage(error);
         return { success: false, error: friendlyError };
       }
-      
+
       // Handle network/connection errors
       if (error?.name === 'NetworkError' || error?.message?.includes('network')) {
         return { success: false, error: 'Network error. Please check your internet connection and try again.' };
       }
-      
+
       // Generic fallback
-      return { 
-        success: false, 
-        error: error?.message || 'An unexpected error occurred during registration. Please try again.' 
+      return {
+        success: false,
+        error: error?.message || 'An unexpected error occurred during registration. Please try again.'
       };
     } finally {
       // No setLoading(false) needed — see comment at top of signUp()
@@ -1242,7 +1244,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     console.log('[AUTH] 🚪 Starting sign out process...');
-    
+
     try {
       setLoading(true);
 
@@ -1281,7 +1283,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const updateProfile = async (updates: Partial<User>): Promise<ApiResponse<User>> => {
     console.log('[AUTH] ✏️ Starting profile update...');
-    
+
     if (!user) {
       console.error('[AUTH] ❌ No user logged in');
       return { success: false, error: 'No user logged in' };
@@ -1322,10 +1324,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const cacheKey = CacheKeys.userProfile(user.id);
       cache.set(cacheKey, updatedUser, 5 * 60 * 1000);
       console.log('[AUTH] 💾 Updated user profile in cache');
-      
+
       setUser(updatedUser);
       console.log('[AUTH] ✅ Profile update completed successfully');
-      
+
       return { success: true, data: updatedUser };
     } catch (error: any) {
       console.error('[AUTH] ❌ Exception during profile update:', error);
@@ -1337,7 +1339,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const forgotPassword = async (email: string): Promise<ApiResponse<void>> => {
     console.log('[AUTH] 🔑 Starting forgot password process...');
     console.log('[AUTH] Forgot-password flow started');
-    
+
     try {
       if (!email) {
         return { success: false, error: 'Email is required' };
@@ -1356,7 +1358,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Emails are opened in a browser, and custom schemes (vibe://) don't work
       // reliably from web browsers or through email link wrappers (e.g. Gmail).
       const redirectUrl = 'https://vibe.volunteersinc.org/reset-password';
-      
+
       console.log('[AUTH] 📧 Redirect URL:', redirectUrl);
 
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -1378,7 +1380,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const resetPassword = async (newPassword: string): Promise<ApiResponse<void>> => {
     console.log('[AUTH] 🔐 Starting password reset process...');
-    
+
     try {
       if (!newPassword || newPassword.length < 8) {
         return { success: false, error: 'Password must be at least 8 characters' };
@@ -1395,10 +1397,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       console.log('[AUTH] ✅ Password reset successfully');
-      
+
       // Clear recovery flag
       setIsPasswordRecovery(false);
-      
+
       return { success: true };
     } catch (error: any) {
       console.error('[AUTH] ❌ Exception during password reset:', error);
@@ -1412,16 +1414,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[AUTH] ⚠️ Cannot refresh: no user');
       return;
     }
-    
+
     console.log('[AUTH] 🔄 Refreshing user profile...');
     console.log('[AUTH] User ID:', user.id);
     console.log('[AUTH] Current role before refresh:', user.role);
-    
+
     // Clear cache explicitly
     const cacheKey = CacheKeys.userProfile(user.id);
     cache.delete(cacheKey);
     console.log('[AUTH] 🗑️ Cache cleared for user profile');
-    
+
     // Reload profile with force refresh flag
     await loadUserProfile(user.id, true);
     console.log('[AUTH] ✅ User profile refreshed');
@@ -1451,7 +1453,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isSup = sessionAppRole === 'sup' || user?.role === 'sup';
   const isPartner = user?.is_partner_organization === true;
   const isPartnerActive = isPartner && user?.membershipStatus === 'active';
-  
+
+  // Distinct flags for paid features vs staff privileges
+  const hasStaffAccess = isAdmin || isSup;
+  // Now consistent: both individual premium and active partners have membershipTier === 'premium'
+  const hasPaidAccess = user?.membershipTier === 'premium' && user?.membershipStatus === 'active';
+
   // Debug logging for role checks
   if (__DEV__ && user) {
     console.log('[AUTH] Role Debug:', {
@@ -1482,6 +1489,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isSup,
         isPartner,
         isPartnerActive,
+        hasPaidAccess,
+        hasStaffAccess,
       }}
     >
       {children}

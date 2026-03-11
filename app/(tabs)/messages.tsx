@@ -217,15 +217,21 @@ export default function MessagesScreen() {
   const swipeableRefs = useRef<Map<string, Swipeable | null>>(new Map());
   const [deleteAlertVisible, setDeleteAlertVisible] = useState(false);
   const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
+  const lastRefreshAtRef = useRef(0);
+  const MESSAGES_FOCUS_STALE_MS = 30_000;
 
   useFocusEffect(
     useCallback(() => {
-      refreshConversations();
+      if (Date.now() - lastRefreshAtRef.current > MESSAGES_FOCUS_STALE_MS) {
+        lastRefreshAtRef.current = Date.now();
+        refreshConversations();
+      }
     }, [refreshConversations])
   );
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
+    lastRefreshAtRef.current = Date.now();
     await refreshConversations();
     setRefreshing(false);
   }, [refreshConversations]);

@@ -36,6 +36,7 @@ import {
   Minus,
   AlertTriangle,
   CheckCircle,
+  Banknote,
 } from 'lucide-react-native';
 import { Colors } from '../../../constants/colors';
 import { Event } from '../../../types';
@@ -670,6 +671,52 @@ export default function EventRegisterScreen() {
     }
   }, [event, user, router, totalAmount, ticketCount, spotsLeft, canPurchase]);
 
+  // Handle direct / offline payment registration
+  const handleDirectPayment = useCallback(async () => {
+    if (!event || submitting) return;
+
+    if (!user) {
+      showToast('Please sign in to register', 'warning');
+      router.push('/login');
+      return;
+    }
+
+    if (ticketCount > spotsLeft) {
+      showToast(`Only ${spotsLeft} spot${spotsLeft !== 1 ? 's' : ''} available`, 'error');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const response = await registerForEvent({
+        eventId: event.id,
+        userId: user.id,
+        ticketCount,
+        paymentStatus: 'pending',
+      });
+
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Registration failed');
+      }
+
+      // If event has a manual payment link, open it
+      if (event.manualPaymentLink) {
+        const { openPaymentPage } = await import('../../../services/paymentService');
+        openPaymentPage(event.manualPaymentLink).catch(() => {});
+      }
+
+      showToast("You're registered! Please arrange payment with the organizer.", 'success');
+      setTimeout(() => {
+        goBack(fallbackRoute);
+      }, 1500);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Something went wrong';
+      showToast(errorMessage, 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  }, [event, user, router, ticketCount, spotsLeft, submitting, fallbackRoute]);
+
   // Loading state
   if (loading) {
     return (
@@ -773,15 +820,29 @@ export default function EventRegisterScreen() {
             disabled={!canPurchase}
             onPress={handlePurchase}
             style={styles.purchaseButton}
-            icon={event.isFree ? 
-              <Ticket size={20} color="#FFFFFF" /> : 
+            icon={event.isFree ?
+              <Ticket size={20} color="#FFFFFF" /> :
               <CreditCard size={20} color="#FFFFFF" />
             }
           >
             {submitting ? 'Processing...' :
-             event.isFree ? 'Complete Registration' : 
+             event.isFree ? 'Complete Registration' :
              `Pay ${formatCurrency(totalAmount)}`}
           </Button>
+
+          {!event.isFree && (
+            <Button
+              variant="outline"
+              size="lg"
+              loading={submitting}
+              disabled={submitting || ticketCount < 1 || ticketCount > spotsLeft}
+              onPress={handleDirectPayment}
+              style={styles.directPayButton}
+              icon={<Banknote size={20} color={colors.primary} />}
+            >
+              Register & Pay Directly
+            </Button>
+          )}
         </View>
 
         {/* Success Animation */}
@@ -1024,6 +1085,10 @@ const styles = StyleSheet.create({
   },
   purchaseButton: {
     width: '100%',
+  },
+  directPayButton: {
+    width: '100%',
+    marginTop: Spacing.sm,
   },
   errorContainer: {
     flex: 1,

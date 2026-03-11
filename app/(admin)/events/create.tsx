@@ -111,6 +111,7 @@ export default function CreateEventScreen() {
   
   // Date & Time
   const [eventDate, setEventDate] = useState(new Date());
+  const [endDate, setEndDate] = useState<Date | null>(null);
   const [startTime, setStartTime] = useState(new Date());
   const [endTime, setEndTime] = useState<Date | null>(null);
   
@@ -369,6 +370,7 @@ export default function CreateEventScreen() {
         isVirtual,
         virtualLink: virtualLink.trim() || undefined,
         eventDate: dateToString(eventDate),
+        endDate: endDate ? dateToString(endDate) : undefined,
         startTime: dateToTimeString(startTime),
         endTime: endTime ? dateToTimeString(endTime) : undefined,
         capacity: hasCapacity ? parseInt(capacity) : undefined,
@@ -784,6 +786,16 @@ export default function CreateEventScreen() {
               onChange={(date) => date && setEventDate(date)}
               minimumDate={new Date()}
               label="Event Date *"
+              colors={colors}
+            />
+
+            <CrossPlatformDateTimePicker
+              mode="date"
+              value={endDate || eventDate}
+              onChange={(date) => setEndDate(date)}
+              minimumDate={eventDate}
+              label="End Date"
+              placeholder="Same as start date"
               colors={colors}
             />
 

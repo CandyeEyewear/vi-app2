@@ -30,7 +30,7 @@ import {
 } from 'lucide-react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { Colors } from '../../constants/colors';
-import { getUserRegistrations, formatEventDate, formatEventTime } from '../../services/eventsService';
+import { getUserRegistrations, formatEventDate, formatEventDateRange, formatEventTime } from '../../services/eventsService';
 import { useAuth } from '../../contexts/AuthContext';
 import { getTicketsByRegistration, EventTicket } from '../../services/eventTicketsService';
 
@@ -177,7 +177,7 @@ export default function MyEventDetailScreen() {
               <View style={styles.detailRow}>
                 <Calendar size={16} color={colors.textSecondary} />
                 <Text style={[styles.detailText, { color: colors.textSecondary }]}>
-                  {formatEventDate(event.eventDate)}
+                  {formatEventDateRange(event.eventDate, event.endDate)}
                 </Text>
               </View>
             )}

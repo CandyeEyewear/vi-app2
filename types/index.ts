@@ -957,6 +957,7 @@ export interface EventFormData {
   eventDate: string;
   startTime: string;
   endTime?: string;
+  endDate?: string;
   capacity?: number;
   registrationRequired: boolean;
   registrationDeadline?: string;

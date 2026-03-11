@@ -27,7 +27,7 @@ import {
 import { Colors } from '../../../../constants/colors';
 import { Event, EventRegistration } from '../../../../types';
 import { supabase } from '../../../../services/supabase';
-import { getEventById, formatCurrency, formatEventDate } from '../../../../services/eventsService';
+import { getEventById, formatCurrency, formatEventDate, formatEventDateRange } from '../../../../services/eventsService';
 import { useAuth } from '../../../../contexts/AuthContext';
 
 export default function EventSummaryScreen() {
@@ -274,7 +274,7 @@ export default function EventSummaryScreen() {
               <View style={styles.infoRow}>
                 <Calendar size={16} color={colors.textSecondary} />
                 <Text style={[styles.infoText, { color: colors.text }]}>
-                  {formatEventDate(event.eventDate)}
+                  {formatEventDateRange(event.eventDate, event.endDate)}
                 </Text>
               </View>
             )}

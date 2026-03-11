@@ -21,6 +21,7 @@ import { EVENT_CATEGORY_CONFIG } from '../constants/eventCategories';
 import { useRouter } from 'expo-router';
 import {
   formatEventDate,
+  formatEventDateRange,
   formatEventTime,
   getDaysUntilEvent,
   isEventToday,
@@ -169,7 +170,7 @@ export default function SharedEventCard({ event }: SharedEventCardProps) {
         <View style={styles.infoRow}>
           <Calendar size={14} color={colors.textSecondary} />
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-            {event.eventDate ? formatEventDate(event.eventDate) : 'Date TBA'}
+            {event.eventDate ? formatEventDateRange(event.eventDate, event.endDate) : 'Date TBA'}
           </Text>
           {isToday && (
             <View style={[styles.todayBadge, { backgroundColor: colors.eventTodayRed }]}>

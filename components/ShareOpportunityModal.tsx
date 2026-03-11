@@ -14,6 +14,7 @@ import {
   ScrollView,
   Keyboard,
   Share,
+  Platform,
 } from 'react-native';
 import { X, Send, Users, Globe, Share2 } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
@@ -60,7 +61,9 @@ export default function ShareOpportunityModal({
   const handleExternalShare = async () => {
     try {
       const shareUrl = `https://vibe.volunteersinc.org/opportunity/${opportunity.slug}`;
-      const message = `Check out this volunteer opportunity: "${opportunity.title}"\n\n${opportunity.description?.substring(0, 150)}...\n\n${shareUrl}`;
+      const message = Platform.OS === 'ios'
+        ? `Check out this volunteer opportunity: "${opportunity.title}"\n\n${opportunity.description?.substring(0, 150)}...`
+        : shareUrl;
       
       await Share.share({
         message,

@@ -14,6 +14,7 @@ import {
   ScrollView,
   Keyboard,
   Share,
+  Platform,
 } from 'react-native';
 import { X, Send, Users, Globe, Share2 } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
@@ -61,8 +62,12 @@ export default function ShareEventModal({
   const handleExternalShare = async () => {
     try {
       const shareUrl = `https://vibe.volunteersinc.org/events/${event.slug}`;
-      const message = `Join me at "${event.title}"!\n\n📅 ${formatEventDate(event.eventDate)}\n⏰ ${formatEventTime(event.startTime)}\n📍 ${event.isVirtual ? 'Virtual Event' : event.location}\n\nSave your spot: ${shareUrl}`;
-      
+      // On iOS, url generates a link preview so message can be just the text.
+      // On Android, url is ignored so we include the URL in the message directly.
+      const message = Platform.OS === 'ios'
+        ? `Join me at "${event.title}"!\n\n📅 ${formatEventDate(event.eventDate)}\n⏰ ${formatEventTime(event.startTime)}\n📍 ${event.isVirtual ? 'Virtual Event' : event.location}`
+        : shareUrl;
+
       await Share.share({
         message,
         url: shareUrl,

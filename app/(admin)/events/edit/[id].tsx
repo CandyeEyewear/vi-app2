@@ -135,6 +135,7 @@ export default function EditEventScreen() {
 
   // Date & Time
   const [eventDate, setEventDate] = useState(new Date());
+  const [endDate, setEndDate] = useState<Date | null>(null);
   const [startTime, setStartTime] = useState(new Date());
   const [endTime, setEndTime] = useState<Date | null>(null);
 
@@ -244,6 +245,9 @@ export default function EditEventScreen() {
           }
           if (event.endTime) {
             setEndTime(timeStringToDate(event.endTime));
+          }
+          if (event.endDate) {
+            setEndDate(parseDateInputLocal(event.endDate));
           }
           setHasCapacity(!!event.capacity);
           setCapacity(event.capacity?.toString() || '');
@@ -468,6 +472,7 @@ export default function EditEventScreen() {
         isVirtual,
         virtualLink: virtualLink.trim() || undefined,
         eventDate: dateToString(eventDate),
+        endDate: endDate ? dateToString(endDate) : null,
         startTime: dateToTimeString(startTime),
         endTime: endTime ? dateToTimeString(endTime) : undefined,
         capacity: hasCapacity ? parseInt(capacity) : undefined,
@@ -949,6 +954,16 @@ export default function EditEventScreen() {
                 onChange={(date) => date && setEventDate(date)}
                 minimumDate={new Date()}
                 label="Event Date *"
+                colors={colors}
+              />
+
+              <CrossPlatformDateTimePicker
+                mode="date"
+                value={endDate || eventDate}
+                onChange={(date) => setEndDate(date)}
+                minimumDate={eventDate}
+                label="End Date"
+                placeholder="Same as start date"
                 colors={colors}
               />
 

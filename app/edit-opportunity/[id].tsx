@@ -93,6 +93,8 @@ export default function EditOpportunityScreen() {
   };
   const [spotsTotal, setSpotsTotal] = useState('');
   const [impactStatement, setImpactStatement] = useState('');
+  const [contactPersonName, setContactPersonName] = useState('');
+  const [contactPersonPhone, setContactPersonPhone] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [rawImageUri, setRawImageUri] = useState<string | null>(null);
   const [cropperVisible, setCropperVisible] = useState(false);
@@ -276,6 +278,8 @@ export default function EditOpportunityScreen() {
       setLinks(data.links || []);
       setVisibility(data.visibility || 'public');
       setOpportunitySlug(data.slug);
+      setContactPersonName(data.contact_person_name || '');
+      setContactPersonPhone(data.contact_person_phone || '');
     } catch (error) {
       console.error('Error loading opportunity:', error);
       showAlert('Error', 'Failed to load opportunity data', 'error');
@@ -506,6 +510,8 @@ export default function EditOpportunityScreen() {
           links: links.length > 0 ? links : null,
           image_url: imageUrl,
           visibility,
+          contact_person_name: contactPersonName.trim() || null,
+          contact_person_phone: contactPersonPhone.trim() || null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', opportunityId)
@@ -1023,6 +1029,33 @@ export default function EditOpportunityScreen() {
             )}
           </View>
 
+          {/* Contact Person */}
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.text }]}>
+              Contact Person (Optional)
+            </Text>
+            <Text style={[styles.fieldDescription, { color: colors.textSecondary }]}>
+              Provide a lead contact for volunteers to reach out to
+            </Text>
+
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text, marginTop: 8 }]}
+              value={contactPersonName}
+              onChangeText={setContactPersonName}
+              placeholder="Contact person name"
+              placeholderTextColor={colors.textSecondary}
+            />
+
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text, marginTop: 8 }]}
+              value={contactPersonPhone}
+              onChangeText={setContactPersonPhone}
+              placeholder="Phone number (e.g., +1876-555-1234)"
+              placeholderTextColor={colors.textSecondary}
+              keyboardType="phone-pad"
+            />
+          </View>
+
           {/* Image Upload */}
           <View style={styles.field}>
             <Text style={[styles.label, { color: colors.text }]}>
@@ -1440,5 +1473,10 @@ const styles = StyleSheet.create({
   helperText: {
     fontSize: 12,
     marginTop: 6,
+  },
+  fieldDescription: {
+    fontSize: 13,
+    marginTop: 4,
+    lineHeight: 18,
   },
 });

@@ -10,6 +10,7 @@ import { supabase } from '../services/supabase';
 import { useAuth } from './AuthContext';
 import { sendNotificationToUser, sendEmailNotification } from '../services/pushNotifications';
 import { warn as logWarn } from '../utils/logger';
+import { useQueryClient } from '@tanstack/react-query';
 
 function getErrorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -46,6 +47,7 @@ const MessagingContext = createContext<MessagingContextType | undefined>(undefin
 export function MessagingProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const userId = user?.id ?? null;
+  const queryClient = useQueryClient();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
@@ -61,7 +63,109 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   const DEBOUNCE_MS = 500; // Wait 500ms before loading after rapid events
 
   // Ref to hold the loadConversations function - allows calling it before definition
-  const loadConversationsRef = useRef<() => Promise<void>>();
+  const loadConversationsRef = useRef<(() => Promise<void>) | null>(null);
+  const conversationsQueryKey = useMemo(() => ['messaging', 'conversations', userId ?? 'anonymous'], [userId]);
+
+  const setConversationsAndCache = useCallback(
+    (next: Conversation[]) => {
+      setConversations(next);
+      queryClient.setQueryData<Conversation[]>(conversationsQueryKey, next);
+    },
+    [conversationsQueryKey, queryClient]
+  );
+
+  const updateConversationsAndCache = useCallback(
+    (updater: (prev: Conversation[]) => Conversation[]) => {
+      setConversations((prev) => {
+        const next = updater(prev);
+        queryClient.setQueryData<Conversation[]>(conversationsQueryKey, next);
+        return next;
+      });
+    },
+    [conversationsQueryKey, queryClient]
+  );
+
+  const applyMessageInsertToCache = useCallback(
+    (payload: any): boolean => {
+      const row = payload?.new;
+      if (!row?.conversation_id) return false;
+      if (row.deleted_at) return true;
+
+      let applied = false;
+      updateConversationsAndCache((prev) => {
+        const index = prev.findIndex((conv) => conv.id === row.conversation_id);
+        if (index === -1) return prev;
+
+        applied = true;
+        const conv = prev[index];
+        const nextConv: Conversation = {
+          ...conv,
+          lastMessage: {
+            id: row.id,
+            conversationId: row.conversation_id,
+            senderId: row.sender_id,
+            text: row.text ?? '',
+            read: !!row.read,
+            status: row.status || 'sent',
+            createdAt: row.created_at || new Date().toISOString(),
+          },
+          unreadCount: row.sender_id !== userId && row.read === false ? conv.unreadCount + 1 : conv.unreadCount,
+          updatedAt: row.created_at || new Date().toISOString(),
+        };
+        return [nextConv, ...prev.filter((c) => c.id !== conv.id)];
+      });
+
+      return applied;
+    },
+    [updateConversationsAndCache, userId]
+  );
+
+  const applyConversationChangeToCache = useCallback(
+    (payload: any): boolean => {
+      const nextRow = payload?.new;
+      const oldRow = payload?.old;
+
+      if (oldRow?.id && !nextRow) {
+        let removed = false;
+        updateConversationsAndCache((prev) => {
+          const next = prev.filter((c) => c.id !== oldRow.id);
+          removed = next.length !== prev.length;
+          return next;
+        });
+        return removed;
+      }
+
+      if (!nextRow?.id) return false;
+
+      if (Array.isArray(nextRow.deleted_by) && userId && nextRow.deleted_by.includes(userId)) {
+        let removed = false;
+        updateConversationsAndCache((prev) => {
+          const next = prev.filter((c) => c.id !== nextRow.id);
+          removed = next.length !== prev.length;
+          return next;
+        });
+        return removed;
+      }
+
+      let updated = false;
+      updateConversationsAndCache((prev) => {
+        const index = prev.findIndex((c) => c.id === nextRow.id);
+        if (index === -1) return prev;
+
+        updated = true;
+        const current = prev[index];
+        const nextConv: Conversation = {
+          ...current,
+          participants: nextRow.participants || current.participants,
+          updatedAt: nextRow.updated_at || current.updatedAt,
+        };
+        return [nextConv, ...prev.filter((c) => c.id !== current.id)];
+      });
+
+      return updated;
+    },
+    [updateConversationsAndCache, userId]
+  );
 
   // Debounced load function that uses the ref
   const triggerDebouncedLoad = useCallback(() => {
@@ -80,6 +184,17 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   const triggerLoadConversations = useCallback(() => {
     loadConversationsRef.current?.();
   }, []);
+
+  useEffect(() => {
+    if (!userId) {
+      setConversations([]);
+      return;
+    }
+    const cached = queryClient.getQueryData<Conversation[]>(conversationsQueryKey);
+    if (cached && cached.length > 0) {
+      setConversations(cached);
+    }
+  }, [conversationsQueryKey, queryClient, userId]);
 
   useEffect(() => {
     userNameRef.current = user?.fullName || '';
@@ -137,7 +252,10 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages' },
-        () => triggerDebouncedLoad()
+        (payload) => {
+          const applied = applyMessageInsertToCache(payload);
+          if (!applied) triggerDebouncedLoad();
+        }
       )
       .on(
         'postgres_changes',
@@ -161,7 +279,10 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
           schema: 'public',
           table: 'conversations',
         },
-        () => triggerDebouncedLoad()
+        (payload) => {
+          const applied = applyConversationChangeToCache(payload);
+          if (!applied) triggerDebouncedLoad();
+        }
       )
       .on(
         'postgres_changes',
@@ -170,7 +291,10 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
           schema: 'public',
           table: 'conversations',
         },
-        () => triggerDebouncedLoad()
+        (payload) => {
+          const applied = applyConversationChangeToCache(payload);
+          if (!applied) triggerDebouncedLoad();
+        }
       )
       .on(
         'postgres_changes',
@@ -179,7 +303,10 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
           schema: 'public',
           table: 'conversations',
         },
-        () => triggerDebouncedLoad()
+        (payload) => {
+          const applied = applyConversationChangeToCache(payload);
+          if (!applied) triggerDebouncedLoad();
+        }
       )
       .subscribe();
 
@@ -193,7 +320,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       messageSubscription.unsubscribe();
       conversationSubscription.unsubscribe();
     };
-  }, [userId, triggerDebouncedLoad]);
+  }, [applyConversationChangeToCache, applyMessageInsertToCache, userId, triggerDebouncedLoad]);
 
   // GLOBAL PRESENCE CHANNEL - Track all online users
   useEffect(() => {
@@ -476,7 +603,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         })
       );
 
-      setConversations(conversationsWithDetails);
+      setConversationsAndCache(conversationsWithDetails);
     } catch (error) {
       console.error('Error loading conversations:', error);
     } finally {
@@ -642,7 +769,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         updatedAt: newConv.updated_at,
       };
 
-      setConversations((prev) => [conversation, ...prev]);
+      updateConversationsAndCache((prev) => [conversation, ...prev]);
       return { success: true, data: conversation };
     } catch (error: any) {
       console.error('Error in getOrCreateConversation:', error);
@@ -906,8 +1033,24 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         createdAt: data.created_at,
       };
 
-      // Keep inbox list in sync even if realtime delivery is delayed.
-      loadConversationsRef.current?.();
+      // Keep inbox list in sync immediately; fall back to full refresh if missing.
+      let updatedConversation = false;
+      updateConversationsAndCache((prev) => {
+        const index = prev.findIndex((conv) => conv.id === conversationId);
+        if (index === -1) return prev;
+
+        updatedConversation = true;
+        const conv = prev[index];
+        const nextConv: Conversation = {
+          ...conv,
+          lastMessage: message,
+          updatedAt: message.createdAt,
+        };
+        return [nextConv, ...prev.filter((c) => c.id !== conv.id)];
+      });
+      if (!updatedConversation) {
+        loadConversationsRef.current?.();
+      }
 
       return { success: true, data: message };
     } catch (error: any) {
@@ -928,6 +1071,16 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         .eq('conversation_id', conversationId)
         .neq('sender_id', user.id)
         .eq('read', false);
+
+      updateConversationsAndCache((prev) =>
+        prev.map((conv) => {
+          if (conv.id !== conversationId) return conv;
+          return {
+            ...conv,
+            unreadCount: 0,
+          };
+        })
+      );
     } catch (error) {
       console.error('Error marking messages as read:', error);
     }
@@ -971,7 +1124,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Remove from local state immediately
-      setConversations(prev => prev.filter(c => c.id !== conversationId));
+      updateConversationsAndCache((prev) => prev.filter((c) => c.id !== conversationId));
 
       return { success: true };
     } catch (error: any) {
@@ -1060,7 +1213,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
 
       // Optimistically update inbox preview if this was the lastMessage
       // (realtime UPDATE payloads can be partial depending on replica identity settings)
-      setConversations((prev) =>
+      updateConversationsAndCache((prev) =>
         prev.map((conv) => {
           if (conv.lastMessage?.id !== messageId) return conv;
           return {

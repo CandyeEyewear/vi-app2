@@ -14,6 +14,7 @@ import {
   ScrollView,
   Keyboard,
   Share,
+  Platform,
 } from 'react-native';
 import { X, Send, Users, Globe, Share2 } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
@@ -62,7 +63,9 @@ export default function ShareCauseModal({
     try {
       const progress = getCauseProgress(cause);
       const shareUrl = `https://vibe.volunteersinc.org/causes/${cause.slug}`;
-      const message = `Support "${cause.title}" - ${Math.round(progress)}% funded!\n\n${cause.description.substring(0, 150)}...\n\nDonate now: ${shareUrl}`;
+      const message = Platform.OS === 'ios'
+        ? `Support "${cause.title}" - ${Math.round(progress)}% funded!\n\n${cause.description.substring(0, 150)}...`
+        : shareUrl;
       
       await Share.share({
         message,

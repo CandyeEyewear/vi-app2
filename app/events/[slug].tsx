@@ -52,6 +52,7 @@ import {
   cancelEventRegistration,
   getEventRegistrations,
   formatEventDate,
+  formatEventDateRange,
   formatEventTime,
   getDaysUntilEvent,
   isEventToday,
@@ -686,7 +687,7 @@ export default function EventDetailScreen() {
 
     try {
       const shareUrl = `https://vibe.volunteersinc.org/events/${event.slug}`;
-      const message = `Join me at "${event.title}"!\n\n📅 ${formatEventDate(event.eventDate)}\n⏰ ${formatEventTime(event.startTime)}\n📍 ${event.isVirtual ? 'Virtual Event' : event.location}\n\nSave your spot: ${shareUrl}`;
+      const message = `Join me at "${event.title}"!\n\n📅 ${formatEventDateRange(event.eventDate, event.endDate)}\n⏰ ${formatEventTime(event.startTime)}\n📍 ${event.isVirtual ? 'Virtual Event' : event.location}\n\nSave your spot: ${shareUrl}`;
 
       await Share.share({
         message,
@@ -993,7 +994,7 @@ export default function EventDetailScreen() {
             {/* Date & Time Card */}
             <EventInfoCard
               icon={<Calendar size={24} color={colors.primary} />}
-              title={formatEventDate(event.eventDate)}
+              title={formatEventDateRange(event.eventDate, event.endDate)}
               subtitle={`${formatEventTime(event.startTime)}${event.endTime ? ` - ${formatEventTime(event.endTime)}` : ''}`}
               badge={
                 eventStatus === 'today' && (
@@ -1181,7 +1182,7 @@ export default function EventDetailScreen() {
               loading={registering}
               disabled={!registration && isSoldOut}
               onPress={handleRegister}
-              icon={registration ? X : event.isFree ? Ticket : DollarSign}
+              icon={registration ? X : Ticket}
               label={
                 registering
                   ? 'Processing...'
@@ -1191,7 +1192,7 @@ export default function EventDetailScreen() {
                   ? 'Sold Out'
                   : event.isFree
                   ? 'Register for Free'
-                  : `Buy Tickets - ${event.ticketPrice ? formatCurrency(event.ticketPrice) : 'N/A'}`
+                  : 'Register Now'
               }
               colors={colors}
             />

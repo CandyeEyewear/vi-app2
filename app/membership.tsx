@@ -88,7 +88,7 @@ export default function MembershipScreen() {
 
     try {
       const isOrganization = user.account_type === 'organization';
-      
+
       // For organizations, check payment_subscriptions table
       if (isOrganization) {
         const { data: subscriptionData, error: subError } = await supabase
@@ -106,7 +106,7 @@ export default function MembershipScreen() {
         }
 
         setMembership({
-          tier: user.is_partner_organization ? 'premium' : 'free',
+          tier: user.membershipTier || 'free', // Now consistent for partners too
           status: user.membership_status || 'inactive',
           subscriptionId: subscriptionData?.ezee_subscription_id || subscriptionData?.id,
           startDate: subscriptionData?.created_at,
@@ -156,13 +156,13 @@ export default function MembershipScreen() {
 
   const confirmCancelSubscription = useCallback(async () => {
     if (!user?.id || !membership) return;
-    
+
     setShowCancelConfirm(false);
     setCancelling(true);
-    
+
     const isOrganization = user.account_type === 'organization';
     const membershipType = isOrganization ? 'partner organization membership' : 'premium membership';
-    
+
     try {
       // If payment system is not configured or no subscriptionId, update database directly
       if (!isConfigured() || !membership.subscriptionId) {
@@ -171,13 +171,13 @@ export default function MembershipScreen() {
           membership_status: 'cancelled',
           membership_tier: 'free',
         };
-        
+
         if (isOrganization) {
           updateData.is_partner_organization = false;
         } else {
           updateData.is_premium = false;
         }
-        
+
         const { error: updateError } = await supabase
           .from('users')
           .update(updateData)
@@ -187,10 +187,10 @@ export default function MembershipScreen() {
 
         // Refresh user context
         if (refreshUser) await refreshUser();
-        
+
         setAlertTitle('Membership Cancelled');
         setAlertMessage(
-          isConfigured() 
+          isConfigured()
             ? 'Your membership will remain active until the end of your current billing period.'
             : 'Your membership has been cancelled. In production, you would retain access until the end of your billing period.'
         );
@@ -205,7 +205,7 @@ export default function MembershipScreen() {
       if (isOrganization) {
         const { cancelSubscription: cancelSub } = await import('../services/paymentService');
         const result = await cancelSub(membership.subscriptionId, user.id);
-        
+
         if (result.success) {
           // Refresh user context
           if (refreshUser) await refreshUser();
@@ -220,7 +220,7 @@ export default function MembershipScreen() {
       } else {
         // Individual membership
         const result = await cancelSubscription(membership.subscriptionId);
-        
+
         if (result.success) {
           // Update local database
           const { error: updateError } = await supabase
@@ -306,9 +306,8 @@ export default function MembershipScreen() {
   }
 
   const isOrganization = user?.account_type === 'organization';
-  const isPremium = isOrganization 
-    ? (user?.is_partner_organization && membership?.status === 'active')
-    : (membership?.tier === 'premium' && membership?.status === 'active');
+  // Unified check: both partners and individuals now use the premium tier
+  const isPremium = membership?.tier === 'premium' && membership?.status === 'active';
   const isCancelled = membership?.status === 'cancelled';
   const isExpired = membership?.status === 'expired';
 
@@ -333,7 +332,7 @@ export default function MembershipScreen() {
         {/* Status Card */}
         <View style={[
           styles.statusCard,
-          { 
+          {
             backgroundColor: isPremium ? '#38B6FF' : colors.card,
             borderColor: isPremium ? '#38B6FF' : colors.border,
           }
@@ -354,7 +353,7 @@ export default function MembershipScreen() {
                 styles.statusTitle,
                 { color: isPremium ? '#FFFFFF' : colors.text }
               ]}>
-                {isPremium 
+                {isPremium
                   ? (isOrganization ? 'Partner Organization' : 'Premium Member')
                   : (isOrganization ? 'Organization' : 'Free Member')}
               </Text>
@@ -362,8 +361,8 @@ export default function MembershipScreen() {
                 styles.statusSubtitle,
                 { color: isPremium ? 'rgba(255,255,255,0.8)' : colors.textSecondary }
               ]}>
-                {isPremium 
-                  ? isCancelled 
+                {isPremium
+                  ? isCancelled
                     ? 'Cancellation pending'
                     : 'Your membership is active'
                   : isExpired

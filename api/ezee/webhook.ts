@@ -112,13 +112,13 @@ export default async function handler(req: any, res: any) {
         if (logError.code === '23505') {
           console.log(`[${webhookId}] DUPLICATE WEBHOOK detected for transaction ${TransactionNumber}`);
           console.log(`[${webhookId}] This webhook was already processed. Returning success to acknowledge.`);
-          return res.status(200).json({ 
-            success: true, 
+          return res.status(200).json({
+            success: true,
             message: 'Webhook already processed',
-            duplicate: true 
+            duplicate: true
           });
         }
-        
+
         console.error(`[${webhookId}] Webhook log error:`, logError);
         // Continue processing even if logging fails
       } else {
@@ -175,10 +175,10 @@ export default async function handler(req: any, res: any) {
       // If transaction is already completed, verify downstream updates and return early
       if (existingTransaction.status === 'completed' && isSuccessful) {
         console.log(`[${webhookId}] Transaction already completed. Performing verification...`);
-        
+
         const verificationPassed = await verifyTransactionCompletion(
-          existingTransaction, 
-          TransactionNumber, 
+          existingTransaction,
+          TransactionNumber,
           webhookId
         );
 
@@ -224,7 +224,7 @@ export default async function handler(req: any, res: any) {
       // ==================== PROCESS SUCCESSFUL PAYMENT ====================
       if (transaction && isSuccessful) {
         console.log(`[${webhookId}] Processing successful payment for order_type: ${transaction.order_type}`);
-        
+
         try {
           await processOneTimePayment(transaction, TransactionNumber, `[${webhookId}]`);
           console.log(`[${webhookId}] Payment processing completed successfully`);
@@ -314,11 +314,11 @@ export default async function handler(req: any, res: any) {
  */
 async function markWebhookProcessed(webhookId: string | undefined) {
   if (!webhookId) return;
-  
+
   try {
     await supabase
       .from('payment_webhooks')
-      .update({ 
+      .update({
         processed: true,
         processed_at: new Date().toISOString()
       })
@@ -333,11 +333,11 @@ async function markWebhookProcessed(webhookId: string | undefined) {
  */
 async function markWebhookError(webhookId: string | undefined, errorMessage: string) {
   if (!webhookId) return;
-  
+
   try {
     await supabase
       .from('payment_webhooks')
-      .update({ 
+      .update({
         processed: false,
         error_message: errorMessage,
         processed_at: new Date().toISOString()
@@ -353,7 +353,7 @@ async function markWebhookError(webhookId: string | undefined, errorMessage: str
  * Returns true if all verifications pass, false if any need fixing
  */
 async function verifyTransactionCompletion(
-  transaction: any, 
+  transaction: any,
   transactionNumber: string,
   webhookId: string
 ): Promise<boolean> {
@@ -409,7 +409,7 @@ async function verifyTransactionCompletion(
         if (transaction.user_id) {
           const { data: user } = await supabase
             .from('users')
-            .select('membership_status, is_premium, is_partner_organization, account_type')
+            .select('membership_status, is_premium, is_partner_organization, account_type, membership_tier')
             .eq('id', transaction.user_id)
             .single();
 
@@ -418,10 +418,15 @@ async function verifyTransactionCompletion(
               console.warn(`[${webhookId}] User membership_status is '${user.membership_status}', should be 'active'`);
               allVerificationsPassed = false;
             }
-            
+
             if (user.account_type === 'organization') {
               if (!user.is_partner_organization) {
                 console.warn(`[${webhookId}] Organization is_partner_organization is false, should be true`);
+                allVerificationsPassed = false;
+              }
+              // VERIFICATION: Partner orgs must now have 'premium' tier
+              if (user.membership_tier !== 'premium') {
+                console.warn(`[${webhookId}] Organization membership_tier is '${user.membership_tier}', should be 'premium'`);
                 allVerificationsPassed = false;
               }
             } else {
