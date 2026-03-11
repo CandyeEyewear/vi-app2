@@ -487,7 +487,7 @@ export default function EventRegisterScreen() {
 
   const { event, loading, error, refetch } = useEventRegistration(slug);
   
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting, setSubmitting] = useState<'pay' | 'direct' | null>(null);
   const [ticketCount, setTicketCount] = useState(1);
   const [showSuccess, setShowSuccess] = useState(false);
 
@@ -519,7 +519,7 @@ export default function EventRegisterScreen() {
 
   // Validation
   const canPurchase = useMemo(() => {
-    if (!event || submitting) return false;
+    if (!event || submitting !== null) return false;
     if (ticketCount < 1 || ticketCount > spotsLeft) return false;
     if (!event.isFree && totalAmount < 1000) return false; // eZeePayments minimum
     return true;
@@ -552,7 +552,7 @@ export default function EventRegisterScreen() {
     }
 
     // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setSubmitting(true);
+    setSubmitting('pay');
 
     try {
       // For free events, register directly and generate tickets
@@ -667,13 +667,13 @@ export default function EventRegisterScreen() {
       const errorMessage = error instanceof Error ? error.message : 'Something went wrong';
       showToast(errorMessage, 'error');
     } finally {
-      setSubmitting(false);
+      setSubmitting(null);
     }
   }, [event, user, router, totalAmount, ticketCount, spotsLeft, canPurchase]);
 
   // Handle direct / offline payment registration
   const handleDirectPayment = useCallback(async () => {
-    if (!event || submitting) return;
+    if (!event || submitting !== null) return;
 
     if (!user) {
       showToast('Please sign in to register', 'warning');
@@ -686,7 +686,7 @@ export default function EventRegisterScreen() {
       return;
     }
 
-    setSubmitting(true);
+    setSubmitting('direct');
     try {
       const response = await registerForEvent({
         eventId: event.id,
@@ -713,7 +713,7 @@ export default function EventRegisterScreen() {
       const errorMessage = error instanceof Error ? error.message : 'Something went wrong';
       showToast(errorMessage, 'error');
     } finally {
-      setSubmitting(false);
+      setSubmitting(null);
     }
   }, [event, user, router, ticketCount, spotsLeft, submitting, fallbackRoute]);
 
@@ -816,8 +816,8 @@ export default function EventRegisterScreen() {
           <Button
             variant="primary"
             size="lg"
-            loading={submitting}
-            disabled={!canPurchase}
+            loading={submitting === 'pay'}
+            disabled={!canPurchase || submitting !== null}
             onPress={handlePurchase}
             style={styles.purchaseButton}
             icon={event.isFree ?
@@ -825,7 +825,7 @@ export default function EventRegisterScreen() {
               <CreditCard size={20} color="#FFFFFF" />
             }
           >
-            {submitting ? 'Processing...' :
+            {submitting === 'pay' ? 'Processing...' :
              event.isFree ? 'Complete Registration' :
              `Pay ${formatCurrency(totalAmount)}`}
           </Button>
@@ -834,13 +834,13 @@ export default function EventRegisterScreen() {
             <Button
               variant="outline"
               size="lg"
-              loading={submitting}
-              disabled={submitting || ticketCount < 1 || ticketCount > spotsLeft}
+              loading={submitting === 'direct'}
+              disabled={submitting !== null || ticketCount < 1 || ticketCount > spotsLeft}
               onPress={handleDirectPayment}
               style={styles.directPayButton}
               icon={<Banknote size={20} color={colors.primary} />}
             >
-              Register & Pay Directly
+              {submitting === 'direct' ? 'Registering...' : 'Register & Pay Directly'}
             </Button>
           )}
         </View>
