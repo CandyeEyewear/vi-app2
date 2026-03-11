@@ -26,6 +26,7 @@ import { setupFCMHandlers } from '../services/fcmNotifications';
 import { setupWebNotificationHandler, setWebNotificationHandler } from '../services/webNotifications';
 import { useAlert } from '../hooks/useAlert';
 import CustomAlert from '../components/CustomAlert';
+import ToastNotification from '../components/ToastNotification';
 import { AlertProvider } from '../contexts/AlertContext';
 import { isWeb } from '../utils/platform';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -512,6 +513,7 @@ function AppContent() {
         </View>
       </View>
       <CustomAlert {...alertProps} />
+      <ToastNotification />
     </>
   );
 }

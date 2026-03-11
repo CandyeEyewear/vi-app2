@@ -1,16 +1,27 @@
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
 
-export const showToast = (message: string, type: 'success' | 'error' | 'warning') => {
+export type ToastType = 'success' | 'error' | 'warning';
+
+type ToastListener = (message: string, type: ToastType) => void;
+
+const listeners: ToastListener[] = [];
+
+export function subscribeToToast(listener: ToastListener): () => void {
+  listeners.push(listener);
+  return () => {
+    const idx = listeners.indexOf(listener);
+    if (idx > -1) listeners.splice(idx, 1);
+  };
+}
+
+export const showToast = (message: string, type: ToastType): void => {
   console.log(`${type.toUpperCase()}: ${message}`);
-  
-  // Show alert notification
-  const title = type === 'success' ? 'Success' : type === 'error' ? 'Error' : 'Warning';
-  
-  if (Platform.OS === 'web') {
-    // For web, use browser alert
-    window.alert(`${title}\n\n${message}`);
+  if (listeners.length > 0) {
+    listeners.forEach(l => l(message, type));
   } else {
-    // For mobile, use React Native Alert
-    Alert.alert(title, message);
+    // Fallback if Toast component not mounted yet
+    if (Platform.OS === 'web') {
+      console.warn('Toast not mounted, message:', message);
+    }
   }
 };
