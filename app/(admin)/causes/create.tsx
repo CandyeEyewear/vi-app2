@@ -54,6 +54,7 @@ import { createCause } from '../../../services/causesService';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../services/supabase';
 import WebContainer from '../../../components/WebContainer';
+import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
 import { sendNotificationToUser, sendEmailNotification } from '../../../services/pushNotifications';
 
@@ -172,35 +173,29 @@ export default function CreateCauseScreen() {
     try {
       setUploadingImage(true);
 
-      // Read file as base64 using fetch + FileReader
       const response = await fetch(uri);
       const blob = await response.blob();
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const result = reader.result as string;
-          const base64Data = result.split(',')[1];
-          resolve(base64Data);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
 
       // Create unique filename
       const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
       const fileName = `causes/${user.id}/${Date.now()}.${ext}`;
 
-      // Convert base64 to ArrayBuffer
-      const arrayBuffer = decode(base64);
+      let uploadData: Blob | Uint8Array;
+      let contentType: string;
+      if (Platform.OS === 'web') {
+        uploadData = blob;
+        contentType = blob.type || 'image/jpeg';
+      } else {
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        uploadData = decode(base64);
+        contentType = 'image/jpeg';
+      }
 
-      // Determine content type
-      const contentType = ext === 'png' ? 'image/png' : 'image/jpeg';
-
-      // Upload to Supabase Storage (using post-images bucket or create a causes bucket)
+      // Upload to Supabase Storage
       const { data, error } = await supabase.storage
         .from('post-images')
-        .upload(fileName, arrayBuffer, {
-          contentType: contentType,
+        .upload(fileName, uploadData, {
+          contentType,
           upsert: false,
         });
 

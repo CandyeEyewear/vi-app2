@@ -22,7 +22,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
-import { File } from 'expo-file-system';
+import { decode } from 'base64-arraybuffer';
 import { supabase } from '../services/supabase';
 import CustomAlert from '../components/CustomAlert';
 import Button from '../components/Button';
@@ -103,47 +103,34 @@ export default function EditProfileScreen() {
 
   const uploadImageToStorage = async (uri: string): Promise<string | null> => {
     try {
-      // SDK 54: Validate file existence using fetch + blob
-      const headResponse = await fetch(uri);
-      if (!headResponse.ok) {
+      const response = await fetch(uri);
+      if (!response.ok) {
         throw new Error('File does not exist');
       }
 
-      // Read file as base64 using fetch + FileReader (SDK 54 compatible)
-      const response = await fetch(uri);
       const blob = await response.blob();
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const result = reader.result as string;
-          const base64Data = result.split(',')[1];
-          resolve(base64Data);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
 
       // Create unique filename
       const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
       const fileName = `${user?.id}-${Date.now()}.${ext}`;
       const filePath = `avatars/${fileName}`;
 
-      // Convert base64 to byte array
-      const byteCharacters = atob(base64);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      let uploadData: Blob | Uint8Array;
+      let contentType: string;
+      if (Platform.OS === 'web') {
+        uploadData = blob;
+        contentType = blob.type || 'image/jpeg';
+      } else {
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        uploadData = decode(base64);
+        contentType = 'image/jpeg';
       }
-      const byteArray = new Uint8Array(byteNumbers);
-
-      // Determine content type
-      const contentType = ext === 'png' ? 'image/png' : 'image/jpeg';
 
       // Upload to Supabase Storage
       const { data, error } = await supabase.storage
         .from('post-images') // Using existing post-images bucket
-        .upload(filePath, byteArray, {
-          contentType: contentType,
+        .upload(filePath, uploadData, {
+          contentType,
           upsert: true, // Overwrite if exists
         });
 

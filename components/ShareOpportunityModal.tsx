@@ -60,7 +60,7 @@ export default function ShareOpportunityModal({
 
   const handleExternalShare = async () => {
     try {
-      const shareUrl = `https://vibe.volunteersinc.org/opportunity/${opportunity.slug}`;
+      const shareUrl = `https://vibe.volunteersinc.org/opportunity/${opportunity.slug || opportunity.id}`;
       const message = Platform.OS === 'ios'
         ? `Check out this volunteer opportunity: "${opportunity.title}"\n\n${opportunity.description?.substring(0, 150)}...`
         : shareUrl;

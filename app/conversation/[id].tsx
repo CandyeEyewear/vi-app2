@@ -31,12 +31,13 @@ import { ChevronLeft, Send, Camera, Smile, Paperclip, X, Reply } from 'lucide-re
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system';
+import { decode } from 'base64-arraybuffer';
 import { useAuth } from '../../contexts/AuthContext';
 import { useMessaging } from '../../contexts/MessagingContext';
 import { Colors } from '../../constants/colors';
 import { Message } from '../../types';
 import { supabase } from '../../services/supabase';
-import { decode } from 'base64-arraybuffer';
 import ProfileActionSheet from '../../components/ProfileActionSheet';
 import MessageStatus from '../../components/MessageStatus';
 import TypingIndicator from '../../components/TypingIndicator';
@@ -841,33 +842,29 @@ export default function ConversationScreen() {
       const filename = `${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
       const filePath = `${id}/${filename}`;
 
-      // Read file as base64 using fetch + FileReader (SDK 54 compatible)
       const response = await fetch(manipulatedImage.uri);
       if (!response.ok) {
         throw new Error('File does not exist or cannot be read');
       }
 
       const blob = await response.blob();
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const result = reader.result as string;
-          // Strip data URL prefix (e.g., "data:image/jpeg;base64,")
-          const base64Data = result.split(',')[1];
-          resolve(base64Data);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
 
-      // Convert base64 to ArrayBuffer for Supabase
-      const arrayBuffer = decode(base64);
+      let uploadData: Blob | Uint8Array;
+      let contentType: string;
+      if (Platform.OS === 'web') {
+        uploadData = blob;
+        contentType = blob.type || 'image/jpeg';
+      } else {
+        const base64 = await FileSystem.readAsStringAsync(manipulatedImage.uri, { encoding: FileSystem.EncodingType.Base64 });
+        uploadData = decode(base64);
+        contentType = 'image/jpeg';
+      }
 
       // Upload to Supabase Storage (using existing post-images bucket)
       const { data, error } = await supabase.storage
         .from('post-images')
-        .upload(filePath, arrayBuffer, {
-          contentType: 'image/jpeg',
+        .upload(filePath, uploadData, {
+          contentType,
           upsert: false,
         });
 

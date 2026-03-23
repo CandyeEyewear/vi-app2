@@ -42,6 +42,7 @@ import { geocodeLocation, GeocodeResult } from '../services/geocoding';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { File } from 'expo-file-system';
+import { decode } from 'base64-arraybuffer';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import CrossPlatformDateTimePicker from '../components/CrossPlatformDateTimePicker';
 import CustomAlert from '../components/CustomAlert';
@@ -347,24 +348,24 @@ export default function CreateOpportunityScreen() {
       if (blob.size > 10 * 1024 * 1024) {
         throw new Error('Image is too large. Please use an image smaller than 10MB.');
       }
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const result = reader.result as string;
-          const base64Data = result.split(',')[1];
-          resolve(base64Data);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-
       const fileName = `opportunity-${Date.now()}.jpg`;
       const filePath = `opportunities/${fileName}`;
 
+      let uploadData: Blob | Uint8Array;
+      let contentType: string;
+      if (Platform.OS === 'web') {
+        uploadData = blob;
+        contentType = blob.type || 'image/jpeg';
+      } else {
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        uploadData = decode(base64);
+        contentType = 'image/jpeg';
+      }
+
       const { data, error } = await supabase.storage
         .from('post-images')
-        .upload(filePath, decode(base64), {
-          contentType: 'image/jpeg',
+        .upload(filePath, uploadData, {
+          contentType,
         });
 
       if (error) {
@@ -387,36 +388,6 @@ export default function CreateOpportunityScreen() {
     } finally {
       setUploadingImage(false);
     }
-  };
-
-  // Helper function to decode base64
-  const decode = (base64: string) => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-    let bufferLength = base64.length * 0.75;
-    let p = 0;
-    let encoded1, encoded2, encoded3, encoded4;
-
-    if (base64[base64.length - 1] === '=') {
-      bufferLength--;
-      if (base64[base64.length - 2] === '=') {
-        bufferLength--;
-      }
-    }
-
-    const bytes = new Uint8Array(bufferLength);
-
-    for (let i = 0; i < base64.length; i += 4) {
-      encoded1 = chars.indexOf(base64[i]);
-      encoded2 = chars.indexOf(base64[i + 1]);
-      encoded3 = chars.indexOf(base64[i + 2]);
-      encoded4 = chars.indexOf(base64[i + 3]);
-
-      bytes[p++] = (encoded1 << 2) | (encoded2 >> 4);
-      bytes[p++] = ((encoded2 & 15) << 4) | (encoded3 >> 2);
-      bytes[p++] = ((encoded3 & 3) << 6) | (encoded4 & 63);
-    }
-
-    return bytes;
   };
 
   const addRequirement = () => {
