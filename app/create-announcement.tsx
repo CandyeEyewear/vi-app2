@@ -30,8 +30,7 @@ import {
 } from 'lucide-react-native';
 import { supabase } from '../services/supabase';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
-import { decode } from 'base64-arraybuffer';
+import { uploadMultipleImages } from '../services/imageUpload';
 import CustomAlert from '../components/CustomAlert';
 import Button from '../components/Button';
 import { sendNotificationToUser, sendEmailNotification } from '../services/pushNotifications';
@@ -96,55 +95,6 @@ export default function CreateAnnouncementScreen() {
     }
   };
 
-  const uploadImage = async (uri: string): Promise<string | null> => {
-    try {
-      console.log('📸 Starting image upload...');
-      const response = await fetch(uri);
-      if (!response.ok) {
-        throw new Error('File does not exist');
-      }
-
-      const blob = await response.blob();
-
-      const fileName = `announcement-${Date.now()}.jpg`;
-      const filePath = `announcements/${fileName}`;
-
-      let uploadData: Blob | Uint8Array;
-      let contentType: string;
-      if (Platform.OS === 'web') {
-        uploadData = blob;
-        contentType = blob.type || 'image/jpeg';
-      } else {
-        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-        uploadData = decode(base64);
-        contentType = 'image/jpeg';
-      }
-
-      console.log('📤 Uploading to storage:', filePath);
-      const { data, error } = await supabase.storage
-        .from('post-images')
-        .upload(filePath, uploadData, {
-          contentType,
-        });
-
-      if (error) {
-        console.error('❌ Image upload error:', error);
-        throw error;
-      }
-
-      console.log('✅ Image uploaded successfully');
-      const { data: { publicUrl } } = supabase.storage
-        .from('post-images')
-        .getPublicUrl(filePath);
-
-      console.log('🔗 Public URL generated:', publicUrl);
-      return publicUrl;
-    } catch (error) {
-      console.error('❌ Error uploading image:', error);
-      return null;
-    }
-  };
-
   const validateForm = () => {
     if (!text.trim()) {
       showAlert('Validation Error', 'Please enter announcement text', 'error');
@@ -176,13 +126,16 @@ export default function CreateAnnouncementScreen() {
 
       if (imageUri) {
         console.log('🖼️ Image selected, uploading...');
-        const imageUrl = await uploadImage(imageUri);
-        if (imageUrl) {
-          mediaUrls = [imageUrl];
+        const result = await uploadMultipleImages([imageUri], user?.id || 'anonymous', 'announcements');
+        if (result.urls.length > 0) {
+          mediaUrls = result.urls;
           mediaTypes = ['image'];
           console.log('✅ Image URL added to post');
         } else {
-          console.warn('⚠️ Image upload failed, continuing without image');
+          console.error('❌ Image upload failed:', result.errors);
+          showAlert('Error', 'Failed to upload image. Please try again.', 'error');
+          setLoading(false);
+          return;
         }
       }
 
