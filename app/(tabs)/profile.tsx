@@ -20,7 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors } from '../../constants/colors';
-import { Shield, ShoppingBag, Plus, Edit, Settings, Calendar, Crown, Heart, ChevronRight, ExternalLink, Building2 } from 'lucide-react-native';
+import { Shield, ShoppingBag, Plus, Edit, Settings, Calendar, Crown, Heart, ChevronRight, ExternalLink, Building2, Award } from 'lucide-react-native';
 import StreakBadge from '../../components/StreakBadge';
 import { UserAvatar, UserNameWithBadge } from '../../components/index';
 import Head from 'expo-router/head';
@@ -28,6 +28,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import CustomAlert from '../../components/CustomAlert';
 import { useAlert } from '../../hooks/useAlert';
+import { generateAndShareCertificate } from '../../utils/generateCertificate';
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -43,6 +44,34 @@ export default function ProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const { alertProps, showAlert } = useAlert();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [certificateLoading, setCertificateLoading] = useState(false);
+
+  const handleDownloadCertificate = async () => {
+    if ((user?.totalHours ?? 0) < 1) {
+      showAlert({
+        type: 'info',
+        title: 'Keep Going!',
+        message: 'Complete at least 1 volunteer hour to earn your certificate.',
+      });
+      return;
+    }
+    setCertificateLoading(true);
+    try {
+      await generateAndShareCertificate({
+        fullName: user!.fullName,
+        totalHours: user!.totalHours ?? 0,
+      });
+    } catch (error) {
+      console.error('[PROFILE] Certificate generation error:', error);
+      showAlert({
+        type: 'error',
+        title: 'Certificate Error',
+        message: 'Could not generate your certificate. Please try again.',
+      });
+    } finally {
+      setCertificateLoading(false);
+    }
+  };
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -474,6 +503,24 @@ export default function ProfileScreen() {
               <Text style={[styles.menuTitle, { color: colors.text }]}>My Events</Text>
               <Text style={[styles.menuSubtitle, { color: colors.textSecondary }]}>
                 View your registered events and tickets
+              </Text>
+            </View>
+            <ChevronRight size={20} color={colors.textSecondary} />
+          </AnimatedPressable>
+
+          {/* Hours Certificate */}
+          <AnimatedPressable
+            style={[styles.menuItem, surfaceShadow, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={handleDownloadCertificate}
+            disabled={certificateLoading}
+          >
+            <View style={[styles.menuIconContainer, { backgroundColor: '#4A90E2' + '15' }]}>
+              <Award size={22} color="#4A90E2" />
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={[styles.menuTitle, { color: colors.text }]}>Hours Certificate</Text>
+              <Text style={[styles.menuSubtitle, { color: colors.textSecondary }]}>
+                {certificateLoading ? 'Generating...' : 'Download your volunteer service certificate'}
               </Text>
             </View>
             <ChevronRight size={20} color={colors.textSecondary} />
