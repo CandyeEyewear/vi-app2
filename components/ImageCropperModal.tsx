@@ -314,6 +314,16 @@ export default function ImageCropperModal({
       const safeCropW = Math.min(Math.round(cropW), imageWidth - safeOriginX);
       const safeCropH = Math.min(Math.round(cropH), imageHeight - safeOriginY);
 
+      // Guard: invalid geometry (0/negative dims) would make manipulateAsync throw.
+      // Rather than fail silently, fall back to the uncropped original.
+      if (safeCropW <= 0 || safeCropH <= 0) {
+        console.warn('[Cropper] Invalid crop geometry, using original image', {
+          safeOriginX, safeOriginY, safeCropW, safeCropH, imageWidth, imageHeight,
+        });
+        onSkip(imageUri);
+        return;
+      }
+
       const result = await manipulateAsync(
         imageUri,
         [
@@ -331,11 +341,15 @@ export default function ImageCropperModal({
 
       onCrop(result.uri);
     } catch (error) {
-      console.error('Crop failed:', error);
+      // Do NOT fail silently: cropping (esp. manipulateAsync on web) can throw.
+      // Fall back to the uncropped original so an image still attaches, and
+      // surface the failure so it's visible in logs/telemetry.
+      console.error('[Cropper] Crop failed, falling back to uncropped original:', error);
+      if (imageUri) onSkip(imageUri);
     } finally {
       setCropping(false);
     }
-  }, [imageUri, imageWidth, imageHeight, onCrop]);
+  }, [imageUri, imageWidth, imageHeight, onCrop, onSkip]);
 
   const handleSkip = useCallback(() => {
     if (imageUri) onSkip(imageUri);
