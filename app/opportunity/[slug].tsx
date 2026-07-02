@@ -55,6 +55,7 @@ import {
   Bookmark,
   Phone,
   ChevronRight,
+  Maximize2,
 } from 'lucide-react-native';
 import { Opportunity } from '../../types';
 import { supabase } from '../../services/supabase';
@@ -63,6 +64,7 @@ import OpportunityGroupChat from '../../components/OpportunityGroupChat';
 import ParticipantsList from '../../components/ParticipantsList';
 import QRScanner from '../../components/QRScanner';
 import ShareOpportunityModal from '../../components/ShareOpportunityModal';
+import ZoomableImageViewer from '../../components/ZoomableImageViewer';
 import { useFeed } from '../../contexts/FeedContext';
 import { goBack } from '../../utils/navigation';
 
@@ -92,19 +94,24 @@ interface MemoizedHeroImageProps {
   category: string;
   isVerified: boolean;
   successColor: string;
+  onPress?: () => void;
 }
 
 const MemoizedHeroImage = React.memo<MemoizedHeroImageProps>(
-  ({ imageUrl, categoryColor, category, isVerified, successColor }) => {
+  ({ imageUrl, categoryColor, category, isVerified, successColor, onPress }) => {
     if (!imageUrl) return null;
 
     return (
-      <View style={memoImageStyles.heroContainer}>
+      <TouchableOpacity activeOpacity={0.9} onPress={onPress} style={memoImageStyles.heroContainer}>
         <Image
           source={{ uri: imageUrl }}
           style={memoImageStyles.heroImage}
         />
+        <View style={memoImageStyles.heroExpandBadge} pointerEvents="none">
+          <Maximize2 size={16} color="#FFF" />
+        </View>
         <LinearGradient
+          pointerEvents="none"
           colors={['transparent', 'rgba(0,0,0,0.7)']}
           style={memoImageStyles.heroGradient}
         />
@@ -117,7 +124,7 @@ const MemoizedHeroImage = React.memo<MemoizedHeroImageProps>(
             <Text style={memoImageStyles.heroVerifiedText}>Verified</Text>
           </View>
         )}
-      </View>
+      </TouchableOpacity>
     );
   },
   // Custom comparison - only re-render if these specific props change
@@ -139,6 +146,7 @@ const memoImageStyles = StyleSheet.create({
   heroBadgeText: { color: '#FFF', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
   heroVerified: { position: 'absolute', top: 16, right: 16, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16 },
   heroVerifiedText: { color: '#FFF', fontSize: 11, fontWeight: '600' },
+  heroExpandBadge: { position: 'absolute', bottom: 12, right: 12, padding: 7, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.45)' },
 });
 
 // ============================================================================
@@ -294,6 +302,7 @@ export default function OpportunityDetailsScreen() {
   const qrCodeRef = useRef<View>(null);
   const [qrScannerVisible, setQrScannerVisible] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [savingBookmark, setSavingBookmark] = useState(false);
@@ -781,6 +790,7 @@ export default function OpportunityDetailsScreen() {
             category={opportunity.category}
             isVerified={opportunity.organizationVerified || false}
             successColor={colors.success}
+            onPress={() => opportunity.imageUrl && setImageViewerVisible(true)}
           />
 
           {/* CHECK-IN BUTTON */}
@@ -1107,6 +1117,13 @@ export default function OpportunityDetailsScreen() {
       <CustomAlert visible={alertVisible} title={alertConfig.title} message={alertConfig.message} type={alertConfig.type} onClose={() => setAlertVisible(false)} />
       {opportunity && <ShareOpportunityModal visible={showShareModal} onClose={() => setShowShareModal(false)} onShare={handleShare} opportunity={opportunity} sharing={sharing} />}
       <QRScanner visible={qrScannerVisible} onClose={() => setQrScannerVisible(false)} onScan={handleQRScan} expectedCode={opportunity?.checkInCode} />
+      {opportunity?.imageUrl && (
+        <ZoomableImageViewer
+          visible={imageViewerVisible}
+          images={[opportunity.imageUrl]}
+          onClose={() => setImageViewerVisible(false)}
+        />
+      )}
     </View>
   );
 }

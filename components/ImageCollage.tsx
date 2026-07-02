@@ -4,22 +4,22 @@
  * Supports 1-10+ images with full-screen viewer
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Image,
   TouchableOpacity,
   StyleSheet,
   Dimensions,
-  Modal,
-  ScrollView,
   Text,
 } from 'react-native';
-import { X } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
+import ZoomableImageViewer from './ZoomableImageViewer';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const GAP = 2;
+// Cap a single image's inline height so a very tall flier doesn't swallow the feed.
+const SINGLE_MAX_HEIGHT = SCREEN_HEIGHT * 0.55;
 
 interface ImageCollageProps {
   images: string[];
@@ -30,6 +30,30 @@ export default function ImageCollage({ images, onImagePress }: ImageCollageProps
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [containerWidth, setContainerWidth] = useState<number>(0);
+  // Natural aspect ratio (width / height) of a lone image, so it renders uncropped.
+  const [singleAspect, setSingleAspect] = useState<number | null>(null);
+
+  // Measure the real dimensions of a single image so we can show it whole.
+  // Keyed on the URI (not the array identity) so a parent re-creating the array
+  // doesn't re-trigger getSize.
+  const singleUri = images?.length === 1 ? images[0] : null;
+  useEffect(() => {
+    if (!singleUri) return;
+    let active = true;
+    setSingleAspect(null);
+    Image.getSize(
+      singleUri,
+      (w, h) => {
+        if (active && w > 0 && h > 0) setSingleAspect(w / h);
+      },
+      () => {
+        if (active) setSingleAspect(1); // fallback to square on failure
+      }
+    );
+    return () => {
+      active = false;
+    };
+  }, [singleUri]);
 
   if (!images || images.length === 0) return null;
 
@@ -50,14 +74,18 @@ export default function ImageCollage({ images, onImagePress }: ImageCollageProps
     const threeRowHeight = containerWidth * 0.6;
     const halfWidth = (containerWidth - GAP) / 2;
 
-    // Single image - full width
+    // Single image - full width, shown whole at its natural aspect ratio (no crop).
     if (count === 1) {
+      // Height derived from the real aspect ratio, capped so tall fliers stay readable.
+      const height = singleAspect
+        ? Math.min(singleSize / singleAspect, SINGLE_MAX_HEIGHT)
+        : singleSize;
       return (
         <TouchableOpacity onPress={() => handleImagePress(0)} activeOpacity={0.9}>
           <Image
             source={{ uri: images[0] }}
-            style={[styles.singleImage, { width: singleSize, height: singleSize }]}
-            resizeMode="cover"
+            style={[styles.singleImage, { width: singleSize, height }]}
+            resizeMode="contain"
           />
         </TouchableOpacity>
       );
@@ -221,45 +249,13 @@ export default function ImageCollage({ images, onImagePress }: ImageCollageProps
         {renderLayout()}
       </View>
 
-      {/* Full-screen image viewer */}
-      <Modal
+      {/* Full-screen image viewer with pinch-to-zoom */}
+      <ZoomableImageViewer
         visible={viewerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setViewerVisible(false)}
-      >
-        <View style={styles.viewerContainer}>
-          <TouchableOpacity
-            style={styles.viewerClose}
-            onPress={() => setViewerVisible(false)}
-          >
-            <X size={28} color="#FFFFFF" />
-          </TouchableOpacity>
-
-          <ScrollView
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            contentOffset={{ x: viewerIndex * SCREEN_WIDTH, y: 0 }}
-          >
-            {images.map((uri, index) => (
-              <View key={index} style={styles.viewerImageContainer}>
-                <Image
-                  source={{ uri }}
-                  style={styles.viewerImage}
-                  resizeMode="contain"
-                />
-              </View>
-            ))}
-          </ScrollView>
-
-          <View style={styles.viewerIndicator}>
-            <Text style={styles.viewerIndicatorText}>
-              {viewerIndex + 1} / {images.length}
-            </Text>
-          </View>
-        </View>
-      </Modal>
+        images={images}
+        initialIndex={viewerIndex}
+        onClose={() => setViewerVisible(false)}
+      />
     </>
   );
 }
@@ -362,43 +358,5 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: 'bold',
     color: '#FFFFFF',
-  },
-  // Viewer
-  viewerContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.95)',
-  },
-  viewerClose: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    zIndex: 10,
-    padding: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 20,
-  },
-  viewerImageContainer: {
-    width: SCREEN_WIDTH,
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  viewerImage: {
-    width: SCREEN_WIDTH,
-    height: '100%',
-  },
-  viewerIndicator: {
-    position: 'absolute',
-    bottom: 50,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  viewerIndicatorText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
   },
 });
