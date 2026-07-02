@@ -191,6 +191,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const setupAuthListener = () => {
       console.log('[AUTH] 👂 Setting up auth state listener...');
       const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        // Telemetry: this callback runs while the GoTrue auth lock is held. Any
+        // await here (esp. another supabase.auth.* or .from() call) can deadlock
+        // signInWithPassword(). These logs reveal if we enter and never exit.
+        const cbAt = Date.now();
+        console.log(`[AUTH][telemetry] onAuthStateChange:enter event=${event} hasSession=${!!session} userId=${session?.user?.id ?? 'none'}`);
         console.log('[AUTH] 🔔 Auth state changed:', event);
 
         // Check for recovery flow — but only treat it as a "forgot password" recovery
@@ -262,7 +267,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.log('[AUTH] Session active - User ID:', session.user.id);
           setNeedsPasswordSetup(session?.user?.user_metadata?.needs_password_setup === true);
           setSessionAppRole((session.user as any)?.app_metadata?.app_role ?? null);
+          console.log(`[AUTH][telemetry] onAuthStateChange:loadProfile:start event=${event} userId=${session.user.id}`);
           await loadUserProfile(session.user.id, false, session.user.id);
+          console.log(`[AUTH][telemetry] onAuthStateChange:loadProfile:end event=${event} elapsed=${Date.now() - cbAt}ms`);
           // Set up real-time subscription after session is confirmed
           setupRealtimeSubscription(session.user.id).catch((error) => {
             console.error('[AUTH] ❌ Error setting up real-time subscription:', error);
@@ -745,10 +752,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signIn = async (data: LoginFormData): Promise<ApiResponse<User>> => {
+    // --- Login telemetry: correlation id + lifecycle timing -----------------
+    // Lets us trace an intermittent login hang in production by seeing exactly
+    // which step a stuck flow stopped at. `t()` logs ms elapsed since tap.
+    const corrId = `login_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+    const startedAt = Date.now();
+    const t = (stage: string, extra?: Record<string, unknown>) =>
+      console.log(`[AUTH][telemetry] corrId=${corrId} +${Date.now() - startedAt}ms ${stage}`, extra ?? '');
+    t('signIn:tap');
     console.log('[AUTH] 🔑 Starting sign in process...');
-    console.log('[AUTH] Sign in requested');
-    // Debug: Capture call stack to trace what triggered signIn
-    console.log('[AUTH] 🔍 signIn called from:', new Error().stack?.split('\n').slice(1, 6).join('\n  '));
 
     try {
       // Prevent duplicate sign-in attempts
@@ -760,10 +772,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Sign in with Supabase
       console.log('[AUTH] 🔐 Authenticating with Supabase...');
+      t('signInWithPassword:start');
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: data.email,
         password: data.password,
       });
+      t('signInWithPassword:return', { hasUser: !!authData?.user, hasError: !!authError });
 
       if (authError) {
         console.error('[AUTH] ❌ Authentication failed:', authError.message);
@@ -772,20 +786,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       console.log('[AUTH] ✅ Authentication successful');
-      console.log('[AUTH] User ID:', authData.user.id);
+      console.log('[AUTH] User ID:', authData.user.id, '| corrId:', corrId);
 
-      // Verify session is saved to SecureStore
-      console.log('[AUTH] 🔍 Verifying session persistence...');
-      await new Promise(resolve => setTimeout(resolve, 100)); // Give SecureStore time to save
-      const { data: { session: verifySession } } = await supabase.auth.getSession();
-      if (verifySession) {
-        console.log('[AUTH] ✅ Session verified and persisted to SecureStore');
-      } else {
-        console.error('[AUTH] ⚠️ WARNING: Session not found in SecureStore after sign-in!');
-      }
-
-      const { data: { user } } = await supabase.auth.getUser();
-      const needsSetup = user?.user_metadata?.needs_password_setup === true;
+      // NOTE: Do NOT call supabase.auth.getSession() / getUser() here.
+      // signInWithPassword already returns the authenticated user + session,
+      // and those auth methods re-acquire the GoTrue auth lock that is held while
+      // the onAuthStateChange subscribers run — a known deadlock vector. Use the
+      // user object we already have.
+      const needsSetup = authData.user?.user_metadata?.needs_password_setup === true;
       setNeedsPasswordSetup(needsSetup);
       if (needsSetup) {
         console.log('[AUTH] User needs to set password - redirecting via layout');
@@ -793,11 +801,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Fetch user profile
       console.log('[AUTH] 📥 Fetching user profile from database...');
+      t('signIn:profileFetch:start');
       let { data: profileData, error: profileError } = await supabase
         .from('users')
         .select('*')
         .eq('id', authData.user.id)
         .maybeSingle();
+      t('signIn:profileFetch:return', { hasProfile: !!profileData, hasError: !!profileError });
 
       if (profileError) {
         console.error('[AUTH] ❌ Failed to fetch user profile:', profileError.message);
@@ -872,6 +882,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log('[AUTH] 📦 Setting user state...');
       setUser(userData);
+      t('signIn:user:set', { role: profileData.role });
       console.log('[AUTH] ✅ User state updated');
 
       // Backfill HubSpot sync after login when missing.
@@ -926,13 +937,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error('[AUTH] ❌ Error stack:', pushError?.stack);
       }
 
+      t('signIn:complete:success');
       console.log('[AUTH] 🎉 Sign in process completed successfully');
       return { success: true, data: userData };
     } catch (error: any) {
+      t('signIn:complete:exception', { message: error?.message });
       console.error('[AUTH] ❌ Exception during sign in:', error);
       console.error('[AUTH] Error message:', error.message);
       return { success: false, error: error.message };
     } finally {
+      t('signIn:finally:setLoadingFalse');
       setLoading(false);
     }
   };
