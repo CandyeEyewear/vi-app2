@@ -11,6 +11,7 @@ import { getCauseById } from '../services/causesService';
 import { useAuth } from './AuthContext';
 import { extractMentionedUserIds } from '../utils/mentions';
 import { extractHashtagIds } from '../utils/hashtags';
+import { sendNotificationToUser } from '../services/pushNotifications';
 
 interface FeedContextType {
   posts: Post[];
@@ -1605,6 +1606,59 @@ const postsWithEvents = await Promise.all(
     }
   };
 
+  // Notify users mentioned in a post/comment: in-app notification row + push.
+  // Fire-and-forget — a notification failure must never affect the post/comment.
+  const notifyMentionedUsers = (
+    mentionedUserIds: string[],
+    postId: string,
+    context: 'comment' | 'post'
+  ) => {
+    if (!user) return;
+    const actorName = user.fullName || 'Someone';
+    const recipients = [...new Set(mentionedUserIds)].filter((id) => id && id !== user.id);
+    if (recipients.length === 0) return;
+
+    const body =
+      context === 'comment'
+        ? `${actorName} mentioned you in a comment`
+        : `${actorName} mentioned you in a post`;
+    const link = `/post/${postId}`;
+
+    void (async () => {
+      try {
+        // In-app notifications (bell list + badge; navigates via `link`).
+        const rows = recipients.map((uid) => ({
+          user_id: uid,
+          type: 'mention',
+          title: 'You were mentioned',
+          message: body,
+          link,
+          related_id: postId,
+          is_read: false,
+          created_at: new Date().toISOString(),
+        }));
+        const { error: notifError } = await supabase.from('notifications').insert(rows);
+        if (notifError) {
+          console.error('[FEED] Error inserting mention notifications:', notifError.message);
+        }
+
+        // Push notifications (best-effort per recipient).
+        await Promise.allSettled(
+          recipients.map((uid) =>
+            sendNotificationToUser(uid, {
+              type: 'mention',
+              id: postId,
+              title: 'You were mentioned',
+              body,
+            })
+          )
+        );
+      } catch (err) {
+        console.error('[FEED] Mention notification error:', err);
+      }
+    })();
+  };
+
   const addComment = async (postId: string, text: string): Promise<ApiResponse<Comment>> => {
     if (!user) {
       return { success: false, error: 'Not authenticated' };
@@ -1656,6 +1710,10 @@ const postsWithEvents = await Promise.all(
 
           await supabase.from('post_mentions').insert(mentionInserts);
           console.log('[FEED] 📣 Saved comment mentions:', mentionedUserIds);
+
+          // Notify mentioned users (in-app + push). Non-blocking; never let a
+          // notification failure affect the comment result.
+          notifyMentionedUsers(mentionedUserIds, postId, 'comment');
         } catch (error) {
           console.error('[FEED] Error saving comment mentions:', error);
         }
