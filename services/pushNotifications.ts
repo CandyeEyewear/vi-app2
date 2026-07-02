@@ -18,7 +18,7 @@ if (Platform.OS !== 'web') {
 }
 
 export interface PushNotificationData {
-  type: 'circle_request' | 'announcement' | 'opportunity' | 'message' | 'cause' | 'event';
+  type: 'circle_request' | 'announcement' | 'opportunity' | 'message' | 'cause' | 'event' | 'mention';
   id: string;
   title: string;
   body: string;

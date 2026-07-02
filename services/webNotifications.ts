@@ -137,6 +137,7 @@ function handleNotificationNavigation(
       navigate(`/conversation/${data.id}`);
       break;
     case 'post':
+    case 'mention':
       navigate(`/post/${data.id}`);
       break;
     case 'opportunity_submitted':

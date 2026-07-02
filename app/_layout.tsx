@@ -306,6 +306,7 @@ function AppContent() {
             } as any);
             break;
           case 'post':
+          case 'mention':
             router.push(`/post/${data.id}` as any);
             break;
           case 'opportunity_submitted':

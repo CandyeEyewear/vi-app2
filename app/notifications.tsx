@@ -29,7 +29,7 @@ import { goBack } from '../utils/navigation';
 
 interface Notification {
   id: string;
-  type: 'circle_request' | 'announcement' | 'opportunity' | 'message' | 'opportunity_submitted' | 'opportunity_approved' | 'opportunity_rejected' | 'cause' | 'event' | 'shoutout_received';
+  type: 'circle_request' | 'announcement' | 'opportunity' | 'message' | 'opportunity_submitted' | 'opportunity_approved' | 'opportunity_rejected' | 'cause' | 'event' | 'shoutout_received' | 'mention';
   title: string;
   message: string;
   link: string | null;
